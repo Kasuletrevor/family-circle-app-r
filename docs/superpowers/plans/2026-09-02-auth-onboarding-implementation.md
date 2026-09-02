@@ -29,6 +29,7 @@
 - Preserve invited-vs-registered account origin and Create Circle vs Explore First onboarding behavior.
 - Preserve neutral recovery copy: `If an account exists for that email, a recovery code has been sent.`
 - Do not modify Jose's original `%APPDATA%/Family Circle/family.db` during migration; copy first, then migrate the copy.
+- If the configured active DB resolves to the same canonical file as the legacy DB, abort startup migration rather than opening the legacy source for write.
 - Keep modules focused; no giant replacement for `ipcMainHandlers.js` or `userModel.js`.
 
 ---
@@ -54,7 +55,7 @@
 - Modify `src/main/main.ts` — dependency composition only.
 
 **Renderer**
-- Create `src/renderer/services/auth/AuthClient.ts`, `DesktopAuthClient.ts`, `types.ts`.
+- Create `src/renderer/services/auth/{AuthClient,DesktopAuthClient,types}.ts`.
 - Create `src/renderer/app/SessionGate.tsx` and test.
 - Create `src/renderer/features/auth/{AuthScreen,SignInForm,RegisterFlow,RecoveryFlow}.tsx`, CSS and tests.
 - Create `src/renderer/features/onboarding/{Onboarding,PasswordStep,ProfileStep,CircleStep,ReadyStep}.tsx`, CSS and tests.
@@ -215,6 +216,7 @@ Use temporary directories and real `DatabaseSync`. Cover:
 it('creates a new database when no legacy DB exists')
 it('copies legacy family.db before opening the rebuild DB')
 it('never modifies the legacy source file')
+it('refuses to migrate when active and legacy paths resolve to the same file')
 it('migrates old users.password into users.password_hash')
 it('preserves unrelated legacy tables and rows')
 it('defaults existing legacy users to account_origin=existing and onboarding_completed=1')
@@ -245,7 +247,7 @@ const activePath = join(app.getPath('userData'), 'family.db')
 const legacyPath = join(app.getPath('appData'), 'Family Circle', 'family.db')
 ```
 
-If `activePath` does not exist and `legacyPath` exists and resolves to a different file, copy `legacyPath` to `activePath`. Never open the legacy source for write during import. A deliberate `FAMILY_CIRCLE_DB_PATH` development override may select a custom active DB path, but normal production migration remains copy-safe.
+Canonicalize both paths before opening either DB. If they resolve to the same file, throw `Legacy database source path must not be used as the rebuild database`. If `activePath` does not exist and the distinct `legacyPath` exists, copy `legacyPath` to `activePath`. Never open the legacy source for write during import. A deliberate `FAMILY_CIRCLE_DB_PATH` development override may select a custom active DB path, but the same canonical-path guard still applies.
 
 - [ ] **Step 4: Implement `node:sqlite` setup**
 
