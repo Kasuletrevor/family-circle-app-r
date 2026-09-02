@@ -5,6 +5,7 @@ import { AuthenticatedApp } from './app/App'
 import { SessionGate } from './app/SessionGate'
 import './design-system/base.css'
 import { AuthScreen } from './features/auth/AuthScreen'
+import { Onboarding } from './features/onboarding/Onboarding'
 import { DesktopAuthClient } from './services/auth/DesktopAuthClient'
 
 const root = document.getElementById('root')
@@ -20,11 +21,8 @@ createRoot(root).render(
         renderUnauthenticated={(onStateChange) => (
           <AuthScreen client={authClient} onStateChange={onStateChange} />
         )}
-        renderOnboarding={() => (
-          <main className="session-gate">
-            <h1>Finish setting up your Family Circle</h1>
-            <p>Your account is secure. Complete the remaining setup steps to continue.</p>
-          </main>
+        renderOnboarding={(state, onStateChange) => (
+          <Onboarding state={state} client={authClient} onStateChange={onStateChange} />
         )}
         renderAuthenticated={() => <AuthenticatedApp />}
       />
