@@ -58,11 +58,21 @@ export function CircleStep({
 
       {!invited && (
         <div className="onboarding-choice-grid">
-          <button className="onboarding-choice" type="button" onClick={() => onContinue('create-circle')}>
+          <button
+            aria-label="Create Circle"
+            className="onboarding-choice"
+            type="button"
+            onClick={() => onContinue('create-circle')}
+          >
             <strong>Create Circle</strong>
             <span>Start a new family space after setup.</span>
           </button>
-          <button className="onboarding-choice" type="button" onClick={() => onContinue('home')}>
+          <button
+            aria-label="Explore First"
+            className="onboarding-choice"
+            type="button"
+            onClick={() => onContinue('home')}
+          >
             <strong>Explore First</strong>
             <span>Open the private workspace and create a Circle later.</span>
           </button>
