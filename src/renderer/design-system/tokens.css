@@ -1,0 +1,22 @@
+:root {
+  --kk-navy: #0c2348;
+  --kk-ocean: #0c557f;
+  --kk-teal: #0e9f9a;
+  --kk-teal-dark: #0c6f70;
+  --kk-gold: #e6ad69;
+  --kk-mint: #e9fbf6;
+  --kk-cool-tint: #eef2f7;
+  --kk-canvas: #f7f9fb;
+  --kk-card: #ffffff;
+  --kk-text: #102347;
+  --kk-text-muted: #637083;
+  --kk-border: #dfe6ef;
+  --kk-success: #16a34a;
+  --kk-danger: #c2413b;
+  --kk-sidebar-width: 256px;
+  --kk-radius-sm: 10px;
+  --kk-radius-md: 14px;
+  --kk-radius-lg: 20px;
+  --kk-shadow-card: 0 8px 28px rgba(12, 35, 72, 0.07);
+  --kk-focus: 0 0 0 3px rgba(14, 159, 154, 0.24);
+}
