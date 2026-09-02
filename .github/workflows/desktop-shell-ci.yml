@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -18,28 +18,6 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
-      - name: Import Kin-Keepers logo once
-        if: github.event_name == 'push'
-        run: |
-          if [ -f src/renderer/assets/kin-cropped.jpg ]; then
-            echo "Kin-Keepers logo is already tracked"
-            exit 0
-          fi
-          mkdir -p src/renderer/assets
-          curl -fsSL \
-            https://raw.githubusercontent.com/Elder-ChatGPT/agent-ai-landing/main/frontend/public/kin-cropped.jpg \
-            -o src/renderer/assets/kin-cropped.jpg
-          actual="$(git hash-object src/renderer/assets/kin-cropped.jpg)"
-          expected="4d24aef203d0b221537e0aa2f82f6dbc9925160c"
-          test "$actual" = "$expected" || {
-            echo "Logo integrity check failed: expected $expected, got $actual"
-            exit 1
-          }
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/renderer/assets/kin-cropped.jpg
-          git commit -m "chore: import Kin-Keepers brand asset"
-          git push
       - uses: actions/setup-node@v4
         with:
           node-version: 24
