@@ -7,8 +7,8 @@ type BrandMarkProps = {
 export function BrandMark({ compact = false }: BrandMarkProps) {
   return (
     <div className={`brand-mark${compact ? ' brand-mark--compact' : ''}`}>
-      <div className="brand-mark__logo-frame" aria-hidden="true">
-        <span className="brand-mark__fallback">K</span>
+      <div className="brand-mark__logo-frame">
+        <span className="brand-mark__fallback" aria-hidden="true">K</span>
         <img
           className="brand-mark__logo"
           src="/kin-cropped.jpg"
