@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { AuthState } from '../../../shared/desktopApi'
 import type { AuthClient } from '../../services/auth/AuthClient'
 import { AuthScreen } from './AuthScreen'
 
 function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
   return {
     restore: vi.fn(),
-    signIn: vi.fn(async () => ({ status: 'authenticated', user: {
+    signIn: vi.fn(async (): Promise<AuthState> => ({ status: 'authenticated', user: {
       id: 1,
       email: 'member@example.com',
       name: 'Member',
@@ -15,7 +16,7 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
       onboardingCompleted: true,
     } })),
     checkInvitation: vi.fn(async () => ({ hasPendingInvite: false, groupName: null, role: null })),
-    register: vi.fn(async () => ({ status: 'onboarding', user: {
+    register: vi.fn(async (): Promise<AuthState> => ({ status: 'onboarding', user: {
       id: 2,
       email: 'owner@example.com',
       name: 'Owner',
@@ -25,11 +26,11 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
     } })),
     signOut: vi.fn(),
     requestPasswordReset: vi.fn(async () => ({
-      success: true,
+      success: true as const,
       message: 'If an account exists for that email, a recovery code has been sent.',
       expiresInMinutes: 10,
     })),
-    resetPassword: vi.fn(async () => ({ success: true })),
+    resetPassword: vi.fn(async () => ({ success: true as const })),
     getOnboardingState: vi.fn(),
     setInitialPassword: vi.fn(),
     updateProfile: vi.fn(),
