@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { AuthenticatedApp } from './app/App'
 import { SessionGate } from './app/SessionGate'
-import { BrandMark } from './design-system/BrandMark'
 import './design-system/base.css'
+import { AuthScreen } from './features/auth/AuthScreen'
 import { DesktopAuthClient } from './services/auth/DesktopAuthClient'
 
 const root = document.getElementById('root')
@@ -17,16 +17,11 @@ createRoot(root).render(
     <HashRouter>
       <SessionGate
         client={authClient}
-        renderUnauthenticated={() => (
-          <main className="session-gate">
-            <BrandMark />
-            <h1>Sign in to Family Circle</h1>
-            <p>Your private workspace is locked until you sign in.</p>
-          </main>
+        renderUnauthenticated={(onStateChange) => (
+          <AuthScreen client={authClient} onStateChange={onStateChange} />
         )}
         renderOnboarding={() => (
           <main className="session-gate">
-            <BrandMark />
             <h1>Finish setting up your Family Circle</h1>
             <p>Your account is secure. Complete the remaining setup steps to continue.</p>
           </main>
