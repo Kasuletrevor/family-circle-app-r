@@ -1,16 +1,38 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
-import { App } from './app/App'
+import { AuthenticatedApp } from './app/App'
+import { SessionGate } from './app/SessionGate'
+import { BrandMark } from './design-system/BrandMark'
 import './design-system/base.css'
+import { DesktopAuthClient } from './services/auth/DesktopAuthClient'
 
 const root = document.getElementById('root')
 if (!root) throw new Error('Family Circle renderer root was not found')
 
+const authClient = new DesktopAuthClient(window.familyCircle)
+
 createRoot(root).render(
   <StrictMode>
     <HashRouter>
-      <App />
+      <SessionGate
+        client={authClient}
+        renderUnauthenticated={() => (
+          <main className="session-gate">
+            <BrandMark />
+            <h1>Sign in to Family Circle</h1>
+            <p>Your private workspace is locked until you sign in.</p>
+          </main>
+        )}
+        renderOnboarding={() => (
+          <main className="session-gate">
+            <BrandMark />
+            <h1>Finish setting up your Family Circle</h1>
+            <p>Your account is secure. Complete the remaining setup steps to continue.</p>
+          </main>
+        )}
+        renderAuthenticated={() => <AuthenticatedApp />}
+      />
     </HashRouter>
   </StrictMode>,
 )
