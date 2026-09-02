@@ -35,10 +35,8 @@ async function createAuthService(): Promise<AuthService> {
   )
   const recovery = new PasswordRecoveryService(database, users, createRecoveryMailer())
   const circle = new LegacyCircleAuthAdapter({
-    baseUrl: process.env.CIRCLE_API_URL
-      || process.env.P2P_SERVER
-      || 'https://familycircle.o2gventures.com/circle-api',
-    apiKey: process.env.P2P_API_KEY || process.env.CIRCLE_API_KEY || '',
+    baseUrl: process.env.CIRCLE_API_URL || '',
+    apiKey: process.env.CIRCLE_API_KEY || '',
   })
 
   return new AuthService(users, sessions, recovery, circle)
