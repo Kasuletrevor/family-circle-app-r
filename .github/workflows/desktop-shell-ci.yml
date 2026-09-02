@@ -3,6 +3,7 @@ name: Desktop shell CI
 on:
   push:
     branches:
+      - main
       - feature/desktop-shell
   pull_request:
     branches:
