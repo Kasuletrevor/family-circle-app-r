@@ -51,7 +51,7 @@ describe('AuthScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(client.signIn).toHaveBeenCalledWith({
-      email: ' MEMBER@EXAMPLE.COM ',
+      email: 'MEMBER@EXAMPLE.COM',
       password: '123456789012',
     }))
     expect(stateChanged).toHaveBeenCalled()
