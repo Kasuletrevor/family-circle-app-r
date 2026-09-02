@@ -1,6 +1,8 @@
 import type { InvitationCheckResult } from '../../shared/desktopApi'
 import { normalizeEmail } from '../auth/passwordPolicy'
 
+const DEFAULT_LEGACY_CIRCLE_URL = 'https://familycircle.o2gventures.com/circle-api'
+
 export interface ClaimedInvitation {
   email: string
   name: string
@@ -39,9 +41,8 @@ export class LegacyCircleAuthAdapter {
     private readonly config: LegacyCircleAuthAdapterConfig,
     private readonly fetcher: FetchLike = fetch,
   ) {
-    this.baseUrl = String(config.baseUrl || '').replace(/\/+$/, '')
+    this.baseUrl = String(config.baseUrl || DEFAULT_LEGACY_CIRCLE_URL).replace(/\/+$/, '')
     this.timeoutMs = config.timeoutMs ?? 12_000
-    if (!this.baseUrl) throw new Error('Circle API URL is required')
   }
 
   async checkInvitation(emailInput: string): Promise<InvitationCheckResult> {
