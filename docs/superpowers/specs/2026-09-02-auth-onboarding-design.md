@@ -8,61 +8,50 @@ Branch: `feature/auth-onboarding`
 
 Build the complete Family Circle front door in the clean Electron + React + TypeScript rebuild while preserving the working behavior of the current application.
 
-This slice includes:
+This slice includes persistent session restore, sign in, create account, invitation detection and first-time invitation claim, forgot/reset password, invited-user onboarding, new-owner onboarding, and sign out.
 
-- persistent session restore
-- sign in
-- create account
-- invitation detection and first-time invitation claim
-- forgot-password request
-- recovery-code verification/reset
-- invited-user onboarding
-- new-owner onboarding
-- sign out
-
-The implementation must remain compatible with Jose's current Circle APIs for now, but the renderer must not depend on those endpoints or on the legacy P2P naming model. The eventual `/v2` backend must be replaceable behind adapters without rewriting the UI.
+The implementation remains compatible with Jose's current Circle APIs for now, but the renderer must not depend on those endpoints or on legacy P2P naming. A future `/v2` backend must be replaceable behind adapters without rewriting the UI.
 
 ## Chosen Approach
 
 Use a compatibility auth layer.
 
-We will not copy the current auth implementation wholesale, and we will not require a new server-first `/v2/auth` backend before the desktop rebuild can proceed.
+We will not copy the current auth implementation wholesale, and we will not block the desktop rebuild on a new server-first `/v2/auth` backend.
 
-Instead, the new application preserves the current product behavior behind clean boundaries:
+Instead:
 
 - existing users authenticate against the local desktop identity store
 - passwords remain bcrypt hashed
 - first-time invited users may be resolved and claimed through the current Circle service
-- recovery behavior and security limits are preserved
+- password-recovery security rules are preserved
 - onboarding remains aware of invited versus registered accounts
 - persistent sessions move out of renderer storage and into Electron-protected storage
-
-The renderer never receives a raw session credential.
+- React never receives a raw session credential
 
 ## Product Rules to Preserve
-
-The current application contains several product and security rules that are intentional and should survive the rebuild.
 
 ### Existing local users
 
 1. User supplies email and password.
 2. The desktop finds the local user by normalized email.
 3. Password is verified against the bcrypt hash.
-4. If the account is valid, a protected desktop session is created.
+4. A protected desktop session is created.
 5. If onboarding is complete, the user enters the app.
-6. If onboarding is incomplete, the user enters the onboarding flow.
+6. Otherwise the user enters onboarding.
 
 ### First-time invited users
 
 1. User enters the email address and temporary password from the invitation email.
 2. No local account exists yet.
-3. The compatibility Circle adapter checks the current Circle service for the invitation.
-4. The temporary password is verified.
+3. `LegacyCircleAuthAdapter` checks the current Circle service for the invitation.
+4. The temporary password is verified using the compatibility behavior required by the current service.
 5. The shared user and invitation are resolved.
 6. Membership is confirmed.
-7. Only after the shared state is sufficiently confirmed is the local invited account created.
+7. Only after sufficient shared-state confirmation is the local invited account created.
 8. A protected local session is created.
 9. The account is marked as requiring onboarding and a personal password.
+
+Remote claim failures must not produce a falsely completed local account.
 
 ### New account registration
 
@@ -72,29 +61,37 @@ Registration is a three-step flow:
 2. email and invitation check
 3. password creation
 
-Before creating a normal registered account, the system checks whether the email already has a pending family invitation. If so, registration stops and the user is guided to sign in with the temporary invitation password instead of accidentally creating a duplicate identity.
+Before creating a normal account, the system checks whether the email already has a pending family invitation. If so, registration stops and the user is guided to sign in with the invitation password instead of creating a duplicate identity.
 
-The new implementation improves one behavior: `name`, `email`, and `password` are committed as one registration domain operation and one local transaction, rather than creating a nameless account and patching the profile afterward.
+The rebuild improves one detail: `name`, `email`, and `password` are committed as one registration domain operation and one local transaction rather than creating a nameless account and patching the profile later.
 
 ### Password requirements
 
-Preserve the existing password length rule:
+Preserve the current rule:
 
-- minimum: 12 characters
-- maximum: 72 characters
+- minimum 12 characters
+- maximum 72 characters
 
 ### Password recovery
 
-Preserve these existing protections:
+Preserve:
 
-- neutral response to recovery requests so account existence is not disclosed
-- recovery code stored only as a hash
-- short expiry window
+- neutral request response so account existence is not disclosed
+- hashed recovery codes at rest
+- 10-minute expiry
 - request throttling
 - attempt limiting
-- recovery code invalidation after use
+- one-time consumption
 - new password must differ from the previous password
-- all old sessions invalidated after successful reset by incrementing `sessionVersion`
+- successful reset increments `sessionVersion`, invalidating prior sessions
+
+The three-step UI is presentation only:
+
+1. email
+2. collect recovery code
+3. collect new password and submit code + new password together
+
+We will **not invent a separate server-side "verify recovery code" endpoint** merely to match the UI steps. The code is validated atomically when the new password is submitted, preserving the current security behavior.
 
 ### Onboarding behavior
 
@@ -102,28 +99,26 @@ Invited users:
 
 1. replace temporary password if required
 2. confirm family-visible profile name
-3. confirm the invited Circle and role
+3. confirm invited Circle and role
 4. complete onboarding
 5. enter Family Circle
 
 Registered/new-owner users:
 
 1. confirm family-visible profile name
-2. choose one of:
-   - create a family Circle
-   - explore the app first
+2. choose either Create a family Circle or Explore the app first
 3. complete onboarding
 4. enter Family Circle
 
-The "Explore first" path must remain available so a user is not forced to configure a family network before seeing the product.
+The Explore-first path remains available.
 
 ## UX Structure
 
-Authentication and onboarding must feel like one coherent Kin-Keepers experience rather than a collection of unrelated legacy pages.
+Authentication and onboarding must feel like one coherent Kin-Keepers entrance rather than unrelated legacy pages.
 
 ### Visual principles
 
-Use the approved Kin-Keepers application palette:
+Use the approved palette:
 
 - deep navy `#0C2348`
 - teal `#0E9F9A`
@@ -131,17 +126,15 @@ Use the approved Kin-Keepers application palette:
 - warm gold `#E6AD69`
 - pale mint `#E9FBF6`
 - cool gray `#EEF2F7`
-- white application surfaces
+- white surfaces
 
-Use the official bundled Kin-Keepers logo from `public/kin-cropped.jpg`.
+Use the bundled official logo at `public/kin-cropped.jpg`.
 
-The auth experience should be calm and application-like, not a promotional landing page. Avoid a dark corporate wall, giant illustration carousel, or noisy system/API status messages.
+The experience should be calm and application-like: no promotional carousel, no dark corporate wall, and no endpoint/database/token diagnostics.
 
-### Startup session gate
+### Startup SessionGate
 
-The main application shell must not render until session restoration is resolved.
-
-State machine:
+The authenticated application shell must not render until session restoration is resolved.
 
 ```text
 restoring
@@ -150,7 +143,7 @@ restoring
   -> authenticated
 ```
 
-During `restoring`, show a short branded splash such as:
+During `restoring`, show a short branded splash:
 
 ```text
 [Kin-Keepers logo]
@@ -158,11 +151,9 @@ Family Circle
 Opening your private workspace...
 ```
 
-No token, endpoint, database, or API diagnostics appear in the renderer.
-
 ### Sign in
 
-One centered branded card:
+One branded card with:
 
 - email
 - password
@@ -175,42 +166,38 @@ Busy and error states remain inside the card.
 
 ### Registration
 
-Step 1: name
+Step 1 — Name
 
-- "What should your family call you?"
+> What should your family call you?
 
-Step 2: email
+Step 2 — Email
 
-- explain that Family Circle will check whether the family has already invited this address
+Explain that Family Circle will check whether the family has already invited the address.
 
-If an invitation is detected:
+If an invitation exists:
 
-- stop the normal registration flow
-- display the Circle name/role when available
-- explain that the user should use the temporary password from the invitation email
-- provide a direct action back to sign in with the email prefilled
+- stop normal registration
+- show Circle name/role when available
+- explain that the invitation password should be used
+- return to sign in with email prefilled
 
-Step 3: password
+Step 3 — Password
 
 - password
 - confirmation
-- 12-72 character guidance
+- 12–72 character guidance
 
-On successful registration:
-
-- create the local account transactionally
-- create protected session
-- enter onboarding
+Successful registration creates the local account transactionally, creates a protected session, then enters onboarding.
 
 ### Recovery
 
-One guided three-step flow:
+Guided UI:
 
 1. email
 2. recovery code
 3. new password
 
-The request response is always neutral:
+The request response remains:
 
 > If an account exists for that email, a recovery code has been sent.
 
@@ -218,7 +205,7 @@ After successful reset, return to sign in with the email prefilled.
 
 ### Invited onboarding
 
-Progress model:
+Progress:
 
 ```text
 Secure your account
@@ -227,18 +214,18 @@ Your family circle
 Ready
 ```
 
-The first step is omitted or considered complete when `mustChangePassword` is false.
+The password step is skipped/complete when `mustChangePassword` is false.
 
-The Circle confirmation screen shows the invited Circle and role only after the main process confirms the shared membership context.
+The Circle screen shows the invited Circle and role only after main-process membership confirmation.
 
 ### Registered-owner onboarding
 
-The Circle step presents two clear choices:
+The Circle step offers:
 
 - Create a family circle
 - Explore the app first
 
-The chosen next action is returned as ordinary application state, not stored as an auth secret.
+The chosen next action is normal application state, not an auth credential.
 
 ## Runtime Architecture
 
@@ -294,26 +281,20 @@ src/renderer/
     SessionGate.tsx
 ```
 
-React is responsible for:
+React owns forms, guided steps, client-side validation, busy/error presentation, state-based routing, and renderer-safe user/onboarding data.
 
-- displaying forms and guided steps
-- client-side field validation for fast feedback
-- busy, success, and failure presentation
-- routing between auth/onboarding/app states
-- rendering safe current-user and onboarding-context data
+React must not own:
 
-React is not responsible for:
-
-- SQLite access
+- SQLite
 - password hashing
 - session encryption/decryption
-- raw session tokens
+- raw session credentials
 - API keys
 - raw Circle URLs
-- direct network calls for auth
+- direct auth networking
 - legacy P2P configuration
 
-Feature components must continue to obey the repository's renderer-boundary checks.
+Existing renderer-boundary checks remain mandatory.
 
 ## Main-Process Responsibilities
 
@@ -338,9 +319,7 @@ src/main/
 
 ### AuthService
 
-Owns authentication orchestration and application-level outcomes.
-
-Examples:
+Orchestrates:
 
 - restore session
 - sign in
@@ -352,26 +331,24 @@ Examples:
 - fetch onboarding Circle context
 - complete onboarding
 
-It coordinates repositories/adapters but does not contain raw renderer code or giant mixed-purpose IPC logic.
+It coordinates focused modules and must not become another giant mixed-purpose IPC file.
 
 ### UserRepository
 
-Owns local user persistence and identity rules.
+Owns:
 
-Responsibilities include:
+- normalized-email identity lookup
+- transactional registered-user creation
+- transactional invited-user creation
+- find by email/id
+- bcrypt verification
+- password replacement
+- profile update
+- onboarding state
+- `sessionVersion`
+- invitation metadata
 
-- normalize email
-- create registered user transactionally
-- create invited user transactionally
-- find user by email/id
-- verify bcrypt password
-- update password hash
-- update family-visible profile
-- update onboarding state
-- increment/read session version
-- read invitation metadata
-
-The repository returns shaped user objects and must never expose password hashes outside the main-process auth layer.
+Password hashes never leave the main-process auth layer.
 
 ### PasswordRecoveryService
 
@@ -379,24 +356,22 @@ Owns:
 
 - secure random recovery-code creation
 - hashing
-- expiry
+- 10-minute expiry
 - request throttling
-- attempt counting
+- failed-attempt counting
 - one-time consumption
 - password replacement
 - session invalidation after reset
 
-Email delivery remains behind a transport/service boundary so it can preserve the current behavior now and change later.
+Email delivery remains behind a transport boundary.
 
 ### SessionStore
 
-Persistent login is approved.
+Persistent sign-in is approved.
 
-Do not persist the session in renderer `localStorage`.
+No auth token/session is stored in renderer `localStorage` or `sessionStorage`.
 
-Use Electron `safeStorage` in the main process.
-
-Store a small local session envelope, conceptually:
+Use Electron `safeStorage` in main. Store an encrypted local envelope conceptually shaped as:
 
 ```ts
 {
@@ -406,46 +381,44 @@ Store a small local session envelope, conceptually:
 }
 ```
 
-The envelope is encrypted with `safeStorage.encryptString(...)` and written under Electron `userData`.
+The protected session lifetime is **30 days**, preserving the lifetime of the old local JWT behavior. Successful sign-in/registration/claim refreshes the 30-day expiry.
 
-Restore sequence:
+Restore:
 
 1. load encrypted session file
-2. decrypt in main process
+2. decrypt in main
 3. parse envelope
-4. reject if expired
+4. reject/delete if expired
 5. find local user
-6. compare stored `sessionVersion` to current user `sessionVersion`
+6. compare envelope `sessionVersion` to the current user version
 7. reject/delete if mismatched
-8. return safe session state to renderer
+8. return renderer-safe state
 
-Successful password reset/change increments `sessionVersion`, invalidating previously persisted sessions.
+All password-changing operations that replace the authenticated password—including password reset and replacing an invitation password—must invalidate older sessions by incrementing `sessionVersion` before writing the fresh session.
 
 Sign out deletes the protected session.
 
+`safeStorage` is wrapped behind an injectable interface so CI tests use a deterministic fake instead of OS keychain behavior.
+
 ### Why no local JWT
 
-The new architecture does not need a locally issued JWT for renderer-to-main communication because the renderer never possesses the credential and the main process queries the local identity store anyway.
-
-Removing the local JWT avoids unnecessary complexity:
+A locally issued JWT is unnecessary when React never holds the credential and Electron main queries the local identity store anyway.
 
 ```text
-issue JWT -> encrypt JWT -> decrypt JWT -> verify JWT -> query local user
+old concept:
+issue JWT -> persist JWT -> verify JWT -> query local user
+
+new concept:
+encrypt session envelope -> validate user + sessionVersion
 ```
 
-becomes:
-
-```text
-encrypt small session envelope -> validate against local user/sessionVersion
-```
-
-This does not prevent a future server session/token from being introduced behind `/v2`; it only removes an unnecessary local-only JWT abstraction.
+A future server-issued token can still exist behind `/v2`; this decision only removes an unnecessary local-only JWT abstraction.
 
 ## Legacy Circle Compatibility Adapter
 
-`LegacyCircleAuthAdapter` is the only new module allowed to know the current shared-service implementation details for auth/onboarding compatibility.
+`LegacyCircleAuthAdapter` is the only new module allowed to know current shared-service implementation details for authentication/onboarding compatibility.
 
-It may internally know endpoints such as:
+It may know current endpoints for:
 
 - invitation check
 - shared-user registration/resolution
@@ -453,7 +426,7 @@ It may internally know endpoints such as:
 - mark claimed
 - memberships/groups lookup
 
-The rest of the application sees domain operations such as:
+The rest of the application uses domain operations such as:
 
 ```text
 checkInvitation(email)
@@ -462,25 +435,17 @@ getMemberships(...)
 confirmInvitedCircle(...)
 ```
 
-This enables a later replacement:
+Later replacement:
 
 ```text
 LegacyCircleAuthAdapter -> V2CircleAuthAdapter
 ```
 
-without changing React screens or AuthService contracts.
+must not require React changes.
 
 ## Legacy Shared API Key
 
-The current Circle service may temporarily require its existing app-wide shared key.
-
-Compatibility rule:
-
-- the key may exist only in Electron main configuration and the legacy adapter
-- it must not be returned through preload
-- it must not appear in React
-- it must not be stored in renderer localStorage/sessionStorage
-- it must not be confused with per-user authentication
+The current Circle service may temporarily require its app-wide shared key.
 
 Use new internal configuration names:
 
@@ -491,13 +456,19 @@ CIRCLE_API_KEY
 
 The legacy adapter may translate `CIRCLE_API_KEY` to the current `X-Kin-Keepers-Key` header internally.
 
-The eventual `/v2` identity design should remove this application-wide credential model.
+Rules:
+
+- main process / legacy adapter only
+- never returned through preload
+- never referenced in React
+- never stored in renderer storage
+- never described as user identity or a secure per-user credential
+
+Because it is distributed with a desktop application, this compatibility key must be treated as **application traffic gating, not a durable secret**. The `/v2` identity design should remove this model rather than trying to make the shared key stronger.
 
 ## Typed Preload Surface
 
-The renderer receives a narrow typed capability surface.
-
-Conceptual shape:
+Conceptual capabilities:
 
 ```text
 desktop.auth.restore()
@@ -524,21 +495,13 @@ rawDatabase()
 rawFetch()
 ```
 
-The returned types contain only renderer-safe state such as:
+Renderer-safe results contain authentication state, shaped current user, account origin, onboarding requirement, must-change-password state, Circle confirmation information, and recoverable user-facing errors.
 
-- authenticated
-- current user
-- account origin
-- onboarding required
-- must-change-password
-- Circle confirmation information
-- recoverable error codes/messages
-
-## Data Model
-
-The local database must support at least:
+## Local Data Model
 
 ### users
+
+At minimum:
 
 - id
 - email (normalized/unique)
@@ -556,7 +519,7 @@ The local database must support at least:
 - created_at
 - updated_at
 
-Existing profile fields may be migrated as needed by later profile/features, but this auth slice should not expand scope unnecessarily.
+Do not expand this slice into unrelated profile schema work.
 
 ### password_reset_tokens
 
@@ -570,28 +533,26 @@ Existing profile fields may be migrated as needed by later profile/features, but
 
 ## Error Handling
 
-Renderer-facing errors should describe the user's next action without exposing raw network or database details.
+Renderer-facing failures describe the user's next action without raw network/database details.
 
 Examples:
 
 - incorrect password
-- account not found / register or check invitation
-- invitation found but shared membership not ready
-- unable to check invitation because connection is unavailable
+- account not found; register or check invitation
+- invitation found but membership not ready
+- invitation check unavailable; check connection and retry
 - recovery code expired
 - too many recovery attempts; request a new code
 - setup session invalid; sign in again
 
-Remote failures during invitation claim must not produce a falsely completed local account state.
+If Circle confirmation fails during invited onboarding, already-saved password/profile work remains intact and the Circle step is retryable.
 
-When Circle confirmation fails during invited onboarding, already-saved password/profile work remains intact and the user can retry the Circle step.
+## Preserve vs Rewrite
 
-## Migration and Compatibility Rules
-
-Preserve or port cleanly:
+Preserve/port cleanly:
 
 - bcrypt local authentication behavior
-- password length rule
+- 12–72 character password rule
 - password-reset security rules
 - invitation detection and claim sequence
 - invited vs registered account origin
@@ -606,34 +567,30 @@ Rewrite cleanly:
 - local JWT session
 - plain electron-store secret storage
 - renderer-accessible P2P configuration
-- P2P naming in the new application
+- P2P naming in the new app
 - direct legacy URLs in UI code
 
-The old repo remains the behavioral reference during implementation.
+The old repo remains the behavioral reference.
 
-## Security Boundaries
-
-Required invariants:
+## Security Invariants
 
 1. No password hash leaves Electron main.
 2. No protected-session payload leaves Electron main.
 3. No Circle API key leaves Electron main.
 4. No auth feature component performs `fetch()` directly.
 5. No renderer code references legacy Circle endpoint URLs.
-6. No auth token is stored in localStorage or sessionStorage.
-7. Password reset invalidates old sessions.
+6. No auth token/session is stored in localStorage or sessionStorage.
+7. Password replacement invalidates older sessions.
 8. Sign out deletes the persistent session.
-9. First-time invited account creation occurs only after sufficient shared-state confirmation.
-10. Startup does not briefly render the authenticated shell before session state is known.
+9. First-time invited account creation happens only after sufficient shared-state confirmation.
+10. Startup never briefly renders the authenticated shell before session state is known.
 
 ## Testing Strategy
 
-### UserRepository tests
-
-Cover:
+### UserRepository
 
 - normalized email uniqueness
-- registration transaction
+- transactional registration
 - bcrypt verification
 - wrong-password rejection
 - invited-user creation
@@ -641,109 +598,93 @@ Cover:
 - sessionVersion increment
 - password replacement
 
-### PasswordRecoveryService tests
+### PasswordRecoveryService
 
-Cover:
-
-- neutral unknown-account request behavior
-- token is hashed at rest
-- request throttle
+- neutral unknown-account behavior
+- token hashed at rest
+- throttling
 - expiry
 - failed-attempt count
 - maximum-attempt invalidation
 - one-time use
-- rejection of old password reuse
+- reject old-password reuse
 - successful reset increments sessionVersion
 
-### SessionStore tests
-
-Cover:
+### SessionStore
 
 - encrypted write/read abstraction
 - valid restore
-- expiry rejection
-- invalid/corrupt payload rejection
+- 30-day expiry handling
+- corrupt payload rejection
 - sessionVersion mismatch rejection
 - sign-out deletion
 
-`safeStorage` itself should be wrapped behind an injectable interface so tests can use a deterministic fake rather than relying on OS keychain behavior in CI.
+### AuthService
 
-### AuthService tests
-
-Cover:
-
-- existing local user success
-- existing local user wrong password
-- registered new user
+- existing user success/wrong password
+- new registration
 - duplicate registration
 - invitation detected during registration
-- first-time invited login/claim
+- first-time invited claim
 - failed invitation lookup
 - failed membership confirmation
 - onboarding-required result
-- restore authenticated session
-- restore onboarding session
+- authenticated restore
+- onboarding restore
 - sign out
 
-### React tests
-
-Cover:
+### React
 
 - branded restoring state
-- sign-in validation and failure
-- successful sign-in route decision
+- sign-in validation/failure/success
 - three-step registration
 - invitation diversion to sign in
-- password-recovery three-step flow
+- three-step recovery UI with atomic final reset submission
 - invited onboarding
 - registered-owner onboarding
 - Create Circle choice
 - Explore first choice
 - retryable Circle-confirmation failure
-- authenticated shell only after SessionGate resolution
+- shell renders only after SessionGate resolves
 
 ### CI
 
-The existing full check remains the release gate:
+Existing release gate remains:
 
 ```text
 typecheck
-unit/component tests
+tests
 renderer boundary verification
 production Electron build
 production Vite build
 ```
 
-Boundary verification should be expanded where appropriate to detect renderer session-token storage and forbidden auth networking patterns.
+Boundary verification should be expanded to detect renderer session-token storage and forbidden auth-networking patterns.
 
-## Out of Scope for This Slice
+## Out of Scope
 
-Do not expand this implementation into:
+This slice does not include:
 
 - full Circle management
-- creating the actual Circle backend operation beyond routing the chosen onboarding action
+- the actual Create-Circle feature beyond routing the chosen onboarding action
 - `/v2` backend implementation
 - SSO/social login
-- biometrics login
+- biometric login
 - MFA
 - Vault encryption redesign
-- offline AI initialization redesign
-- full profile management beyond onboarding name/profile essentials
-
-Those can build on this identity/session foundation later.
+- offline-AI initialization redesign
+- full profile management beyond onboarding essentials
 
 ## Definition of Done
 
-This slice is complete when:
-
-1. The app opens through a SessionGate.
-2. Persistent sessions restore without exposing a token to React.
+1. App startup is controlled by SessionGate.
+2. Persistent sessions restore without exposing a credential to React.
 3. Existing local users can sign in.
 4. New users can register through the guided flow.
 5. Pending invitations divert ordinary registration correctly.
 6. First-time invited users can claim through the compatibility adapter.
-7. Password recovery works with the preserved security controls.
-8. Invited users can complete secure-password/profile/Circle onboarding.
+7. Password recovery works with preserved security controls.
+8. Invited users can complete password/profile/Circle onboarding.
 9. Registered users can choose Create Circle or Explore first.
 10. Sign out removes the protected session.
 11. Raw legacy endpoints and shared credentials remain out of renderer code.
