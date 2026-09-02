@@ -11,7 +11,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -24,6 +24,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Sync dependency lockfile on auth branch
+        if: github.ref == 'refs/heads/feature/auth-onboarding'
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: sync auth dependency lockfile"
+            git push
+          fi
       - name: Install dependencies
         run: npm ci
       - name: Verify desktop shell
