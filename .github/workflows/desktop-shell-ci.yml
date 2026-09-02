@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -18,6 +18,28 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
+      - name: Import official Kin-Keepers logo once
+        if: github.event_name == 'push'
+        run: |
+          if [ -f public/kin-cropped.jpg ]; then
+            echo "Official Kin-Keepers logo already tracked"
+            exit 0
+          fi
+          mkdir -p public
+          curl -fsSL --retry 3 --retry-delay 2 \
+            https://kin-keepers.ai/kin-cropped.jpg \
+            -o public/kin-cropped.jpg
+          actual="$(git hash-object public/kin-cropped.jpg)"
+          expected="4d24aef203d0b221537e0aa2f82f6dbc9925160c"
+          test "$actual" = "$expected" || {
+            echo "Logo integrity check failed: expected $expected, got $actual"
+            exit 1
+          }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/kin-cropped.jpg
+          git commit -m "chore: import official Kin-Keepers logo"
+          git push
       - uses: actions/setup-node@v4
         with:
           node-version: 24
