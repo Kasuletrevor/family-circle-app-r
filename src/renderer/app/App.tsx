@@ -1,11 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { Home } from '../features/home/Home'
 import { PlaceholderPage } from './PlaceholderPage'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import './App.css'
 
 const placeholderRoutes = [
-  { path: '/', title: 'Home' },
   { path: '/circles', title: 'My Circles' },
   { path: '/family-tree', title: 'Family Tree' },
   { path: '/members', title: 'Members' },
@@ -25,6 +25,7 @@ export function App() {
         <TopBar />
         <main className="app-shell__content">
           <Routes>
+            <Route path="/" element={<Home />} />
             {placeholderRoutes.map(({ path, title }) => (
               <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
             ))}
