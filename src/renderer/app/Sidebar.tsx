@@ -47,11 +47,12 @@ export function Sidebar() {
             key={to}
             end={to === '/'}
             to={to}
+            aria-label={label}
             className={({ isActive }) => `sidebar-link${isActive ? ' sidebar-link--active' : ''}`}
           >
             <Icon size={19} strokeWidth={1.9} aria-hidden="true" />
             <span>{label}</span>
-            {badge && <span className="sidebar-link__badge">{badge}</span>}
+            {badge && <span className="sidebar-link__badge" aria-hidden="true">{badge}</span>}
           </NavLink>
         ))}
       </nav>
