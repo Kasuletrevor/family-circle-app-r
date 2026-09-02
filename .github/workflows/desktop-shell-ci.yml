@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -22,14 +22,23 @@ jobs:
         with:
           node-version: 24
       - name: Install dependencies
-        run: npm install
-      - name: Preserve generated lockfile
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+      - name: Commit generated lockfile once
+        if: github.event_name == 'push'
+        run: |
+          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            echo "package-lock.json is already tracked"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: lock desktop dependencies"
+          git push
       - name: Run tests
         run: npm test -- src/main/windowOptions.test.ts src/preload/createDesktopApi.test.ts
