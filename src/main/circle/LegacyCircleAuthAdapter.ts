@@ -1,12 +1,16 @@
-import type { InvitationCheckResult } from '../../shared/desktopApi'
+import type {
+  CircleNotificationRecord,
+  InvitationCheckResult,
+  InvitationFamilyRole,
+  InviteMemberResult,
+} from '../../shared/desktopApi'
 import { normalizeEmail } from '../auth/passwordPolicy'
 import type {
-  CircleGroupRecord,
-  CircleNotificationRecord,
-  CircleTreePersonRecord,
-  CircleTreeRecord,
-  CircleTreeRelationRecord,
-} from './CircleService'
+  CircleGroupInternal,
+  CircleTreeInternal,
+  CircleTreePersonInternal,
+  CircleTreeRelationInternal,
+} from './circleModels'
 
 const DEFAULT_LEGACY_CIRCLE_URL = 'https://familycircle.o2gventures.com/circle-api'
 
@@ -51,7 +55,7 @@ function finiteNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null
 }
 
-function normalizePersonKind(value: unknown, id: string): CircleTreePersonRecord['kind'] {
+function normalizePersonKind(value: unknown, id: string): CircleTreePersonInternal['kind'] {
   const kind = String(value ?? '').trim().toLowerCase()
   if (kind === 'placeholder') return 'placeholder'
   if (kind === 'invite' || id.startsWith('invite:')) return 'invite'
@@ -140,12 +144,66 @@ export class LegacyCircleAuthAdapter {
     }
   }
 
+  async ensureSharedUser(input: { email: string; name: string }): Promise<{ serverUserId: string }> {
+    const registration = await this.postJson<RegistrationResponse>('/api/register', {
+      email: normalizeEmail(input.email),
+      name: String(input.name ?? '').trim(),
+    })
+    const serverUserId = String(registration.user?.id ?? '').trim()
+    if (!serverUserId) throw new Error('The shared account could not be created')
+    return { serverUserId }
+  }
+
+  async createCircle(input: { serverUserId: string; name: string }): Promise<CircleGroupInternal> {
+    const serverUserId = String(input.serverUserId ?? '').trim()
+    const name = String(input.name ?? '').trim()
+    const data = await this.postJson<{
+      group?: { id?: unknown; name?: unknown; ownerId?: unknown; owner_id?: unknown }
+    }>('/api/group/create', {
+      fromUserId: serverUserId,
+      name,
+    })
+    const group = data.group ?? {}
+    const id = String(group.id ?? '').trim()
+    if (!id) throw new Error('The shared Circle could not be created')
+    const ownerId = String(group.ownerId ?? group.owner_id ?? serverUserId).trim()
+    return {
+      id,
+      name: String(group.name ?? name),
+      ownerId,
+      role: 'Circle owner',
+    }
+  }
+
+  async inviteMember(input: {
+    serverUserId: string
+    circleId: string
+    email: string
+    role: InvitationFamilyRole
+  }): Promise<InviteMemberResult> {
+    const data = await this.postJson<{
+      alreadyMember?: boolean
+      alreadyPending?: boolean
+      emailSent?: boolean
+    }>('/api/group/invite-email', {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      groupId: String(input.circleId ?? '').trim(),
+      email: normalizeEmail(input.email),
+      role: input.role,
+    })
+
+    if (data.alreadyMember) return { outcome: 'already-member' }
+    if (data.alreadyPending) return { outcome: 'already-pending' }
+    if (data.emailSent === false) return { outcome: 'delivery-failed' }
+    return { outcome: 'sent' }
+  }
+
   async getMemberships(serverUserId: string): Promise<Array<{ id: string; name: string; role: string }>> {
     const groups = await this.listGroups(serverUserId)
     return groups.map(({ id, name, role }) => ({ id, name, role }))
   }
 
-  async listGroups(serverUserId: string): Promise<CircleGroupRecord[]> {
+  async listGroups(serverUserId: string): Promise<CircleGroupInternal[]> {
     const safeServerUserId = String(serverUserId).trim()
     const data = await this.getJson<{
       groups?: Array<{ id?: unknown; name?: unknown; ownerId?: unknown; owner_id?: unknown; role?: unknown }>
@@ -166,7 +224,7 @@ export class LegacyCircleAuthAdapter {
       : []
   }
 
-  async getTree(groupId: string, serverUserId: string): Promise<CircleTreeRecord> {
+  async getTree(groupId: string, serverUserId: string): Promise<CircleTreeInternal> {
     const data = await this.getJson<{
       group?: { id?: unknown; name?: unknown; ownerId?: unknown; owner_id?: unknown }
       people?: Array<Record<string, unknown>>
@@ -175,7 +233,7 @@ export class LegacyCircleAuthAdapter {
     }>(`/api/group/${encodeURIComponent(groupId)}/tree/${encodeURIComponent(serverUserId)}`)
 
     const group = data.group ?? {}
-    const people: CircleTreePersonRecord[] = Array.isArray(data.people)
+    const people: CircleTreePersonInternal[] = Array.isArray(data.people)
       ? data.people.map((person) => {
           const id = String(person.id ?? '').trim()
           return {
@@ -189,7 +247,7 @@ export class LegacyCircleAuthAdapter {
         }).filter((person) => Boolean(person.id))
       : []
 
-    const relations: CircleTreeRelationRecord[] = Array.isArray(data.relations)
+    const relations: CircleTreeRelationInternal[] = Array.isArray(data.relations)
       ? data.relations.map((relation) => ({
           id: String(relation.id ?? '').trim(),
           kind: String(relation.kind ?? '').trim(),
