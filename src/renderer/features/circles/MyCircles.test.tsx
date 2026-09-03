@@ -49,11 +49,12 @@ describe('MyCircles', () => {
     expect(screen.queryByRole('button', { name: 'Invite to Ramos Family' })).not.toBeInTheDocument()
   })
 
-  it('renders the intentional first-Circle empty state', async () => {
+  it('renders the intentional first-Circle empty state and opens the same create dialog', async () => {
     renderPage(service({ getMyCircles: vi.fn(async () => []) }))
 
     expect(await screen.findByRole('heading', { name: 'Your family starts here' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create your first Circle' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create your first Circle' }))
+    expect(screen.getByRole('dialog', { name: 'Create a family circle' })).toBeInTheDocument()
   })
 
   it('opens only after protected selection succeeds, then navigates Home', async () => {
@@ -88,5 +89,27 @@ describe('MyCircles', () => {
 
     expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
     expect(getMyCircles).toHaveBeenCalledTimes(2)
+  })
+
+  it('creates through the protected client, closes the dialog, and reloads authoritative Circle cards', async () => {
+    const refreshed: CircleSummary[] = [
+      ...circles.map((item) => ({ ...item, isActive: false })),
+      { id: 'circle-new', name: 'New Family', role: 'Circle owner', memberCount: 1, isActive: true },
+    ]
+    const getMyCircles = vi
+      .fn<CircleClient['getMyCircles']>()
+      .mockResolvedValueOnce(circles)
+      .mockResolvedValueOnce(refreshed)
+    const createCircle = vi.fn(async () => ({ circleId: 'circle-new' }))
+    renderPage(service({ getMyCircles, createCircle }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Circle' }))
+    fireEvent.change(screen.getByLabelText('Circle name'), { target: { value: 'New Family' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Circle' }))
+
+    expect(await screen.findByText('New Family')).toBeInTheDocument()
+    expect(createCircle).toHaveBeenCalledWith({ name: 'New Family' })
+    expect(getMyCircles).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('dialog', { name: 'Create a family circle' })).not.toBeInTheDocument()
   })
 })
