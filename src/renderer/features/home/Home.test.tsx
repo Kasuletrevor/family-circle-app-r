@@ -101,6 +101,7 @@ describe('Home', () => {
     renderHome({
       getHomeSnapshot,
       getMyCircles: vi.fn(async () => [snapshot.activeCircle]),
+      getShellSnapshot: vi.fn(async () => ({ activeCircleName: snapshot.activeCircle.name, unreadNotifications: 0 })),
     })
 
     expect(await screen.findByText('We could not load your family overview.')).toBeInTheDocument()
