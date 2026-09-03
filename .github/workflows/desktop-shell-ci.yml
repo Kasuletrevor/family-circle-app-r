@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/desktop-shell
+      - feature/auth-onboarding
   pull_request:
     branches:
       - main

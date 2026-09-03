@@ -17,7 +17,7 @@ const placeholderRoutes = [
   { path: '/settings', title: 'Settings' },
 ] as const
 
-export function App() {
+export function AuthenticatedApp() {
   return (
     <div className="app-shell">
       <Sidebar />
@@ -36,3 +36,5 @@ export function App() {
     </div>
   )
 }
+
+export const App = AuthenticatedApp

@@ -4,15 +4,39 @@ import process from 'node:process'
 
 const root = process.cwd()
 const rendererRoot = join(root, 'src', 'renderer')
+const mainRoot = join(root, 'src', 'main')
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.html'])
+const legacyAdapterPath = 'src/main/circle/LegacyCircleAuthAdapter.ts'
 
 const rendererRules = [
-  { name: 'legacy shared API key', pattern: /P2P_API_KEY/g },
+  { name: 'renderer token storage through localStorage', pattern: /\blocalStorage\b[^\n]*\btoken\b/gi },
+  { name: 'renderer token storage through sessionStorage', pattern: /\bsessionStorage\b[^\n]*\btoken\b/gi },
+  { name: 'renderer token getter', pattern: /\bgetToken\s*\(/g },
+  { name: 'renderer token decoder', pattern: /\bdecodeToken\s*\(/g },
   { name: 'legacy shared API-key header', pattern: /X-Kin-Keepers-Key/g },
+  { name: 'Circle API-key configuration', pattern: /\bCIRCLE_API_KEY\b/g },
+  { name: 'Circle API URL configuration', pattern: /\bCIRCLE_API_URL\b/g },
+  { name: 'legacy shared API key', pattern: /\bP2P_API_KEY\b/g },
+  { name: 'legacy P2P server configuration', pattern: /\bP2P_SERVER\b/g },
   { name: 'legacy P2P environment access', pattern: /process\.env\.P2P_/g },
   { name: 'legacy global application state', pattern: /window\.KK/g },
   { name: 'direct legacy Circle API URL', pattern: /https:\/\/familycircle\.o2gventures\.com\/circle-api/g },
   { name: 'runtime dependency on the brand source repository', pattern: /raw\.githubusercontent\.com\/Elder-ChatGPT\/agent-ai-landing/g },
+]
+
+const mainQuarantineRules = [
+  { name: 'legacy Circle API-key header', pattern: /X-Kin-Keepers-Key/g },
+  { name: 'legacy Circle endpoint URL', pattern: /https:\/\/familycircle\.o2gventures\.com\/circle-api/g },
+  { name: 'legacy invitation-check path', pattern: /\/api\/invitation-check/g },
+  { name: 'legacy registration path', pattern: /\/api\/register/g },
+  { name: 'legacy invitation-accept path', pattern: /\/api\/invitations\/accept-link/g },
+  { name: 'legacy mark-claimed path', pattern: /\/api\/user\/mark-claimed/g },
+  { name: 'legacy membership path', pattern: /\/api\/me\//g },
+]
+
+const mainForbiddenRules = [
+  { name: 'new production code must not use P2P_API_KEY', pattern: /\bP2P_API_KEY\b/g },
+  { name: 'new production code must not use P2P_SERVER', pattern: /\bP2P_SERVER\b/g },
 ]
 
 async function collectFiles(directory) {
@@ -39,32 +63,60 @@ function lineNumberFor(content, index) {
   return content.slice(0, index).split('\n').length
 }
 
-const violations = []
-const files = await collectFiles(rendererRoot)
+function isProductionSource(file) {
+  return !/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
+}
 
-for (const filePath of files) {
-  const content = await readFile(filePath, 'utf8')
-  const file = displayPath(filePath)
-
-  for (const rule of rendererRules) {
+function recordMatches(violations, file, content, rules) {
+  for (const rule of rules) {
     rule.pattern.lastIndex = 0
     for (const match of content.matchAll(rule.pattern)) {
       violations.push(`${file}:${lineNumberFor(content, match.index ?? 0)} — ${rule.name}`)
     }
   }
+}
+
+const violations = []
+const rendererFiles = await collectFiles(rendererRoot)
+const mainFiles = await collectFiles(mainRoot)
+
+for (const filePath of rendererFiles) {
+  const file = displayPath(filePath)
+  if (!isProductionSource(file)) continue
+  const content = await readFile(filePath, 'utf8')
+
+  recordMatches(violations, file, content, rendererRules)
 
   if (file.startsWith('src/renderer/features/')) {
-    const directFetchPattern = /\bfetch\s*\(/g
-    for (const match of content.matchAll(directFetchPattern)) {
-      violations.push(`${file}:${lineNumberFor(content, match.index ?? 0)} — feature components must use typed service clients instead of fetch()`)
-    }
+    recordMatches(violations, file, content, [
+      { name: 'feature components must use typed service clients instead of fetch()', pattern: /\bfetch\s*\(/g },
+    ])
+  }
+
+  if (file.startsWith('src/renderer/features/auth/') || file.startsWith('src/renderer/features/onboarding/')) {
+    recordMatches(violations, file, content, [
+      { name: 'auth/onboarding must not persist through localStorage', pattern: /\blocalStorage\s*\.\s*setItem\s*\(/g },
+      { name: 'auth/onboarding must not persist through sessionStorage', pattern: /\bsessionStorage\s*\.\s*setItem\s*\(/g },
+      { name: 'auth/onboarding must not call fetch()', pattern: /\bfetch\s*\(/g },
+    ])
   }
 }
 
+for (const filePath of mainFiles) {
+  const file = displayPath(filePath)
+  if (!isProductionSource(file)) continue
+  const content = await readFile(filePath, 'utf8')
+
+  recordMatches(violations, file, content, mainForbiddenRules)
+  if (file !== legacyAdapterPath) recordMatches(violations, file, content, mainQuarantineRules)
+}
+
 if (violations.length > 0) {
-  console.error('Renderer boundary verification failed:')
+  console.error('Architecture boundary verification failed:')
   for (const violation of violations) console.error(`  - ${violation}`)
   process.exit(1)
 }
 
-console.log(`Renderer boundary verification passed across ${files.length} source files.`)
+console.log(
+  `Architecture boundary verification passed across ${rendererFiles.length} renderer and ${mainFiles.length} main-process source files.`,
+)

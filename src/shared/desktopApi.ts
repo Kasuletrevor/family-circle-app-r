@@ -1,6 +1,68 @@
+export type AccountOrigin = 'registered' | 'invited' | 'existing'
+export type OnboardingNextAction = 'create-circle' | 'home' | 'joined-circle'
+
+export interface AuthUser {
+  id: number
+  email: string
+  name: string | null
+  accountOrigin: AccountOrigin
+  mustChangePassword: boolean
+  onboardingCompleted: boolean
+}
+
+export type AuthState =
+  | { status: 'unauthenticated' }
+  | { status: 'onboarding'; user: AuthUser }
+  | { status: 'authenticated'; user: AuthUser }
+
+export interface SignInInput {
+  email: string
+  password: string
+}
+
+export interface RegisterInput {
+  name: string
+  email: string
+  password: string
+}
+
+export interface ResetPasswordInput {
+  email: string
+  code: string
+  newPassword: string
+}
+
+export interface InvitationCheckResult {
+  hasPendingInvite: boolean
+  groupName: string | null
+  role: string | null
+}
+
+export interface CircleContext {
+  accountOrigin: AccountOrigin
+  invitation: null | { groupId: string; groupName: string; role: string }
+  groups: Array<{ id: string; name: string; role: string }>
+}
+
 export interface DesktopApi {
   app: {
     getVersion(): Promise<string>
     getPlatform(): Promise<NodeJS.Platform>
+  }
+  auth: {
+    restore(): Promise<AuthState>
+    signIn(input: SignInInput): Promise<AuthState>
+    checkInvitation(email: string): Promise<InvitationCheckResult>
+    register(input: RegisterInput): Promise<AuthState>
+    signOut(): Promise<{ success: true }>
+    requestPasswordReset(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
+    resetPassword(input: ResetPasswordInput): Promise<{ success: true }>
+  }
+  onboarding: {
+    getState(): Promise<AuthState>
+    setInitialPassword(newPassword: string): Promise<AuthState>
+    updateProfile(name: string): Promise<AuthState>
+    getCircleContext(): Promise<CircleContext>
+    complete(nextAction: OnboardingNextAction): Promise<AuthState>
   }
 }
