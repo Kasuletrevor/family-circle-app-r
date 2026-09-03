@@ -1,5 +1,5 @@
 import type { CircleClient } from './CircleClient'
-import type { CircleSummary, HomeSnapshot } from './types'
+import type { CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 const circles: CircleSummary[] = [
   { id: 'kasule-family', name: 'Kasule Family', ownerName: 'Trevor Kasule', memberCount: 12, isActive: true },
@@ -66,5 +66,12 @@ export class MockCircleClient implements CircleClient {
 
   async getMyCircles(): Promise<CircleSummary[]> {
     return structuredClone(circles)
+  }
+
+  async getShellSnapshot(): Promise<ShellSnapshot> {
+    return {
+      activeCircleName: circles.find((circle) => circle.isActive)?.name ?? null,
+      unreadNotifications: 2,
+    }
   }
 }
