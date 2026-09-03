@@ -27,7 +27,7 @@ export function TopBar({ user }: { user: AuthUser }) {
     return () => { active = false }
   }, [circle])
 
-  const displayName = user.name.trim() || user.email
+  const displayName = String(user.name ?? '').trim() || user.email
   const profileInitials = useMemo(() => initials(displayName), [displayName])
   const activeCircleName = shell?.activeCircleName ?? null
   const circleLabel = shell === null ? 'Loading Circle…' : activeCircleName || 'No Circle yet'
