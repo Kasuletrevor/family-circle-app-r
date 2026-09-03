@@ -10,6 +10,8 @@ describe('MockCircleClient', () => {
     const circles = await client.getMyCircles()
 
     expect(snapshot.state).toBe('ready')
+    if (snapshot.state !== 'ready') throw new Error('MockCircleClient should return a ready snapshot')
+
     expect(snapshot.activeCircle.name).toBe('Kasule Family')
     expect(snapshot.metrics).toEqual({ members: 12, circles: 3, stories: 28, memories: 142 })
     expect(snapshot.people.some((person) => person.id === snapshot.selectedPersonId)).toBe(true)
