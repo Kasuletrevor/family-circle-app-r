@@ -119,5 +119,27 @@ describe('DesktopCircleClient', () => {
       reason: 'no-circles',
     })
     await expect(client.getMyCircles()).resolves.toEqual([])
+    await expect(client.getShellSnapshot()).resolves.toEqual({
+      activeCircleName: null,
+      unreadNotifications: 0,
+    })
+  })
+
+  it('maps shell chrome and shares one in-flight overview request across simultaneous consumers', async () => {
+    let resolveOverview!: (overview: CircleOverview) => void
+    const overviewPromise = new Promise<CircleOverview>((resolve) => { resolveOverview = resolve })
+    const getOverview = vi.fn(() => overviewPromise)
+    const client = new DesktopCircleClient(getOverview, () => now)
+
+    const home = client.getHomeSnapshot()
+    const shell = client.getShellSnapshot()
+    resolveOverview(readyOverview)
+
+    await expect(shell).resolves.toEqual({
+      activeCircleName: 'Test Family',
+      unreadNotifications: 1,
+    })
+    await expect(home).resolves.toMatchObject({ state: 'ready' })
+    expect(getOverview).toHaveBeenCalledTimes(1)
   })
 })
