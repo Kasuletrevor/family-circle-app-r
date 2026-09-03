@@ -84,6 +84,15 @@ describe('InviteMemberDialog', () => {
     expect(onInvited).toHaveBeenCalledWith(outcome)
   })
 
+  it('shows the safe owner-specific authorization message when ownership changed', async () => {
+    renderDialog(vi.fn(async () => { throw new Error('Only the Circle owner can invite members') }))
+
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'relative@example.test' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
+
+    expect(await screen.findByText('Only the Circle owner can invite members.')).toBeInTheDocument()
+  })
+
   it('does not reveal unexpected backend details', async () => {
     renderDialog(vi.fn(async () => { throw new Error('smtp secret upstream.internal') }))
 
