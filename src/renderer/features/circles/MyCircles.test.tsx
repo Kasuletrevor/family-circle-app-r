@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppServicesProvider } from '../../app/services'
@@ -104,8 +104,9 @@ describe('MyCircles', () => {
     renderPage(service({ getMyCircles, createCircle }))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create Circle' }))
-    fireEvent.change(screen.getByLabelText('Circle name'), { target: { value: 'New Family' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create Circle' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create a family circle' })
+    fireEvent.change(within(dialog).getByLabelText('Circle name'), { target: { value: 'New Family' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Circle' }))
 
     expect(await screen.findByText('New Family')).toBeInTheDocument()
     expect(createCircle).toHaveBeenCalledWith({ name: 'New Family' })
