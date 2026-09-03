@@ -52,5 +52,10 @@ describe('App shell', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Members' }))
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'My Circles' }))
+    expect(await screen.findByRole('heading', { name: 'My Circles' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create Circle' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Kasule Family' })).toBeInTheDocument()
   })
 })
