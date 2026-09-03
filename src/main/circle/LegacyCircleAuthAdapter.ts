@@ -218,7 +218,9 @@ export class LegacyCircleAuthAdapter {
             id,
             name: String(group.name ?? 'Family Circle'),
             ownerId,
-            role: explicitRole || (ownerId && ownerId === safeServerUserId ? 'Circle owner' : 'Family member'),
+            role: ownerId && ownerId === safeServerUserId
+              ? 'Circle owner'
+              : explicitRole || 'Family member',
           }
         }).filter((group) => Boolean(group.id))
       : []
