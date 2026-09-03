@@ -74,6 +74,7 @@ describe('CircleService', () => {
       reason: 'not-linked',
       circles: [],
       activeCircleId: null,
+      viewerPersonId: null,
       tree: null,
       notifications: [],
     })
@@ -87,12 +88,13 @@ describe('CircleService', () => {
       reason: 'no-circles',
       circles: [],
       activeCircleId: null,
+      viewerPersonId: null,
     })
     expect(circle.getTree).not.toHaveBeenCalled()
     expect(circle.getNotifications).toHaveBeenCalledWith('88')
   })
 
-  it('uses only the protected account server identity and prefers its invited Circle as the active Circle', async () => {
+  it('uses only the protected account server identity and identifies the signed-in tree person safely', async () => {
     const { service, circle } = setup()
     const overview = await service.getOverview()
 
@@ -102,6 +104,7 @@ describe('CircleService', () => {
     expect(overview).toMatchObject({
       status: 'ready',
       activeCircleId: 'g-1',
+      viewerPersonId: 'user:88',
       circles: [
         { id: 'g-1', name: 'Test Family', ownerId: '1', role: 'Family member' },
         { id: 'g-2', name: 'Other Family', ownerId: '88', role: 'Circle owner' },
