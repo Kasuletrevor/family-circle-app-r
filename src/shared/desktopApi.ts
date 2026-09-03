@@ -97,6 +97,7 @@ export type CircleOverview =
       reason: 'not-linked' | 'no-circles'
       circles: CircleGroupRecord[]
       activeCircleId: null
+      viewerPersonId: null
       tree: null
       notifications: CircleNotificationRecord[]
     }
@@ -104,6 +105,7 @@ export type CircleOverview =
       status: 'ready'
       circles: CircleGroupRecord[]
       activeCircleId: string
+      viewerPersonId: string | null
       tree: CircleTreeRecord
       notifications: CircleNotificationRecord[]
     }
