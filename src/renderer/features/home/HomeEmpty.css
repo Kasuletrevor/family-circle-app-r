@@ -1,0 +1,37 @@
+.home-empty {
+  display: flex;
+  min-height: 360px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px;
+  border: 1px solid var(--kk-border);
+  border-radius: var(--kk-radius-md);
+  background: white;
+  text-align: left;
+}
+
+.home-empty__icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--kk-teal-dark);
+  background: var(--kk-mint);
+}
+
+.home-empty h1 {
+  margin: 0;
+  color: var(--kk-navy);
+  font-size: 19px;
+}
+
+.home-empty p {
+  max-width: 560px;
+  margin: 7px 0 0;
+  color: var(--kk-text-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
