@@ -30,7 +30,7 @@ function treeFor(groupId: string, name: string, ownerId: string, memberCount: nu
     userId: index === 0 ? viewerId : String(index + 100),
     name: index === 0 ? 'Member Example' : `Family Member ${index}`,
     email: index === 0 ? 'member@example.test' : `member${index}@example.test`,
-    role: index === 0 ? 'Family member' : 'Family member',
+    role: 'Family member',
   }))
 
   return {
@@ -168,8 +168,15 @@ describe('CircleService', () => {
       ],
       tree: {
         group: { id: 'g-2', name: 'Other Family' },
-        people: [{ id: 'user:88' }],
       },
+    })
+    if (overview.status !== 'ready') throw new Error('Expected a ready Circle overview')
+    expect(overview.tree.people).toHaveLength(8)
+    expect(overview.tree.people[0]).toMatchObject({
+      id: 'user:88',
+      kind: 'user',
+      name: 'Member Example',
+      role: 'Family member',
     })
     expect(JSON.stringify(overview)).not.toContain('ownerId')
     expect(JSON.stringify(overview)).not.toContain('userId')
