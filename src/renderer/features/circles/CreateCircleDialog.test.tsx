@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AppServicesProvider } from '../../app/services'
 import type { CircleClient } from '../../services/circle/CircleClient'
@@ -15,7 +16,7 @@ function service(createCircle: CircleClient['createCircle']): CircleClient {
   }
 }
 
-function renderDialog(createCircle: CircleClient['createCircle'], props: Partial<React.ComponentProps<typeof CreateCircleDialog>> = {}) {
+function renderDialog(createCircle: CircleClient['createCircle'], props: Partial<ComponentProps<typeof CreateCircleDialog>> = {}) {
   const onClose = vi.fn()
   const onCreated = vi.fn(async () => undefined)
   render(
