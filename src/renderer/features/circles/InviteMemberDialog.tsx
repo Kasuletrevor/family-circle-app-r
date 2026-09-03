@@ -105,7 +105,7 @@ export function InviteMemberDialog({
           </button>
         </header>
 
-        <form className="circle-dialog__form" onSubmit={(event) => void submit(event)}>
+        <form className="circle-dialog__form" noValidate onSubmit={(event) => void submit(event)}>
           <label className="circle-dialog__field">
             <span>Email address</span>
             <input
