@@ -170,5 +170,9 @@ export interface DesktopApi {
   }
   circle: {
     getOverview(): Promise<CircleOverview>
+    getMyCircles(): Promise<CircleListItem[]>
+    selectCircle(circleId: string): Promise<{ success: true }>
+    createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
+    inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
   }
 }
