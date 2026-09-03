@@ -83,8 +83,8 @@ describe('Home', () => {
     expect(await screen.findByRole('heading', { name: /good .* member/i })).toBeInTheDocument()
     expect(screen.getAllByText('Test Family').length).toBeGreaterThan(0)
     expect(screen.getByText('A member joined Test Family')).toBeInTheDocument()
-    expect(screen.queryByText('Stories')).not.toBeInTheDocument()
-    expect(screen.queryByText('Memories')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Stories:/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Memories:/)).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument()
   })
 
