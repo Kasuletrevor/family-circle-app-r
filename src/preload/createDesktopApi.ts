@@ -1,6 +1,7 @@
 import type {
   AuthState,
   CircleContext,
+  CircleOverview,
   DesktopApi,
   InvitationCheckResult,
   OnboardingNextAction,
@@ -24,6 +25,7 @@ type DesktopChannel =
   | 'onboarding:update-profile'
   | 'onboarding:get-circle-context'
   | 'onboarding:complete'
+  | 'circle:get-overview'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 
@@ -79,6 +81,11 @@ export function createDesktopApi(invoke: Invoke): DesktopApi {
       },
       complete(nextAction: OnboardingNextAction) {
         return invoke('onboarding:complete', nextAction) as Promise<AuthState>
+      },
+    },
+    circle: {
+      getOverview() {
+        return invoke('circle:get-overview') as Promise<CircleOverview>
       },
     },
   }
