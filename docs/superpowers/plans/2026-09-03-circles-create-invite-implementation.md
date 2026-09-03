@@ -15,7 +15,7 @@
 - Preserve Jose's current Circle API; do not create `/v2` backend work in this slice.
 - `Circle owner` is an authorization state, never an invitation-role option.
 - Fixed invitation roles are exactly: `Family member`, `Parent`, `Child`, `Spouse / Partner`, `Sibling`, `Grandparent`, `Grandchild`, `Guardian / Caregiver`.
-- React must not supply or receive `fromUserId`, `serverUserId`, `ownerId`, raw shared `userId`, `CIRCLE_API_KEY`, `X-Kin-Keepers-Key`, legacy endpoint URLs, invitation tokens, or temporary passwords.
+- Final renderer/public Circle contracts must not supply or receive `fromUserId`, `serverUserId`, `ownerId`, raw shared `userId`, `CIRCLE_API_KEY`, `X-Kin-Keepers-Key`, legacy endpoint URLs, invitation tokens, or temporary passwords.
 - Every shared-data mutation derives the acting identity from the protected desktop session and persisted local user record.
 - Shared identity bootstrap uses the authenticated user's persisted name/email, persists the returned `server_user_id`, and keeps that valid identity if Circle creation subsequently fails.
 - `active_circle_id` is local viewer preference only; ownership/membership remain server-owned.
@@ -24,6 +24,7 @@
 - No optimistic remote success state; invalidate/read authoritative Circle state after confirmed writes.
 - Keep current Electron security settings: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `webSecurity: true`.
 - No new direct `fetch` in renderer Circle feature code.
+- Every task below must end with its targeted tests and `npm run typecheck` green before committing.
 - Final exact head must pass `npm audit --audit-level=high` and `npm run check`.
 
 ---
@@ -35,17 +36,17 @@
 - `src/main/circle/circleModels.ts` — **create**; internal legacy/shared-service records that may contain shared IDs. Never imported by renderer/preload.
 - `src/main/circle/LegacyCircleAuthAdapter.ts` — extend with shared registration, create Circle, invite member; normalize Jose payloads.
 - `src/main/circle/CircleService.ts` — extend protected read/write orchestration, safe DTO mapping, active-Circle selection, accurate multi-Circle summaries.
-- `src/main/circle/CircleService.test.ts` — service TDD for session scoping, bootstrap, permissions, selection, refresh-safe results.
+- `src/main/circle/CircleService.test.ts` — service TDD for session scoping, bootstrap, permissions, selection, safe reads.
 - `src/main/circle/LegacyCircleAuthAdapter.test.ts` and `src/main/circle/LegacyCircleReadAdapter.test.ts` — compatibility TDD.
 - `src/main/auth/UserRepository.ts` — persist `server_user_id` and local `active_circle_id` through narrow setters.
 - `src/main/auth/UserRepository.test.ts` — persistence tests.
 - `src/main/database/migrations.ts` and `src/main/database/migrations.test.ts` — add/migrate `active_circle_id` without damaging legacy databases.
-- `src/main/circle/circleIpc.ts` and `src/main/circle/circleIpc.test.ts` — typed no-identity public mutation channels.
-- `src/main/main.ts` — compose the same repository/session/adapter into the expanded CircleService.
+- `src/main/circle/circleIpc.ts` and `src/main/circle/circleIpc.test.ts` — typed no-identity public channels.
+- `src/main/main.ts` — continue composing the same repository/session/adapter into the expanded CircleService.
 
 ### Shared/preload contract
 
-- `src/shared/desktopApi.ts` — safe public DTOs, fixed family-role allow-list/type, Circle list/create/select/invite methods; remove legacy shared IDs from renderer-facing tree/group records.
+- `src/shared/desktopApi.ts` — fixed family-role allow-list/type, safe Circle list/create/select/invite DTOs, and final removal of legacy shared IDs from renderer-facing read DTOs in Task 3.
 - `src/preload/createDesktopApi.ts` and `src/preload/createDesktopApi.test.ts` — expose only approved Circle capabilities.
 
 ### Renderer service and feature
@@ -61,17 +62,17 @@
 - `src/renderer/features/circles/InviteMemberDialog.test.tsx` — **create**.
 - `src/renderer/features/circles/MyCircles.css` — **create**; reuse brand tokens, no new palette.
 - `src/renderer/app/App.tsx` and `src/renderer/app/App.test.tsx` — replace `/circles` placeholder with `MyCircles` route.
-- `src/renderer/features/home/Home.tsx` / tests only if needed to turn the existing no-Circle copy/action into navigation to `/circles`; do not expand Home scope.
+- `src/renderer/features/home/Home.tsx` / test — only change the existing no-Circle action/copy if needed to navigate to `/circles`; no broader Home scope.
 
 ### Architecture/docs/CI
 
 - `scripts/verify-boundaries.mjs` — forbid shared identities/secrets/legacy paths in public Circle surfaces.
-- `.github/workflows/desktop-shell-ci.yml` — include `feature/circles-create-invite` in push branches so every implementation commit gets the full gate.
+- `.github/workflows/desktop-shell-ci.yml` — include `feature/circles-create-invite` in push branches so implementation commits get the full gate.
 - `README.md` — document Create/Invite boundary and fixed-role behavior.
 
 ---
 
-### Task 1: Safe public Circle contracts and local viewer preference
+### Task 1: Local viewer preference, write DTOs, internal models, and branch CI
 
 **Files:**
 - Create: `src/main/circle/circleModels.ts`
@@ -83,14 +84,14 @@
 - Modify: `.github/workflows/desktop-shell-ci.yml`
 
 **Interfaces:**
-- Produces public fixed role type `InvitationFamilyRole` and `INVITATION_FAMILY_ROLES`.
-- Produces public `CircleListItem`, `CreateCircleInput`, `CreateCircleResult`, `InviteMemberInput`, `InviteMemberResult`.
-- Produces internal `CircleGroupInternal`, `CircleTreeInternal`, `CircleTreePersonInternal` containing shared IDs only inside main process.
+- Produces `InvitationFamilyRole` and `INVITATION_FAMILY_ROLES`.
+- Produces `CircleListItem`, `CreateCircleInput`, `CreateCircleResult`, `InviteMemberInput`, `InviteMemberResult`.
+- Produces internal `CircleGroupInternal`, `CircleTreeInternal`, `CircleTreePersonInternal` while keeping the current read DTO shape temporarily compatible until Task 3 sanitizes it atomically with `CircleService`.
 - Produces `UserRecord.activeCircleId`, `UserRepository.setServerUserId(userId, serverUserId)`, and `UserRepository.setActiveCircleId(userId, circleId)`.
 
 - [ ] **Step 1: Write failing migration/repository tests**
 
-Add assertions equivalent to:
+In `migrations.test.ts` add:
 
 ```ts
 it('adds active_circle_id to legacy users without losing existing data', () => {
@@ -106,7 +107,7 @@ it('adds active_circle_id to legacy users without losing existing data', () => {
 })
 ```
 
-and in `UserRepository.test.ts`:
+In `UserRepository.test.ts` add:
 
 ```ts
 await users.setServerUserId(user.id, '88')
@@ -116,19 +117,17 @@ expect(record?.serverUserId).toBe('88')
 expect(record?.activeCircleId).toBe('circle-a')
 ```
 
-- [ ] **Step 2: Run tests to verify RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 npx vitest run src/main/database/migrations.test.ts src/main/auth/UserRepository.test.ts
 ```
 
-Expected: FAIL because `active_circle_id`, `activeCircleId`, `setServerUserId`, and `setActiveCircleId` do not exist.
+Expected: FAIL because `active_circle_id`, `activeCircleId`, and the two setters do not exist.
 
-- [ ] **Step 3: Add shared safe contracts and internal models**
+- [ ] **Step 3: Add fixed role/write contracts without changing current read DTOs yet**
 
-In `src/shared/desktopApi.ts`, define the role allow-list and safe public DTOs:
+In `src/shared/desktopApi.ts` add:
 
 ```ts
 export const INVITATION_FAMILY_ROLES = [
@@ -166,32 +165,9 @@ export interface InviteMemberResult {
 }
 ```
 
-Make renderer-facing records safe by removing shared identities:
+Do **not** remove `ownerId` or tree `userId` from the existing read DTOs in this task; Task 3 removes them together with service sanitization so this task stays green.
 
-```ts
-export interface CircleGroupRecord {
-  id: string
-  name: string
-  role: string
-}
-
-export interface CircleTreePersonRecord {
-  id: string
-  kind: 'user' | 'placeholder' | 'invite'
-  name: string
-  email: string | null
-  role: string
-}
-
-export interface CircleTreeRecord {
-  group: { id: string; name: string }
-  people: CircleTreePersonRecord[]
-  relations: CircleTreeRelationRecord[]
-  positions: CircleTreePositionRecord[]
-}
-```
-
-Create `src/main/circle/circleModels.ts` with internal-only shapes:
+Create `src/main/circle/circleModels.ts`:
 
 ```ts
 export interface CircleGroupInternal {
@@ -233,7 +209,7 @@ export interface UserRecord {
 }
 ```
 
-Add exact repository operations:
+Add:
 
 ```ts
 async setServerUserId(userId: number, serverUserId: string): Promise<void> {
@@ -254,7 +230,7 @@ async setActiveCircleId(userId: number, circleId: string | null): Promise<void> 
 }
 ```
 
-- [ ] **Step 5: Enable branch CI and run targeted tests/typecheck**
+- [ ] **Step 5: Enable branch CI and verify green**
 
 Add `feature/circles-create-invite` under workflow `push.branches`, then run:
 
@@ -263,13 +239,13 @@ npx vitest run src/main/database/migrations.test.ts src/main/auth/UserRepository
 npm run typecheck
 ```
 
-Expected: migration/repository tests PASS; typecheck may reveal the deliberate public/internal ID split in `CircleService`/adapter and should be fixed only in Tasks 2–3, not by re-exposing IDs in `desktopApi.ts`.
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add .github/workflows/desktop-shell-ci.yml src/shared/desktopApi.ts src/main/circle/circleModels.ts src/main/database/migrations.ts src/main/database/migrations.test.ts src/main/auth/UserRepository.ts src/main/auth/UserRepository.test.ts
-git commit -m "feat: add safe circle contracts and viewer preference"
+git commit -m "feat: add circle write contracts and viewer preference"
 ```
 
 ---
@@ -282,18 +258,15 @@ git commit -m "feat: add safe circle contracts and viewer preference"
 - Modify: `src/main/circle/LegacyCircleReadAdapter.test.ts`
 
 **Interfaces:**
-- Consumes internal types from `circleModels.ts`.
-- Produces:
-
-```ts
-ensureSharedUser(input: { email: string; name: string }): Promise<{ serverUserId: string }>
-createCircle(input: { serverUserId: string; name: string }): Promise<CircleGroupInternal>
-inviteMember(input: { serverUserId: string; circleId: string; email: string; role: InvitationFamilyRole }): Promise<InviteMemberResult>
-```
+- `listGroups(serverUserId): Promise<CircleGroupInternal[]>`
+- `getTree(groupId, serverUserId): Promise<CircleTreeInternal>`
+- `ensureSharedUser(input: { email: string; name: string }): Promise<{ serverUserId: string }>`
+- `createCircle(input: { serverUserId: string; name: string }): Promise<CircleGroupInternal>`
+- `inviteMember(input: { serverUserId: string; circleId: string; email: string; role: InvitationFamilyRole }): Promise<InviteMemberResult>`
 
 - [ ] **Step 1: Write failing adapter tests**
 
-Cover exact request bodies and safe normalization:
+Shared registration request:
 
 ```ts
 await adapter.ensureSharedUser({ email: 'owner@example.test', name: 'Owner Name' })
@@ -303,12 +276,14 @@ expect(fetcher).toHaveBeenCalledWith(
 )
 ```
 
+Circle create normalization:
+
 ```ts
 const created = await adapter.createCircle({ serverUserId: '88', name: 'Kasule Family' })
 expect(created).toEqual({ id: 'circle-1', name: 'Kasule Family', ownerId: '88', role: 'Circle owner' })
 ```
 
-Invite cases must include `sent`, `already-pending`, `already-member`, and `delivery-failed`; include a mocked response containing `token` and `tempPassword` and assert the returned value is exactly `{ outcome: 'sent' }`.
+Invite tests must cover `sent`, `already-pending`, `already-member`, `delivery-failed`. Include a server response containing `token`, `tempPassword`, and `emailPayload`; assert the returned object is only `{ outcome: 'sent' }`.
 
 - [ ] **Step 2: Run RED**
 
@@ -316,15 +291,15 @@ Invite cases must include `sent`, `already-pending`, `already-member`, and `deli
 npx vitest run src/main/circle/LegacyCircleAuthAdapter.test.ts src/main/circle/LegacyCircleReadAdapter.test.ts
 ```
 
-Expected: FAIL because write methods/internal type imports do not exist.
+Expected: FAIL because write methods/internal return types do not exist.
 
-- [ ] **Step 3: Move legacy read normalization onto internal models**
+- [ ] **Step 3: Move legacy reads to internal model return types**
 
-`listGroups()` returns `CircleGroupInternal[]`; `getTree()` returns `CircleTreeInternal`. Keep `ownerId`/`userId` there because `CircleService` needs them for authorization/viewer matching, but do not import renderer-facing safe DTOs for these methods.
+Change adapter imports to `circleModels.ts`; `CircleGroupInternal` and `CircleTreeInternal` are structurally compatible with the current Task-1 read DTOs, so existing consumers continue to typecheck until Task 3 performs the public sanitization.
 
-- [ ] **Step 4: Implement shared registration and Circle create**
+- [ ] **Step 4: Implement `ensureSharedUser()` and `createCircle()`**
 
-Use existing `postJson()` only:
+Use existing `postJson()`:
 
 ```ts
 async ensureSharedUser(input: { email: string; name: string }): Promise<{ serverUserId: string }> {
@@ -338,9 +313,9 @@ async ensureSharedUser(input: { email: string; name: string }): Promise<{ server
 }
 ```
 
-`createCircle()` posts `{ fromUserId: serverUserId, name }` to `/api/group/create` and normalizes the returned group to owner role.
+`createCircle()` posts exactly `{ fromUserId: serverUserId, name }` to `/api/group/create` and returns `{ id, name, ownerId, role: 'Circle owner' }`.
 
-- [ ] **Step 5: Implement invite normalization without leaking credentials**
+- [ ] **Step 5: Implement invite normalization**
 
 Post exactly:
 
@@ -353,7 +328,7 @@ Post exactly:
 }
 ```
 
-Normalize response precedence:
+Normalize:
 
 ```ts
 if (data.alreadyMember) return { outcome: 'already-member' }
@@ -364,14 +339,14 @@ return { outcome: 'sent' }
 
 Never return `data.invitation`, `token`, `tempPassword`, or `emailPayload`.
 
-- [ ] **Step 6: Run adapter tests and typecheck**
+- [ ] **Step 6: Verify green**
 
 ```bash
 npx vitest run src/main/circle/LegacyCircleAuthAdapter.test.ts src/main/circle/LegacyCircleReadAdapter.test.ts
 npm run typecheck
 ```
 
-Expected: adapter tests PASS. Remaining type failures, if any, should point at `CircleService` still expecting renderer-facing types and are resolved in Task 3.
+Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
@@ -382,32 +357,32 @@ git commit -m "feat: add legacy circle mutation adapter"
 
 ---
 
-### Task 3: Session-scoped CircleService mutations, selection, and accurate list summaries
+### Task 3: Session-scoped CircleService, safe read DTOs, selection, and accurate summaries
 
 **Files:**
 - Modify: `src/main/circle/CircleService.ts`
 - Modify: `src/main/circle/CircleService.test.ts`
+- Modify: `src/shared/desktopApi.ts`
+- Modify: `src/renderer/services/circle/DesktopCircleClient.ts`
+- Modify: `src/renderer/services/circle/DesktopCircleClient.test.ts`
 
 **Interfaces:**
-- Consumes `CircleGroupInternal`, `CircleTreeInternal`, repository setters, and adapter write methods.
-- Produces:
+- `getOverview(): Promise<CircleOverview>`
+- `getMyCircles(): Promise<CircleListItem[]>`
+- `selectCircle(circleId: string): Promise<{ success: true }>`
+- `createCircle(input: CreateCircleInput): Promise<CreateCircleResult>`
+- `inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>`
 
-```ts
-getOverview(): Promise<CircleOverview>
-getMyCircles(): Promise<CircleListItem[]>
-selectCircle(circleId: string): Promise<{ success: true }>
-createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
-inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
-```
+This task is the atomic boundary change that removes shared-service IDs from renderer-facing read DTOs while keeping them in `circleModels.ts` inside main.
 
-- [ ] **Step 1: Write failing service tests for identity-safe writes**
-
-Include these cases:
+- [ ] **Step 1: Write failing identity/session/bootstrap tests**
 
 ```ts
 await expect(service.createCircle({ name: 'Kasule Family' }))
   .rejects.toThrow('Please sign in')
 ```
+
+For a local user with no shared ID:
 
 ```ts
 await service.createCircle({ name: 'Kasule Family' })
@@ -420,37 +395,42 @@ expect(circle.createCircle).toHaveBeenCalledWith({ serverUserId: '88', name: 'Ka
 expect(users.setActiveCircleId).toHaveBeenCalledWith(7, 'circle-1')
 ```
 
-Add a failure case where `ensureSharedUser` succeeds and `createCircle` rejects; assert `setServerUserId(7, '88')` still happened and no rollback setter was called.
+Add a case where bootstrap succeeds but Circle create rejects; assert `setServerUserId(7, '88')` remains called and no clearing setter follows.
 
-- [ ] **Step 2: Write failing selection/list/permission tests**
+- [ ] **Step 2: Write failing safe-read/list/selection/invite tests**
 
-Accurate multi-Circle count:
+Safe overview assertion must prove no shared IDs cross:
 
 ```ts
-const items = await service.getMyCircles()
-expect(items).toEqual([
+const overview = await service.getOverview()
+expect(JSON.stringify(overview)).not.toContain('ownerId')
+expect(JSON.stringify(overview)).not.toContain('userId')
+```
+
+Accurate list:
+
+```ts
+expect(await service.getMyCircles()).toEqual([
   { id: 'circle-a', name: 'A Family', role: 'Circle owner', memberCount: 3, isActive: true },
   { id: 'circle-b', name: 'B Family', role: 'Sibling', memberCount: 8, isActive: false },
 ])
 ```
 
-Ensure each Circle's tree is read with the protected `serverUserId`.
+Selection: membership-confirmed `circle-b` persists; `not-mine` rejects and does not persist.
 
-Selection test: selecting `circle-b` persists only after membership list confirms it. Selecting `not-mine` rejects and does not call `setActiveCircleId`.
-
-Invite test: owner group succeeds; non-owner group rejects before adapter invite. Unknown runtime role such as `'Administrator'` is rejected even if cast through TypeScript.
+Invite: non-owner rejects before adapter call; runtime role `'Administrator'` rejects even when cast through TypeScript.
 
 - [ ] **Step 3: Run RED**
 
 ```bash
-npx vitest run src/main/circle/CircleService.test.ts
+npx vitest run src/main/circle/CircleService.test.ts src/renderer/services/circle/DesktopCircleClient.test.ts
 ```
 
-Expected: FAIL because the new methods and internal/safe mapping do not exist.
+Expected: FAIL for missing methods and unsafe current read DTO fields.
 
-- [ ] **Step 4: Add one protected-context helper**
+- [ ] **Step 4: Add protected current-record helper and internal read port**
 
-Keep identity derivation in one private helper:
+Use:
 
 ```ts
 private async requireCurrentRecord(): Promise<UserRecord> {
@@ -462,31 +442,60 @@ private async requireCurrentRecord(): Promise<UserRecord> {
 }
 ```
 
-Do not add any service method parameter for acting user/server user.
+`CircleReadPort`/write port methods consume/return internal main-only models. No public method accepts acting identity.
 
-- [ ] **Step 5: Sanitize internal read data into public DTOs**
+- [ ] **Step 5: Remove shared IDs from public read DTOs and sanitize in service**
 
-`getOverview()` chooses active Circle in this order:
+In `desktopApi.ts` change renderer-facing read records to:
 
 ```ts
-const activeCircle = circles.find((item) => item.id === record.activeCircleId)
-  ?? circles.find((item) => item.id === record.invitation?.groupId)
-  ?? circles[0]
+export interface CircleGroupRecord {
+  id: string
+  name: string
+  role: string
+}
+
+export interface CircleTreePersonRecord {
+  id: string
+  kind: 'user' | 'placeholder' | 'invite'
+  name: string
+  email: string | null
+  role: string
+}
+
+export interface CircleTreeRecord {
+  group: { id: string; name: string }
+  people: CircleTreePersonRecord[]
+  relations: CircleTreeRelationRecord[]
+  positions: CircleTreePositionRecord[]
+}
 ```
 
-If the persisted preference is stale, persist the fallback active ID. If no Circles remain, clear a stale `activeCircleId`.
-
-Compute `viewerPersonId` while `userId` is still internal:
+In `CircleService`, compute viewer identity before stripping:
 
 ```ts
 const viewerPersonId = tree.people.find((person) => person.userId === serverUserId)?.id ?? null
 ```
 
-Then construct a safe `CircleOverview` by stripping `ownerId` from groups/tree group and `userId` from people.
+Map groups/tree to safe records without `ownerId`/`userId`.
 
-- [ ] **Step 6: Implement accurate `getMyCircles()` and `selectCircle()`**
+Update `DesktopCircleClient` and its tests only as required by this safe DTO change; it must continue using `viewerPersonId` rather than raw user IDs.
 
-Use `Promise.all` over the user's group list to read each tree and count confirmed users:
+- [ ] **Step 6: Implement active selection and stale fallback**
+
+Choose active Circle:
+
+```ts
+const activeCircle = groups.find((item) => item.id === record.activeCircleId)
+  ?? groups.find((item) => item.id === record.invitation?.groupId)
+  ?? groups[0]
+```
+
+If a persisted preference is stale, persist the chosen fallback. If no Circles remain and `activeCircleId` is non-null, clear it.
+
+`selectCircle(circleId)` must call `listGroups(serverUserId)` and verify membership before `setActiveCircleId`.
+
+- [ ] **Step 7: Implement accurate `getMyCircles()`**
 
 ```ts
 const trees = await Promise.all(groups.map((group) => this.circle.getTree(group.id, serverUserId)))
@@ -499,9 +508,9 @@ return groups.map((group, index) => ({
 }))
 ```
 
-`selectCircle(circleId)` must verify the ID exists in `listGroups(serverUserId)` before `setActiveCircleId`.
+Do not reuse the active tree count for another Circle.
 
-- [ ] **Step 7: Implement Create Circle and Invite Member**
+- [ ] **Step 8: Implement create/invite service methods**
 
 Create validation:
 
@@ -511,30 +520,33 @@ if (!name) throw new Error('Circle name is required')
 if (name.length > 120) throw new Error('Circle name is too long')
 ```
 
-If no `serverUserId`, call `ensureSharedUser`, persist it immediately, then create. Persist the new Circle ID as active only after create succeeds.
+When `serverUserId` is absent, call `ensureSharedUser`, persist it immediately, then create. Persist created Circle ID as active only after successful create.
 
 Invite validation:
 
 ```ts
-if (!INVITATION_FAMILY_ROLES.includes(input.role)) throw new Error('Choose a valid family role')
-if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) throw new Error('Enter a valid email address')
+const allowedRoles = INVITATION_FAMILY_ROLES as readonly string[]
+if (!allowedRoles.includes(String(input.role))) throw new Error('Choose a valid family role')
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(input.email).trim())) {
+  throw new Error('Enter a valid email address')
+}
 ```
 
-Before adapter invite, load groups and require `group.ownerId === serverUserId` for `input.circleId`; otherwise throw `Only the Circle owner can invite members`.
+Load internal groups and require both matching `circleId` and `group.ownerId === serverUserId`; otherwise throw `Only the Circle owner can invite members`.
 
-- [ ] **Step 8: Run service suite + typecheck**
+- [ ] **Step 9: Verify green**
 
 ```bash
-npx vitest run src/main/circle/CircleService.test.ts
+npx vitest run src/main/circle/CircleService.test.ts src/renderer/services/circle/DesktopCircleClient.test.ts
 npm run typecheck
 ```
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/main/circle/CircleService.ts src/main/circle/CircleService.test.ts
+git add src/main/circle/CircleService.ts src/main/circle/CircleService.test.ts src/shared/desktopApi.ts src/renderer/services/circle/DesktopCircleClient.ts src/renderer/services/circle/DesktopCircleClient.test.ts
 git commit -m "feat: add protected circle management service"
 ```
 
@@ -548,19 +560,16 @@ git commit -m "feat: add protected circle management service"
 - Modify: `src/shared/desktopApi.ts`
 - Modify: `src/preload/createDesktopApi.ts`
 - Modify: `src/preload/createDesktopApi.test.ts`
-- Modify: `src/main/main.ts` only if composition type errors require no behavioral change.
+- Modify: `src/main/main.ts` only if service interface composition requires a type-only adjustment.
 
 **Interfaces:**
-- Public channels:
-  - `circle:get-overview`
-  - `circle:get-my-circles`
-  - `circle:select`
-  - `circle:create`
-  - `circle:invite-member`
+- `circle:get-overview`
+- `circle:get-my-circles`
+- `circle:select`
+- `circle:create`
+- `circle:invite-member`
 
 - [ ] **Step 1: Write failing IPC tests**
-
-Assert exact registered handlers and business-only payload forwarding:
 
 ```ts
 await handlers.get('circle:create')?.({}, { name: 'Kasule Family' })
@@ -573,13 +582,16 @@ await handlers.get('circle:invite-member')?.({}, {
   email: 'relative@example.test',
   role: 'Sibling',
 })
+expect(service.inviteMember).toHaveBeenCalledWith({
+  circleId: 'circle-a',
+  email: 'relative@example.test',
+  role: 'Sibling',
+})
 ```
 
-No handler accepts a second acting-identity argument.
+No handler accepts an acting-user parameter.
 
 - [ ] **Step 2: Write failing preload tests**
-
-Expect calls exactly:
 
 ```ts
 await api.circle.getMyCircles()
@@ -607,9 +619,7 @@ npx vitest run src/main/circle/circleIpc.test.ts src/preload/createDesktopApi.te
 
 Expected: FAIL because channels/capabilities do not exist.
 
-- [ ] **Step 4: Extend `DesktopApi.circle` and channel union**
-
-Use exactly:
+- [ ] **Step 4: Extend public API exactly**
 
 ```ts
 circle: {
@@ -623,9 +633,9 @@ circle: {
 
 - [ ] **Step 5: Register IPC and preload methods**
 
-Handlers call only `CircleService` methods. Do not normalize identities or legacy payloads in IPC/preload.
+Handlers call only `CircleService`. Do not normalize identities or legacy payloads in IPC/preload.
 
-- [ ] **Step 6: Run IPC/preload tests + typecheck**
+- [ ] **Step 6: Verify green**
 
 ```bash
 npx vitest run src/main/circle/circleIpc.test.ts src/preload/createDesktopApi.test.ts
@@ -665,22 +675,11 @@ export interface CircleClient {
 }
 ```
 
-- [ ] **Step 1: Write failing DesktopCircleClient tests**
+- [ ] **Step 1: Write failing renderer-service tests**
 
-`getMyCircles()` must call `window.familyCircle.circle.getMyCircles()` instead of deriving non-active counts from one overview tree.
+`getMyCircles()` must call `window.familyCircle.circle.getMyCircles()` rather than deriving all counts from one overview tree.
 
-```ts
-await client.getMyCircles()
-expect(getMyCircles).toHaveBeenCalledOnce()
-```
-
-Selection/create tests should prove the next `getHomeSnapshot()` performs a fresh `getOverview()` after mutation:
-
-```ts
-await client.createCircle({ name: 'Kasule Family' })
-await client.getHomeSnapshot()
-expect(getOverview).toHaveBeenCalledTimes(2)
-```
+Selection/create must invalidate the next overview read. Use a mocked overview provider and assert a fresh call after mutation.
 
 - [ ] **Step 2: Run RED**
 
@@ -688,9 +687,9 @@ expect(getOverview).toHaveBeenCalledTimes(2)
 npx vitest run src/renderer/services/circle/DesktopCircleClient.test.ts src/renderer/services/circle/MockCircleClient.test.ts
 ```
 
-Expected: FAIL due missing client methods/new list source.
+Expected: FAIL due missing methods/new list source.
 
-- [ ] **Step 3: Implement public calls and one invalidation helper**
+- [ ] **Step 3: Implement mutation/list methods and invalidation**
 
 Add:
 
@@ -700,15 +699,13 @@ private invalidateOverview(): void {
 }
 ```
 
-After `selectCircle` and successful `createCircle`, invalidate overview. After `inviteMember`, invalidate overview for `sent`, `already-pending`, and `delivery-failed` because shared invitation state exists; `already-member` may also invalidate safely for consistency.
-
-`getMyCircles()` maps already-safe `CircleListItem[]` to renderer `CircleSummary[]` without inventing counts.
+`selectCircle()` awaits preload selection then invalidates. `createCircle()` awaits create, invalidates, and returns result. `inviteMember()` awaits invite, invalidates, and returns normalized result. `getMyCircles()` maps safe authoritative `CircleListItem[]` without inventing counts.
 
 - [ ] **Step 4: Keep MockCircleClient test-only compatible**
 
-Implement deterministic fixture methods for interface compliance. Do not import MockCircleClient into production `services.tsx`.
+Implement deterministic fixture methods only for interface compliance. Do not import MockCircleClient into production `src/renderer/app/services.tsx`.
 
-- [ ] **Step 5: Run service tests + typecheck**
+- [ ] **Step 5: Verify green**
 
 ```bash
 npx vitest run src/renderer/services/circle/DesktopCircleClient.test.ts src/renderer/services/circle/MockCircleClient.test.ts
@@ -734,15 +731,13 @@ git commit -m "feat: add desktop circle management client"
 - Create: `src/renderer/features/circles/MyCircles.css`
 - Modify: `src/renderer/app/App.tsx`
 - Modify: `src/renderer/app/App.test.tsx`
-- Modify: `src/renderer/features/home/Home.tsx` and test only for the no-Circle navigation action if required.
+- Modify: `src/renderer/features/home/Home.tsx` and `.test.tsx` only if the existing no-Circle CTA needs routing to `/circles`.
 
 **Interfaces:**
-- Consumes `CircleClient.getMyCircles()` and `CircleClient.selectCircle()`.
+- Consumes `getMyCircles()` and `selectCircle()`.
 - Produces `/circles` route, real cards, empty/loading/error state, Open Circle navigation.
 
 - [ ] **Step 1: Write failing page tests**
-
-Cover loading → list, exact member counts, owner/non-owner actions, and empty state:
 
 ```ts
 expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
@@ -774,7 +769,7 @@ npx vitest run src/renderer/features/circles/MyCircles.test.tsx src/renderer/app
 
 Expected: FAIL because `MyCircles` and route do not exist.
 
-- [ ] **Step 3: Implement real route and states**
+- [ ] **Step 3: Implement route and states**
 
 Remove `/circles` from `placeholderRoutes` and add:
 
@@ -782,22 +777,21 @@ Remove `/circles` from `placeholderRoutes` and add:
 <Route path="/circles" element={<MyCircles />} />
 ```
 
-`MyCircles` loads via `useAppServices().circle.getMyCircles()` in an effect with an unmounted guard; render a calm loading state and an inline retry on error.
-
-Owner action is based only on `circle.role === 'Circle owner'` from main-process-normalized data.
+Load via `useAppServices().circle.getMyCircles()` with an unmounted guard; render loading, retryable error, empty state, or cards. Owner action is based only on `circle.role === 'Circle owner'` from normalized main-process data.
 
 - [ ] **Step 4: Implement Open Circle**
 
-On button click disable that action while `selectCircle` is in flight, await success, then `navigate('/')`. On failure stay on My Circles and show a safe inline message.
+Disable the clicked action while selection is in flight, await `selectCircle(id)`, then `navigate('/')`. Stay on the page and show safe inline copy if selection fails.
 
-- [ ] **Step 5: Style using existing brand tokens**
+- [ ] **Step 5: Style with existing tokens**
 
-Use CSS variables from `tokens.css`; no new palette constants. Cards must fit the current desktop shell at minimum width 1180px and remain usable in the content region.
+Use existing CSS variables only; no new palette constants. Keep usable within the existing 1180px minimum app window.
 
-- [ ] **Step 6: Run page/app tests**
+- [ ] **Step 6: Verify green**
 
 ```bash
-npx vitest run src/renderer/features/circles/MyCircles.test.tsx src/renderer/app/App.test.tsx
+npx vitest run src/renderer/features/circles/MyCircles.test.tsx src/renderer/app/App.test.tsx src/renderer/features/home/Home.test.tsx
+npm run typecheck
 ```
 
 Expected: PASS.
@@ -811,7 +805,7 @@ git commit -m "feat: add real my circles page"
 
 ---
 
-### Task 7: Create Circle dialog and shared-identity bootstrap UX
+### Task 7: Create Circle dialog
 
 **Files:**
 - Create: `src/renderer/features/circles/CreateCircleDialog.tsx`
@@ -822,11 +816,9 @@ git commit -m "feat: add real my circles page"
 
 **Interfaces:**
 - Consumes `CircleClient.createCircle({ name })`.
-- On success closes dialog and reloads `getMyCircles()`; main service already made the new Circle active.
+- Success closes dialog and reloads authoritative Circle cards; main service already makes the created Circle active.
 
-- [ ] **Step 1: Write failing dialog tests**
-
-Required validation and duplicate-submit behavior:
+- [ ] **Step 1: Write failing validation/duplicate-submit tests**
 
 ```ts
 await user.click(screen.getByRole('button', { name: 'Create Circle' }))
@@ -840,7 +832,7 @@ await user.click(screen.getByRole('button', { name: 'Create Circle' }))
 expect(screen.getByText('Circle name is too long.')).toBeInTheDocument()
 ```
 
-With a deferred promise, double click Submit and assert `createCircle` called once and button disabled.
+Use a deferred promise, double-click submit, and assert one service call plus disabled submit.
 
 - [ ] **Step 2: Run RED**
 
@@ -852,8 +844,6 @@ Expected: FAIL because dialog does not exist.
 
 - [ ] **Step 3: Implement controlled dialog**
 
-Props:
-
 ```ts
 interface CreateCircleDialogProps {
   open: boolean
@@ -862,11 +852,9 @@ interface CreateCircleDialogProps {
 }
 ```
 
-The dialog obtains `circle` from `useAppServices()`, trims locally, validates required/max 120, and calls only `{ name }`.
+Trim and validate required/max 120 locally; call only `{ name }`.
 
 - [ ] **Step 4: Map safe errors without erasing input**
-
-Known main-service messages map to exact copy:
 
 ```ts
 'Circle name is required' -> 'Circle name is required.'
@@ -874,16 +862,17 @@ Known main-service messages map to exact copy:
 otherwise -> "We couldn't create the Circle. Please try again."
 ```
 
-Do not show raw stack/network text.
+Do not show raw network/stack text.
 
-- [ ] **Step 5: Wire page refresh**
+- [ ] **Step 5: Wire both create entry points and authoritative refresh**
 
-Both `+ Create Circle` and empty-state `Create your first Circle` open the same dialog. After success, close and reload Circle cards from authoritative service data.
+Header `Create Circle` and empty-state `Create your first Circle` open the same dialog. After success close and reload `getMyCircles()`.
 
-- [ ] **Step 6: Run tests**
+- [ ] **Step 6: Verify green**
 
 ```bash
 npx vitest run src/renderer/features/circles/CreateCircleDialog.test.tsx src/renderer/features/circles/MyCircles.test.tsx
+npm run typecheck
 ```
 
 Expected: PASS.
@@ -908,7 +897,7 @@ git commit -m "feat: add create circle flow"
 
 **Interfaces:**
 - Consumes `INVITATION_FAMILY_ROLES` and `CircleClient.inviteMember()`.
-- Only owner cards can open the dialog; main process independently re-verifies ownership.
+- Only owner cards can open it; main independently re-verifies ownership.
 
 - [ ] **Step 1: Write failing fixed-role tests**
 
@@ -927,11 +916,11 @@ expect(options).toEqual([
 expect(options).not.toContain('Circle owner')
 ```
 
-Email validation must reject `bad-email` without calling service.
+Invalid email `bad-email` must not call service.
 
 - [ ] **Step 2: Write failing outcome tests**
 
-Parameterize exact UI messages:
+Parameterize exact messages:
 
 ```ts
 [
@@ -954,8 +943,6 @@ Expected: FAIL because invite dialog does not exist.
 
 - [ ] **Step 4: Implement invite dialog**
 
-Props:
-
 ```ts
 interface InviteMemberDialogProps {
   circle: { id: string; name: string }
@@ -965,16 +952,17 @@ interface InviteMemberDialogProps {
 }
 ```
 
-Default role is `Family member`. Validate email locally, disable duplicate submit, and call `circle.inviteMember()`.
+Default role is `Family member`. Validate email, disable duplicate submit, and call `circle.inviteMember()`.
 
 - [ ] **Step 5: Render normalized outcomes only**
 
-Never inspect or render token/temp-password fields. On `sent`, `already-pending`, and `delivery-failed`, invoke `onInvitationChanged()` so authoritative Circle state can refresh. `already-member` may refresh too; do not fabricate local membership.
+Never inspect/render token/temp-password fields. Refresh authoritative Circle data after `sent`, `already-pending`, or `delivery-failed`; refreshing after `already-member` is also allowed. Do not fabricate membership.
 
-- [ ] **Step 6: Run tests**
+- [ ] **Step 6: Verify green**
 
 ```bash
 npx vitest run src/renderer/features/circles/InviteMemberDialog.test.tsx src/renderer/features/circles/MyCircles.test.tsx
+npm run typecheck
 ```
 
 Expected: PASS.
@@ -996,11 +984,11 @@ git commit -m "feat: add fixed-role member invitations"
 - Test: entire repository
 
 **Interfaces:**
-- Produces enforcement preventing regression of the approved architecture.
+- Produces enforcement preventing regression of approved architecture.
 
-- [ ] **Step 1: Add failing boundary checks**
+- [ ] **Step 1: Add boundary rules**
 
-Extend verifier rules so it rejects:
+Verifier must reject:
 
 ```text
 renderer Circle feature/service code containing fromUserId
@@ -1013,15 +1001,15 @@ legacy Circle endpoint literals outside src/main/circle/LegacyCircleAuthAdapter.
 MockCircleClient imported from production renderer app composition
 ```
 
-Use existing verifier path-scoping style so tests/fixtures can mention forbidden strings only where explicitly allowed by the verifier itself.
+Use current verifier path-scoping conventions; do not weaken existing rules.
 
-- [ ] **Step 2: Run verifier RED if any current violation remains**
+- [ ] **Step 2: Run boundary verifier**
 
 ```bash
 npm run verify:boundaries
 ```
 
-Expected before cleanup: FAIL if any old public DTO/import still exposes shared identity; otherwise PASS after Tasks 1–8 have already removed them. Do not weaken rules to obtain green.
+Expected: PASS. If it fails, remove the leaked dependency/identity rather than adding an exception unless the exception is a test fixture already covered by current verifier conventions.
 
 - [ ] **Step 3: Update README**
 
@@ -1031,14 +1019,14 @@ Document:
 React My Circles
   -> DesktopCircleClient
   -> typed preload
-  -> CircleService (protected session + local viewer preference)
+  -> CircleService (protected session + local active-circle preference)
   -> LegacyCircleAuthAdapter
   -> Jose current Circle API
 ```
 
-State that Create Circle can bootstrap missing shared identity transparently, invitation roles are fixed descriptive labels, and Circle ownership remains separate authorization.
+State that Create Circle transparently bootstraps missing shared identity, roles are fixed descriptive labels, and Circle ownership is separate authorization.
 
-- [ ] **Step 4: Run targeted full feature tests**
+- [ ] **Step 4: Run targeted feature suite**
 
 ```bash
 npx vitest run \
@@ -1073,29 +1061,29 @@ Expected:
 npm audit: 0 high-or-greater vulnerabilities
 TypeScript renderer: PASS
 TypeScript Electron: PASS
-Vitest: all test files/tests PASS
+Vitest: all tests PASS
 Boundary verifier: PASS
 Electron build: PASS
 Vite renderer build: PASS
 ```
 
-Also require the GitHub Actions run for the exact final commit SHA on `feature/circles-create-invite` to conclude `success` before presenting the branch as merge-ready.
+Require GitHub Actions on the exact final `feature/circles-create-invite` commit SHA to conclude `success` before calling the branch merge-ready.
 
 - [ ] **Step 6: Review final diff for security-sensitive leakage**
 
-Inspect changed files and confirm:
+Confirm:
 
 ```text
 No renderer-provided acting identity
 No shared owner/user IDs in public Circle DTOs
 No token/temp password crossing desktop API
 No legacy URL/header outside adapter
-No optimistic fabricated counts or successful writes
+No fabricated counts or optimistic successful writes
 No Circle owner in invite dropdown
-No unrelated rename/delete/leave/remove/tree-edit mutation scope
+No rename/delete/leave/remove/tree-edit mutation scope
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Commit docs/boundary changes**
 
 ```bash
 git add scripts/verify-boundaries.mjs README.md
@@ -1104,4 +1092,4 @@ git commit -m "docs: secure circle management boundaries"
 
 - [ ] **Step 8: Prepare PR, do not merge without user instruction**
 
-Create a PR from `feature/circles-create-invite` to `main` pinned to the verified final head. Include the exact test count, build status, audit result, boundary file counts, and explicitly note excluded management operations. Stop before merge until the user asks to merge.
+Create a PR from `feature/circles-create-invite` to `main` pinned to the verified final head. Include exact final test count, build status, audit result, boundary file counts, and excluded management operations. Stop before merge until the user asks to merge.
