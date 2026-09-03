@@ -26,6 +26,14 @@ function outcomeMessage(outcome: InviteMemberResult['outcome']): string {
   }
 }
 
+function inviteErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message.includes('Only the Circle owner can invite members')) {
+    return 'Only the Circle owner can invite members.'
+  }
+  return "We couldn't send the invitation. Please try again."
+}
+
 export function InviteMemberDialog({
   open,
   circleId,
@@ -75,8 +83,8 @@ export function InviteMemberDialog({
       setResult(outcomeMessage(response.outcome))
       await onInvited(response.outcome)
       setSubmitting(false)
-    } catch {
-      setError("We couldn't send the invitation. Please try again.")
+    } catch (cause) {
+      setError(inviteErrorMessage(cause))
       setSubmitting(false)
     }
   }
