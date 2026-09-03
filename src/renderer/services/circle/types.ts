@@ -9,6 +9,11 @@ export type CircleSummary = {
   isActive: boolean
 }
 
+export type ShellSnapshot = {
+  activeCircleName: string | null
+  unreadNotifications: number
+}
+
 export type HomeMetrics = {
   members: number
   circles: number
