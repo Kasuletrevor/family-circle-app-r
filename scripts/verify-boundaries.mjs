@@ -7,6 +7,8 @@ const rendererRoot = join(root, 'src', 'renderer')
 const mainRoot = join(root, 'src', 'main')
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.html'])
 const legacyAdapterPath = 'src/main/circle/LegacyCircleAuthAdapter.ts'
+const desktopCircleClientPath = 'src/renderer/services/circle/DesktopCircleClient.ts'
+const mockCircleClientPath = 'src/renderer/services/circle/MockCircleClient.ts'
 
 const rendererRules = [
   { name: 'renderer token storage through localStorage', pattern: /\blocalStorage\b[^\n]*\btoken\b/gi },
@@ -86,6 +88,24 @@ for (const filePath of rendererFiles) {
   const content = await readFile(filePath, 'utf8')
 
   recordMatches(violations, file, content, rendererRules)
+
+  if (file !== desktopCircleClientPath) {
+    recordMatches(violations, file, content, [
+      {
+        name: 'production renderer must access Circle preload only through DesktopCircleClient',
+        pattern: /window\.familyCircle\.circle/g,
+      },
+    ])
+  }
+
+  if (file !== mockCircleClientPath) {
+    recordMatches(violations, file, content, [
+      {
+        name: 'MockCircleClient is test/demo-only and must not be used by production renderer code',
+        pattern: /\bMockCircleClient\b/g,
+      },
+    ])
+  }
 
   if (file.startsWith('src/renderer/features/')) {
     recordMatches(violations, file, content, [
