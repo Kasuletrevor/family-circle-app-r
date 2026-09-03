@@ -5,54 +5,8 @@ import type {
   CircleTreePersonRecord,
   CircleTreePositionRecord,
 } from '../../../shared/desktopApi'
-
-export type DesktopHomeEmptySnapshot = {
-  state: 'empty'
-  reason: 'not-linked' | 'no-circles'
-}
-
-export type DesktopHomeReadySnapshot = {
-  state: 'ready'
-  activeCircle: {
-    id: string
-    name: string
-    role: string
-    memberCount: number
-    isActive: true
-  }
-  metrics: {
-    members: number
-    circles: number
-    stories: null
-    memories: null
-  }
-  upcoming: []
-  activity: Array<{
-    id: string
-    title: string
-    detail: string
-    when: string
-    kind: 'invitation' | 'relationship' | 'story' | 'tree'
-  }>
-  people: Array<{
-    id: string
-    name: string
-    role: string
-    email?: string
-    initials: string
-    kind: 'member' | 'placeholder' | 'invited'
-    generation: number
-  }>
-  relationships: Array<{
-    id: string
-    fromPersonId: string
-    toPersonId: string
-    kind: string
-  }>
-  selectedPersonId: string
-}
-
-export type DesktopHomeSnapshot = DesktopHomeEmptySnapshot | DesktopHomeReadySnapshot
+import type { CircleClient } from './CircleClient'
+import type { ActivityItem, CircleSummary, HomeSnapshot } from './types'
 
 type GetOverview = () => Promise<CircleOverview>
 
@@ -98,7 +52,7 @@ function relativeTime(createdAt: number | null, now: number): string {
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
-function activityKind(type: string): 'invitation' | 'relationship' | 'story' | 'tree' {
+function activityKind(type: string): ActivityItem['kind'] {
   const normalized = type.toLowerCase()
   if (normalized.includes('invite') || normalized.includes('member_')) return 'invitation'
   if (normalized.includes('relation')) return 'relationship'
@@ -106,7 +60,7 @@ function activityKind(type: string): 'invitation' | 'relationship' | 'story' | '
   return 'tree'
 }
 
-function mapNotification(notification: CircleNotificationRecord, now: number) {
+function mapNotification(notification: CircleNotificationRecord, now: number): ActivityItem {
   return {
     id: notification.id,
     title: notification.title,
@@ -116,7 +70,7 @@ function mapNotification(notification: CircleNotificationRecord, now: number) {
   }
 }
 
-function mapCircle(circle: CircleGroupRecord, activeCircleId: string, memberCount: number | null) {
+function mapCircle(circle: CircleGroupRecord, activeCircleId: string, memberCount: number | null): CircleSummary {
   return {
     id: circle.id,
     name: circle.name,
@@ -126,13 +80,13 @@ function mapCircle(circle: CircleGroupRecord, activeCircleId: string, memberCoun
   }
 }
 
-export class DesktopCircleClient {
+export class DesktopCircleClient implements CircleClient {
   constructor(
     private readonly getOverview: GetOverview = defaultOverview,
     private readonly now: () => number = Date.now,
   ) {}
 
-  async getHomeSnapshot(): Promise<DesktopHomeSnapshot> {
+  async getHomeSnapshot(): Promise<HomeSnapshot> {
     const overview = await this.getOverview()
     if (overview.status === 'empty') {
       return { state: 'empty', reason: overview.reason }
@@ -185,7 +139,7 @@ export class DesktopCircleClient {
     }
   }
 
-  async getMyCircles() {
+  async getMyCircles(): Promise<CircleSummary[]> {
     const overview = await this.getOverview()
     if (overview.status === 'empty') return []
     const memberCount = overview.tree.people.filter((person) => person.kind === 'user').length
