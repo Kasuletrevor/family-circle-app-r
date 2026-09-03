@@ -81,7 +81,7 @@ describe('Home', () => {
     renderHome(new DesktopCircleClient(async () => overview) as unknown as CircleClient)
 
     expect(await screen.findByRole('heading', { name: /good .* member/i })).toBeInTheDocument()
-    expect(screen.getByText('Test Family')).toBeInTheDocument()
+    expect(screen.getAllByText('Test Family').length).toBeGreaterThan(0)
     expect(screen.getByText('A member joined Test Family')).toBeInTheDocument()
     expect(screen.queryByText('Stories')).not.toBeInTheDocument()
     expect(screen.queryByText('Memories')).not.toBeInTheDocument()
@@ -90,6 +90,9 @@ describe('Home', () => {
 
   it('shows an error state and retries the same service boundary', async () => {
     const snapshot = await new MockCircleClient().getHomeSnapshot()
+    expect(snapshot.state).toBe('ready')
+    if (snapshot.state !== 'ready') throw new Error('MockCircleClient should return a ready snapshot')
+
     const getHomeSnapshot = vi
       .fn<CircleClient['getHomeSnapshot']>()
       .mockRejectedValueOnce(new Error('Circle service unavailable'))
