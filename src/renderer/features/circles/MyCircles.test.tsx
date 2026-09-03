@@ -113,4 +113,27 @@ describe('MyCircles', () => {
     expect(getMyCircles).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('dialog', { name: 'Create a family circle' })).not.toBeInTheDocument()
   })
+
+  it('invites only from an owner Circle and refreshes the authoritative list after the normalized outcome', async () => {
+    const getMyCircles = vi
+      .fn<CircleClient['getMyCircles']>()
+      .mockResolvedValueOnce(circles)
+      .mockResolvedValueOnce(circles)
+    const inviteMember = vi.fn(async () => ({ outcome: 'already-pending' as const }))
+    renderPage(service({ getMyCircles, inviteMember }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Invite to Kasule Family' }))
+    const dialog = screen.getByRole('dialog', { name: 'Invite someone to Kasule Family' })
+    fireEvent.change(within(dialog).getByLabelText('Email address'), { target: { value: 'relative@example.test' } })
+    fireEvent.change(within(dialog).getByLabelText('Relationship'), { target: { value: 'Parent' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invitation' }))
+
+    expect(await within(dialog).findByText('An invitation is already pending.')).toBeInTheDocument()
+    expect(inviteMember).toHaveBeenCalledWith({
+      circleId: 'circle-a',
+      email: 'relative@example.test',
+      role: 'Parent',
+    })
+    expect(getMyCircles).toHaveBeenCalledTimes(2)
+  })
 })
