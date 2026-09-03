@@ -6,6 +6,7 @@ on:
       - main
       - feature/desktop-shell
       - feature/auth-onboarding
+      - feature/real-circle-home
   pull_request:
     branches:
       - main
