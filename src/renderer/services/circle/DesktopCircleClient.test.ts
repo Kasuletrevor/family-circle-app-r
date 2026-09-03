@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CircleOverview } from '../../../shared/desktopApi'
+import type { CircleListItem, CircleOverview } from '../../../shared/desktopApi'
 import { DesktopCircleClient } from './DesktopCircleClient'
 
 const now = 1_700_000_120_000
@@ -38,6 +38,11 @@ const readyOverview: CircleOverview = {
     },
   ],
 }
+
+const circleList: CircleListItem[] = [
+  { id: 'g-1', name: 'Test Family', role: 'Family member', memberCount: 3, isActive: true },
+  { id: 'g-2', name: 'Other Family', role: 'Circle owner', memberCount: 8, isActive: false },
+]
 
 describe('DesktopCircleClient', () => {
   it('maps the protected desktop overview into real Home data without shared service identities or fabricated local features', async () => {
@@ -102,6 +107,17 @@ describe('DesktopCircleClient', () => {
     expect(getOverview).toHaveBeenCalledTimes(1)
   })
 
+  it('uses the authoritative protected Circle list instead of deriving other Circle counts from the active tree', async () => {
+    const getMyCircles = vi.fn(async () => circleList)
+    const client = new DesktopCircleClient(async () => readyOverview, () => now, { getMyCircles })
+
+    await expect(client.getMyCircles()).resolves.toEqual([
+      { id: 'g-1', name: 'Test Family', role: 'Family member', memberCount: 3, isActive: true },
+      { id: 'g-2', name: 'Other Family', role: 'Circle owner', memberCount: 8, isActive: false },
+    ])
+    expect(getMyCircles).toHaveBeenCalledTimes(1)
+  })
+
   it('returns an explicit Home empty state for an account with no shared Circle', async () => {
     const overview: CircleOverview = {
       status: 'empty',
@@ -112,7 +128,7 @@ describe('DesktopCircleClient', () => {
       tree: null,
       notifications: [],
     }
-    const client = new DesktopCircleClient(async () => overview, () => now)
+    const client = new DesktopCircleClient(async () => overview, () => now, { getMyCircles: async () => [] })
 
     await expect(client.getHomeSnapshot()).resolves.toEqual({
       state: 'empty',
@@ -141,5 +157,41 @@ describe('DesktopCircleClient', () => {
     })
     await expect(home).resolves.toMatchObject({ state: 'ready' })
     expect(getOverview).toHaveBeenCalledTimes(1)
+  })
+
+  it('delegates select/create/invite through preload and invalidates an in-flight overview after each confirmed change', async () => {
+    const pendingResolvers: Array<(overview: CircleOverview) => void> = []
+    const getOverview = vi.fn(() => new Promise<CircleOverview>((resolve) => pendingResolvers.push(resolve)))
+    const selectCircle = vi.fn(async () => ({ success: true as const }))
+    const createCircle = vi.fn(async () => ({ circleId: 'g-3' }))
+    const inviteMember = vi.fn(async () => ({ outcome: 'sent' as const }))
+    const client = new DesktopCircleClient(getOverview, () => now, {
+      getMyCircles: async () => circleList,
+      selectCircle,
+      createCircle,
+      inviteMember,
+    })
+
+    const firstHome = client.getHomeSnapshot()
+    expect(getOverview).toHaveBeenCalledTimes(1)
+
+    await client.selectCircle('g-2')
+    expect(selectCircle).toHaveBeenCalledWith('g-2')
+    const afterSelect = client.getShellSnapshot()
+    expect(getOverview).toHaveBeenCalledTimes(2)
+
+    await expect(client.createCircle({ name: 'New Family' })).resolves.toEqual({ circleId: 'g-3' })
+    expect(createCircle).toHaveBeenCalledWith({ name: 'New Family' })
+    const afterCreate = client.getShellSnapshot()
+    expect(getOverview).toHaveBeenCalledTimes(3)
+
+    await expect(client.inviteMember({ circleId: 'g-2', email: 'relative@example.test', role: 'Sibling' }))
+      .resolves.toEqual({ outcome: 'sent' })
+    expect(inviteMember).toHaveBeenCalledWith({ circleId: 'g-2', email: 'relative@example.test', role: 'Sibling' })
+    const afterInvite = client.getShellSnapshot()
+    expect(getOverview).toHaveBeenCalledTimes(4)
+
+    pendingResolvers.forEach((resolve) => resolve(readyOverview))
+    await Promise.all([firstHome, afterSelect, afterCreate, afterInvite])
   })
 })
