@@ -1,13 +1,13 @@
 import { createContext, type PropsWithChildren, useContext } from 'react'
 import type { CircleClient } from '../services/circle/CircleClient'
-import { MockCircleClient } from '../services/circle/MockCircleClient'
+import { DesktopCircleClient } from '../services/circle/DesktopCircleClient'
 
 export type AppServices = {
   circle: CircleClient
 }
 
 const defaultServices: AppServices = {
-  circle: new MockCircleClient(),
+  circle: new DesktopCircleClient(),
 }
 
 const AppServicesContext = createContext<AppServices>(defaultServices)
