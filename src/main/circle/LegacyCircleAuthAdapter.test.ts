@@ -123,6 +123,60 @@ describe('LegacyCircleAuthAdapter', () => {
     })).rejects.toThrow('circle membership could not be confirmed')
   })
 
+  it('registers a shared identity using normalized protected profile values', async () => {
+    const fetcher = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ email: 'owner@example.com', name: 'Owner Name' })
+      return jsonResponse({ user: { id: 88, name: 'Owner Name' } })
+    })
+    const adapter = new LegacyCircleAuthAdapter({ baseUrl: 'https://circle.example.test', apiKey: 'legacy-key' }, fetcher)
+
+    await expect(adapter.ensureSharedUser({ email: ' Owner@Example.COM ', name: ' Owner Name ' }))
+      .resolves.toEqual({ serverUserId: '88' })
+  })
+
+  it('creates a Circle using the shared owner identity', async () => {
+    const fetcher = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ fromUserId: '88', name: 'Kasule Family' })
+      return jsonResponse({ group: { id: 'circle-1', name: 'Kasule Family', ownerId: 88 } }, 201)
+    })
+    const adapter = new LegacyCircleAuthAdapter({ baseUrl: 'https://circle.example.test', apiKey: 'legacy-key' }, fetcher)
+
+    await expect(adapter.createCircle({ serverUserId: '88', name: 'Kasule Family' })).resolves.toEqual({
+      id: 'circle-1',
+      name: 'Kasule Family',
+      ownerId: '88',
+      role: 'Circle owner',
+    })
+  })
+
+  it.each([
+    [{ alreadyMember: true, tempPassword: 'secret', token: 'token' }, { outcome: 'already-member' }],
+    [{ alreadyPending: true, emailRetried: true, tempPassword: 'secret', token: 'token' }, { outcome: 'already-pending' }],
+    [{ success: true, invitation: { id: 'i-1', tempPassword: 'secret', token: 'token' }, emailSent: true }, { outcome: 'sent' }],
+    [{ success: true, invitation: { id: 'i-1', tempPassword: 'secret', token: 'token' }, emailSent: false, emailError: 'smtp' }, { outcome: 'delivery-failed' }],
+  ])('normalizes invite response %# without leaking credentials', async (response, expected) => {
+    const fetcher = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        fromUserId: '88',
+        groupId: 'circle-1',
+        email: 'relative@example.com',
+        role: 'Sibling',
+      })
+      return jsonResponse(response)
+    })
+    const adapter = new LegacyCircleAuthAdapter({ baseUrl: 'https://circle.example.test', apiKey: 'legacy-key' }, fetcher)
+
+    const result = await adapter.inviteMember({
+      serverUserId: '88',
+      circleId: 'circle-1',
+      email: ' Relative@Example.COM ',
+      role: 'Sibling',
+    })
+    expect(result).toEqual(expected)
+    expect(JSON.stringify(result)).not.toContain('secret')
+    expect(JSON.stringify(result)).not.toContain('token')
+  })
+
   it('aborts slow requests using the configured timeout', async () => {
     const fetcher = vi.fn((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal
