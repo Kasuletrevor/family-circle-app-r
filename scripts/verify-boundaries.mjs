@@ -5,6 +5,7 @@ import process from 'node:process'
 const root = process.cwd()
 const rendererRoot = join(root, 'src', 'renderer')
 const mainRoot = join(root, 'src', 'main')
+const sharedDesktopApiPath = join(root, 'src', 'shared', 'desktopApi.ts')
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.html'])
 const legacyAdapterPath = 'src/main/circle/LegacyCircleAuthAdapter.ts'
 const desktopCircleClientPath = 'src/renderer/services/circle/DesktopCircleClient.ts'
@@ -26,14 +27,34 @@ const rendererRules = [
   { name: 'runtime dependency on the brand source repository', pattern: /raw\.githubusercontent\.com\/Elder-ChatGPT\/agent-ai-landing/g },
 ]
 
+const rendererCircleIdentityRules = [
+  { name: 'Circle renderer must not carry caller-supplied fromUserId', pattern: /\bfromUserId\b/g },
+  { name: 'Circle renderer must not carry shared serverUserId', pattern: /\bserverUserId\b/g },
+  { name: 'Circle renderer must not carry shared ownerId', pattern: /\bownerId\b/g },
+  { name: 'Circle renderer must not carry raw shared userId', pattern: /\buserId\b/g },
+  { name: 'Circle renderer must not carry invitation tokens', pattern: /\binvitationToken\b/g },
+  { name: 'Circle renderer must not carry temporary passwords', pattern: /\btemporaryPassword\b/g },
+]
+
+const publicCircleContractRules = [
+  { name: 'public desktop Circle contract must not expose fromUserId', pattern: /\bfromUserId\b/g },
+  { name: 'public desktop Circle contract must not expose serverUserId', pattern: /\bserverUserId\b/g },
+  { name: 'public desktop Circle contract must not expose ownerId', pattern: /\bownerId\b/g },
+  { name: 'public desktop Circle contract must not expose raw shared userId', pattern: /\buserId\b/g },
+  { name: 'public desktop Circle contract must not expose Circle API keys', pattern: /\bCIRCLE_API_KEY\b|X-Kin-Keepers-Key/g },
+  { name: 'public desktop Circle contract must not expose invitation tokens', pattern: /\binvitationToken\b/g },
+  { name: 'public desktop Circle contract must not expose temporary passwords', pattern: /\btemporaryPassword\b/g },
+]
+
 const mainQuarantineRules = [
   { name: 'legacy Circle API-key header', pattern: /X-Kin-Keepers-Key/g },
   { name: 'legacy Circle endpoint URL', pattern: /https:\/\/familycircle\.o2gventures\.com\/circle-api/g },
   { name: 'legacy invitation-check path', pattern: /\/api\/invitation-check/g },
   { name: 'legacy registration path', pattern: /\/api\/register/g },
-  { name: 'legacy invitation-accept path', pattern: /\/api\/invitations\/accept-link/g },
+  { name: 'legacy invitation path', pattern: /\/api\/invitations\//g },
   { name: 'legacy mark-claimed path', pattern: /\/api\/user\/mark-claimed/g },
-  { name: 'legacy membership path', pattern: /\/api\/me\//g },
+  { name: 'legacy membership/notification path', pattern: /\/api\/me\//g },
+  { name: 'legacy Circle group/tree/write path', pattern: /\/api\/group\//g },
 ]
 
 const mainForbiddenRules = [
@@ -89,6 +110,10 @@ for (const filePath of rendererFiles) {
 
   recordMatches(violations, file, content, rendererRules)
 
+  if (file.startsWith('src/renderer/features/circles/') || file.startsWith('src/renderer/services/circle/')) {
+    recordMatches(violations, file, content, rendererCircleIdentityRules)
+  }
+
   if (file !== desktopCircleClientPath) {
     recordMatches(violations, file, content, [
       {
@@ -131,6 +156,9 @@ for (const filePath of mainFiles) {
   if (file !== legacyAdapterPath) recordMatches(violations, file, content, mainQuarantineRules)
 }
 
+const sharedDesktopApi = await readFile(sharedDesktopApiPath, 'utf8')
+recordMatches(violations, displayPath(sharedDesktopApiPath), sharedDesktopApi, publicCircleContractRules)
+
 if (violations.length > 0) {
   console.error('Architecture boundary verification failed:')
   for (const violation of violations) console.error(`  - ${violation}`)
@@ -138,5 +166,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture boundary verification passed across ${rendererFiles.length} renderer and ${mainFiles.length} main-process source files.`,
+  `Architecture boundary verification passed across ${rendererFiles.length} renderer and ${mainFiles.length} main-process source files plus the public desktop contract.`,
 )
