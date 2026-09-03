@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import type { AuthUser } from '../../shared/desktopApi'
 import { Home } from '../features/home/Home'
 import { PlaceholderPage } from './PlaceholderPage'
 import { Sidebar } from './Sidebar'
@@ -17,12 +18,12 @@ const placeholderRoutes = [
   { path: '/settings', title: 'Settings' },
 ] as const
 
-export function AuthenticatedApp() {
+export function AuthenticatedApp({ user }: { user: AuthUser }) {
   return (
     <div className="app-shell">
       <Sidebar />
       <div className="app-shell__workspace">
-        <TopBar />
+        <TopBar user={user} />
         <main className="app-shell__content">
           <Routes>
             <Route path="/" element={<Home />} />

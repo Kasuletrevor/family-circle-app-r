@@ -18,7 +18,6 @@ export type NavigationItem = {
   label: string
   to: string
   icon: LucideIcon
-  badge?: string
 }
 
 export const navigationItems: NavigationItem[] = [
@@ -26,7 +25,7 @@ export const navigationItems: NavigationItem[] = [
   { label: 'My Circles', to: '/circles', icon: CircleUserRound },
   { label: 'Family Tree', to: '/family-tree', icon: Network },
   { label: 'Members', to: '/members', icon: UsersRound },
-  { label: 'Invitations', to: '/invitations', icon: MailPlus, badge: '2' },
+  { label: 'Invitations', to: '/invitations', icon: MailPlus },
   { label: 'Stories', to: '/stories', icon: BookOpen },
   { label: 'Vault', to: '/vault', icon: LockKeyhole },
   { label: 'Memories', to: '/memories', icon: Image },
@@ -42,7 +41,7 @@ export function Sidebar() {
       </div>
 
       <nav className="app-sidebar__nav" aria-label="Primary navigation">
-        {navigationItems.map(({ label, to, icon: Icon, badge }) => (
+        {navigationItems.map(({ label, to, icon: Icon }) => (
           <NavLink
             key={to}
             end={to === '/'}
@@ -52,7 +51,6 @@ export function Sidebar() {
           >
             <Icon size={19} strokeWidth={1.9} aria-hidden="true" />
             <span>{label}</span>
-            {badge && <span className="sidebar-link__badge" aria-hidden="true">{badge}</span>}
           </NavLink>
         ))}
       </nav>

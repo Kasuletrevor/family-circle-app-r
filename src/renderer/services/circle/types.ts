@@ -3,16 +3,22 @@ export type ServiceState = 'ready' | 'offline'
 export type CircleSummary = {
   id: string
   name: string
-  ownerName: string
-  memberCount: number
+  ownerName?: string
+  role?: string
+  memberCount: number | null
   isActive: boolean
+}
+
+export type ShellSnapshot = {
+  activeCircleName: string | null
+  unreadNotifications: number
 }
 
 export type HomeMetrics = {
   members: number
   circles: number
-  stories: number
-  memories: number
+  stories: number | null
+  memories: number | null
 }
 
 export type FamilyPersonKind = 'member' | 'placeholder' | 'invited'
@@ -34,7 +40,7 @@ export type FamilyRelationship = {
   id: string
   fromPersonId: string
   toPersonId: string
-  kind: 'spouse' | 'parent' | 'sibling'
+  kind: string
 }
 
 export type UpcomingItem = {
@@ -52,7 +58,7 @@ export type ActivityItem = {
   kind: 'invitation' | 'relationship' | 'story' | 'tree'
 }
 
-export type HomeSnapshot = {
+export type HomeReadySnapshot = {
   state: ServiceState
   activeCircle: CircleSummary
   metrics: HomeMetrics
@@ -62,3 +68,10 @@ export type HomeSnapshot = {
   relationships: FamilyRelationship[]
   selectedPersonId: string
 }
+
+export type HomeEmptySnapshot = {
+  state: 'empty'
+  reason: 'not-linked' | 'no-circles'
+}
+
+export type HomeSnapshot = HomeReadySnapshot | HomeEmptySnapshot

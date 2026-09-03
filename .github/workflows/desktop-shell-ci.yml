@@ -6,6 +6,7 @@ on:
       - main
       - feature/desktop-shell
       - feature/auth-onboarding
+      - feature/real-circle-home
   pull_request:
     branches:
       - main
@@ -26,5 +27,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
       - name: Verify desktop shell
         run: npm run check
