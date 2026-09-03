@@ -9,15 +9,15 @@ const readyOverview: CircleOverview = {
   activeCircleId: 'g-1',
   viewerPersonId: 'user:88',
   circles: [
-    { id: 'g-1', name: 'Test Family', ownerId: '1', role: 'Family member' },
-    { id: 'g-2', name: 'Other Family', ownerId: '88', role: 'Circle owner' },
+    { id: 'g-1', name: 'Test Family', role: 'Family member' },
+    { id: 'g-2', name: 'Other Family', role: 'Circle owner' },
   ],
   tree: {
-    group: { id: 'g-1', name: 'Test Family', ownerId: '1' },
+    group: { id: 'g-1', name: 'Test Family' },
     people: [
-      { id: 'user:1', kind: 'user', userId: '1', name: 'Circle Owner', email: 'owner@example.test', role: 'Circle owner' },
-      { id: 'user:88', kind: 'user', userId: '88', name: 'Member Example', email: 'member@example.test', role: 'Family member' },
-      { id: 'invite:i-1', kind: 'invite', userId: null, name: 'Pending Cousin', email: 'cousin@example.test', role: 'Family member' },
+      { id: 'user:1', kind: 'user', name: 'Circle Owner', email: 'owner@example.test', role: 'Circle owner' },
+      { id: 'user:88', kind: 'user', name: 'Member Example', email: 'member@example.test', role: 'Family member' },
+      { id: 'invite:i-1', kind: 'invite', name: 'Pending Cousin', email: 'cousin@example.test', role: 'Family member' },
     ],
     relations: [{ id: 'r-1', kind: 'sibling', aPersonId: 'user:1', bPersonId: 'user:88' }],
     positions: [
@@ -40,7 +40,7 @@ const readyOverview: CircleOverview = {
 }
 
 describe('DesktopCircleClient', () => {
-  it('maps the protected desktop overview into real Home data without fabricating local features', async () => {
+  it('maps the protected desktop overview into real Home data without shared service identities or fabricated local features', async () => {
     const getOverview = vi.fn(async () => readyOverview)
     const client = new DesktopCircleClient(getOverview, () => now)
 
