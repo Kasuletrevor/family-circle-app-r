@@ -1,17 +1,36 @@
 import type {
   CircleGroupRecord,
+  CircleListItem,
   CircleNotificationRecord,
   CircleOverview,
   CircleTreePersonRecord,
   CircleTreePositionRecord,
+  CreateCircleInput,
+  CreateCircleResult,
+  InviteMemberInput,
+  InviteMemberResult,
 } from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
 import type { ActivityItem, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 type GetOverview = () => Promise<CircleOverview>
 
+interface CircleDesktopOperations {
+  getMyCircles(): Promise<CircleListItem[]>
+  selectCircle(circleId: string): Promise<{ success: true }>
+  createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
+  inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+}
+
 function defaultOverview(): Promise<CircleOverview> {
   return window.familyCircle.circle.getOverview()
+}
+
+const defaultOperations: CircleDesktopOperations = {
+  getMyCircles: () => window.familyCircle.circle.getMyCircles(),
+  selectCircle: (circleId) => window.familyCircle.circle.selectCircle(circleId),
+  createCircle: (input) => window.familyCircle.circle.createCircle(input),
+  inviteMember: (input) => window.familyCircle.circle.inviteMember(input),
 }
 
 function initials(name: string): string {
@@ -80,13 +99,27 @@ function mapCircle(circle: CircleGroupRecord, activeCircleId: string, memberCoun
   }
 }
 
+function mapListItem(circle: CircleListItem): CircleSummary {
+  return {
+    id: circle.id,
+    name: circle.name,
+    role: circle.role,
+    memberCount: circle.memberCount,
+    isActive: circle.isActive,
+  }
+}
+
 export class DesktopCircleClient implements CircleClient {
   private overviewInFlight: Promise<CircleOverview> | null = null
+  private readonly operations: CircleDesktopOperations
 
   constructor(
     private readonly getOverview: GetOverview = defaultOverview,
     private readonly now: () => number = Date.now,
-  ) {}
+    operations: Partial<CircleDesktopOperations> = {},
+  ) {
+    this.operations = { ...defaultOperations, ...operations }
+  }
 
   async getHomeSnapshot(): Promise<HomeSnapshot> {
     const overview = await this.readOverview()
@@ -142,14 +175,7 @@ export class DesktopCircleClient implements CircleClient {
   }
 
   async getMyCircles(): Promise<CircleSummary[]> {
-    const overview = await this.readOverview()
-    if (overview.status === 'empty') return []
-    const memberCount = overview.tree.people.filter((person) => person.kind === 'user').length
-    return overview.circles.map((circle) => mapCircle(
-      circle,
-      overview.activeCircleId,
-      circle.id === overview.activeCircleId ? memberCount : null,
-    ))
+    return (await this.operations.getMyCircles()).map(mapListItem)
   }
 
   async getShellSnapshot(): Promise<ShellSnapshot> {
@@ -166,6 +192,27 @@ export class DesktopCircleClient implements CircleClient {
       activeCircleName: activeCircle?.name ?? overview.tree.group.name ?? null,
       unreadNotifications: overview.notifications.filter((notification) => !notification.read).length,
     }
+  }
+
+  async selectCircle(circleId: string): Promise<void> {
+    await this.operations.selectCircle(circleId)
+    this.invalidateOverview()
+  }
+
+  async createCircle(input: CreateCircleInput): Promise<CreateCircleResult> {
+    const result = await this.operations.createCircle(input)
+    this.invalidateOverview()
+    return result
+  }
+
+  async inviteMember(input: InviteMemberInput): Promise<InviteMemberResult> {
+    const result = await this.operations.inviteMember(input)
+    this.invalidateOverview()
+    return result
+  }
+
+  private invalidateOverview(): void {
+    this.overviewInFlight = null
   }
 
   private readOverview(): Promise<CircleOverview> {
