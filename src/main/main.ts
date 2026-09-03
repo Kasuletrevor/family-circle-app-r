@@ -7,6 +7,8 @@ import { PasswordRecoveryService } from './auth/PasswordRecoveryService'
 import { createRecoveryMailer } from './auth/RecoveryMailer'
 import { createProtectedCrypto, createSessionFile, SessionStore } from './auth/SessionStore'
 import { UserRepository } from './auth/UserRepository'
+import { registerCircleIpc } from './circle/circleIpc'
+import { CircleService } from './circle/CircleService'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
 import { createWindowOptions } from './windowOptions'
@@ -14,13 +16,14 @@ import { createWindowOptions } from './windowOptions'
 let mainWindow: BrowserWindow | null = null
 let database: DatabaseSync | null = null
 
-function registerDesktopIpc(authService: AuthService) {
+function registerDesktopIpc(authService: AuthService, circleService: CircleService) {
   ipcMain.handle('app:get-version', () => app.getVersion())
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, authService)
+  registerCircleIpc(ipcMain, circleService)
 }
 
-async function createAuthService(): Promise<AuthService> {
+async function createAppServices(): Promise<{ authService: AuthService; circleService: CircleService }> {
   const userDataPath = app.getPath('userData')
   database = await prepareDatabase({
     userDataPath,
@@ -39,7 +42,10 @@ async function createAuthService(): Promise<AuthService> {
     apiKey: process.env.CIRCLE_API_KEY || '',
   })
 
-  return new AuthService(users, sessions, recovery, circle)
+  return {
+    authService: new AuthService(users, sessions, recovery, circle),
+    circleService: new CircleService(sessions, users, circle),
+  }
 }
 
 function createMainWindow() {
@@ -62,8 +68,8 @@ function createMainWindow() {
 }
 
 void app.whenReady().then(async () => {
-  const authService = await createAuthService()
-  registerDesktopIpc(authService)
+  const { authService, circleService } = await createAppServices()
+  registerDesktopIpc(authService, circleService)
   createMainWindow()
 
   app.on('activate', () => {
