@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
+import type { AuthUser } from '../../shared/desktopApi'
+import { MockCircleClient } from '../services/circle/MockCircleClient'
 import { App } from './App'
+import { AppServicesProvider } from './services'
 
 const navigationLabels = [
   'Home',
@@ -16,11 +19,22 @@ const navigationLabels = [
   'Settings',
 ]
 
+const user: AuthUser = {
+  id: 12,
+  email: 'ada@example.test',
+  name: 'Ada Example',
+  accountOrigin: 'registered',
+  mustChangePassword: false,
+  onboardingCompleted: true,
+}
+
 describe('App shell', () => {
-  it('renders stable desktop navigation and changes routes without leaving the shell', () => {
+  it('renders stable desktop navigation and changes routes without leaving the shell', async () => {
     render(
       <MemoryRouter initialEntries={['/family-tree']}>
-        <App />
+        <AppServicesProvider services={{ circle: new MockCircleClient() }}>
+          <App user={user} />
+        </AppServicesProvider>
       </MemoryRouter>,
     )
 
@@ -30,7 +44,8 @@ describe('App shell', () => {
 
     expect(screen.getByRole('link', { name: 'Family Tree' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
-    expect(screen.getByText('Kasule Family')).toBeInTheDocument()
+    expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
+    expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: /search family circle/i })).toBeInTheDocument()
     expect(screen.getByText('Ready (Offline)')).toBeInTheDocument()
 
