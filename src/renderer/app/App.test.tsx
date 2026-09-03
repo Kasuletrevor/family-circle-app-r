@@ -48,6 +48,7 @@ describe('App shell', () => {
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: /search family circle/i })).toBeInTheDocument()
     expect(screen.getByText('Ready (Offline)')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Invitations' }).querySelector('.sidebar-link__badge')).toBeNull()
 
     fireEvent.click(screen.getByRole('link', { name: 'Members' }))
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument()
