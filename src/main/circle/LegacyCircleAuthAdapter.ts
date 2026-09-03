@@ -1,5 +1,12 @@
 import type { InvitationCheckResult } from '../../shared/desktopApi'
 import { normalizeEmail } from '../auth/passwordPolicy'
+import type {
+  CircleGroupRecord,
+  CircleNotificationRecord,
+  CircleTreePersonRecord,
+  CircleTreeRecord,
+  CircleTreeRelationRecord,
+} from './CircleService'
 
 const DEFAULT_LEGACY_CIRCLE_URL = 'https://familycircle.o2gventures.com/circle-api'
 
@@ -31,6 +38,24 @@ interface RawInvitation {
 
 interface RegistrationResponse {
   user?: { id?: string | number | null; name?: string | null }
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (value == null) return null
+  const normalized = String(value).trim()
+  return normalized || null
+}
+
+function finiteNumber(value: unknown): number | null {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function normalizePersonKind(value: unknown, id: string): CircleTreePersonRecord['kind'] {
+  const kind = String(value ?? '').trim().toLowerCase()
+  if (kind === 'placeholder') return 'placeholder'
+  if (kind === 'invite' || id.startsWith('invite:')) return 'invite'
+  return 'user'
 }
 
 export class LegacyCircleAuthAdapter {
@@ -116,15 +141,99 @@ export class LegacyCircleAuthAdapter {
   }
 
   async getMemberships(serverUserId: string): Promise<Array<{ id: string; name: string; role: string }>> {
-    const data = await this.getJson<{ groups?: Array<{ id?: unknown; name?: unknown; role?: unknown }> }>(
-      `/api/me/${encodeURIComponent(serverUserId)}/groups`,
-    )
+    const groups = await this.listGroups(serverUserId)
+    return groups.map(({ id, name, role }) => ({ id, name, role }))
+  }
+
+  async listGroups(serverUserId: string): Promise<CircleGroupRecord[]> {
+    const safeServerUserId = String(serverUserId).trim()
+    const data = await this.getJson<{
+      groups?: Array<{ id?: unknown; name?: unknown; ownerId?: unknown; owner_id?: unknown; role?: unknown }>
+    }>(`/api/me/${encodeURIComponent(safeServerUserId)}/groups`)
+
     return Array.isArray(data.groups)
-      ? data.groups.map((group) => ({
-          id: String(group.id ?? ''),
-          name: String(group.name ?? 'Family Circle'),
-          role: String(group.role ?? 'Family member'),
-        })).filter((group) => Boolean(group.id))
+      ? data.groups.map((group) => {
+          const id = String(group.id ?? '').trim()
+          const ownerId = String(group.ownerId ?? group.owner_id ?? '').trim()
+          const explicitRole = String(group.role ?? '').trim()
+          return {
+            id,
+            name: String(group.name ?? 'Family Circle'),
+            ownerId,
+            role: explicitRole || (ownerId && ownerId === safeServerUserId ? 'Circle owner' : 'Family member'),
+          }
+        }).filter((group) => Boolean(group.id))
+      : []
+  }
+
+  async getTree(groupId: string, serverUserId: string): Promise<CircleTreeRecord> {
+    const data = await this.getJson<{
+      group?: { id?: unknown; name?: unknown; ownerId?: unknown; owner_id?: unknown }
+      people?: Array<Record<string, unknown>>
+      relations?: Array<Record<string, unknown>>
+      positions?: Array<Record<string, unknown>>
+    }>(`/api/group/${encodeURIComponent(groupId)}/tree/${encodeURIComponent(serverUserId)}`)
+
+    const group = data.group ?? {}
+    const people: CircleTreePersonRecord[] = Array.isArray(data.people)
+      ? data.people.map((person) => {
+          const id = String(person.id ?? '').trim()
+          return {
+            id,
+            kind: normalizePersonKind(person.kind, id),
+            userId: stringOrNull(person.userId ?? person.user_id),
+            name: String(person.name ?? person.email ?? 'Family member'),
+            email: stringOrNull(person.email),
+            role: String(person.role ?? 'Family member'),
+          }
+        }).filter((person) => Boolean(person.id))
+      : []
+
+    const relations: CircleTreeRelationRecord[] = Array.isArray(data.relations)
+      ? data.relations.map((relation) => ({
+          id: String(relation.id ?? '').trim(),
+          kind: String(relation.kind ?? '').trim(),
+          aPersonId: String(relation.aPersonId ?? relation.a_person_id ?? '').trim(),
+          bPersonId: String(relation.bPersonId ?? relation.b_person_id ?? '').trim(),
+        })).filter((relation) => Boolean(relation.id && relation.aPersonId && relation.bPersonId))
+      : []
+
+    const positions = Array.isArray(data.positions)
+      ? data.positions.flatMap((position) => {
+          const personId = String(position.personId ?? position.person_id ?? '').trim()
+          const x = finiteNumber(position.x)
+          const y = finiteNumber(position.y)
+          return personId && x != null && y != null ? [{ personId, x, y }] : []
+        })
+      : []
+
+    return {
+      group: {
+        id: String(group.id ?? groupId),
+        name: String(group.name ?? 'Family Circle'),
+        ownerId: String(group.ownerId ?? group.owner_id ?? ''),
+      },
+      people,
+      relations,
+      positions,
+    }
+  }
+
+  async getNotifications(serverUserId: string): Promise<CircleNotificationRecord[]> {
+    const data = await this.getJson<{ notifications?: Array<Record<string, unknown>> }>(
+      `/api/me/${encodeURIComponent(serverUserId)}/notifications`,
+    )
+    return Array.isArray(data.notifications)
+      ? data.notifications.map((notification) => ({
+          id: String(notification.id ?? '').trim(),
+          type: String(notification.type ?? 'circle_activity'),
+          title: String(notification.title ?? 'Circle update'),
+          message: String(notification.message ?? ''),
+          groupId: stringOrNull(notification.groupId ?? notification.group_id),
+          groupName: stringOrNull(notification.groupName ?? notification.group_name),
+          createdAt: finiteNumber(notification.createdAt ?? notification.created_at),
+          read: Boolean(notification.read ?? notification.read_at),
+        })).filter((notification) => Boolean(notification.id))
       : []
   }
 
