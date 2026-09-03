@@ -1,10 +1,16 @@
+import type {
+  CreateCircleInput,
+  CreateCircleResult,
+  InviteMemberInput,
+  InviteMemberResult,
+} from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
 import type { CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 const circles: CircleSummary[] = [
-  { id: 'kasule-family', name: 'Kasule Family', ownerName: 'Trevor Kasule', memberCount: 12, isActive: true },
-  { id: 'extended-family', name: 'Extended Family', ownerName: 'Trevor Kasule', memberCount: 18, isActive: false },
-  { id: 'nambuti-family', name: 'Nambuti Family', ownerName: 'Grace Nambuti', memberCount: 9, isActive: false },
+  { id: 'kasule-family', name: 'Kasule Family', ownerName: 'Trevor Kasule', role: 'Circle owner', memberCount: 12, isActive: true },
+  { id: 'extended-family', name: 'Extended Family', ownerName: 'Trevor Kasule', role: 'Circle owner', memberCount: 18, isActive: false },
+  { id: 'nambuti-family', name: 'Nambuti Family', ownerName: 'Grace Nambuti', role: 'Family member', memberCount: 9, isActive: false },
 ]
 
 const homeSnapshot: HomeSnapshot = {
@@ -60,18 +66,36 @@ const homeSnapshot: HomeSnapshot = {
 }
 
 export class MockCircleClient implements CircleClient {
+  private activeCircleId = 'kasule-family'
+
   async getHomeSnapshot(): Promise<HomeSnapshot> {
     return structuredClone(homeSnapshot)
   }
 
   async getMyCircles(): Promise<CircleSummary[]> {
-    return structuredClone(circles)
+    return structuredClone(circles.map((circle) => ({
+      ...circle,
+      isActive: circle.id === this.activeCircleId,
+    })))
   }
 
   async getShellSnapshot(): Promise<ShellSnapshot> {
     return {
-      activeCircleName: circles.find((circle) => circle.isActive)?.name ?? null,
+      activeCircleName: circles.find((circle) => circle.id === this.activeCircleId)?.name ?? null,
       unreadNotifications: 2,
     }
+  }
+
+  async selectCircle(circleId: string): Promise<void> {
+    if (!circles.some((circle) => circle.id === circleId)) throw new Error('Circle was not found')
+    this.activeCircleId = circleId
+  }
+
+  async createCircle(_input: CreateCircleInput): Promise<CreateCircleResult> {
+    return { circleId: 'mock-created-circle' }
+  }
+
+  async inviteMember(_input: InviteMemberInput): Promise<InviteMemberResult> {
+    return { outcome: 'sent' }
   }
 }
