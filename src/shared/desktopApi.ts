@@ -1,6 +1,19 @@
 export type AccountOrigin = 'registered' | 'invited' | 'existing'
 export type OnboardingNextAction = 'create-circle' | 'home' | 'joined-circle'
 
+export const INVITATION_FAMILY_ROLES = [
+  'Family member',
+  'Parent',
+  'Child',
+  'Spouse / Partner',
+  'Sibling',
+  'Grandparent',
+  'Grandchild',
+  'Guardian / Caregiver',
+] as const
+
+export type InvitationFamilyRole = typeof INVITATION_FAMILY_ROLES[number]
+
 export interface AuthUser {
   id: number
   email: string
@@ -89,6 +102,32 @@ export interface CircleNotificationRecord {
   groupName: string | null
   createdAt: number | null
   read: boolean
+}
+
+export interface CircleListItem {
+  id: string
+  name: string
+  role: string
+  memberCount: number
+  isActive: boolean
+}
+
+export interface CreateCircleInput {
+  name: string
+}
+
+export interface CreateCircleResult {
+  circleId: string
+}
+
+export interface InviteMemberInput {
+  circleId: string
+  email: string
+  role: InvitationFamilyRole
+}
+
+export interface InviteMemberResult {
+  outcome: 'sent' | 'already-pending' | 'already-member' | 'delivery-failed'
 }
 
 export type CircleOverview =
