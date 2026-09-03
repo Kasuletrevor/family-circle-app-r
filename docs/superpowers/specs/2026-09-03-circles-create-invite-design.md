@@ -16,17 +16,20 @@ This work must preserve Jose's current Circle API behind the Electron main-proce
 ### Included
 
 - Real `/circles` page.
-- Real My Circles list sourced from the existing protected Circle read path.
+- Real My Circles list sourced from a protected main-process Circle read path.
+- Accurate real member count for every listed Circle.
 - Empty state for users with no Circle.
+- Local active-Circle selection for the signed-in viewer.
+- Open Circle action that selects the Circle locally and opens its Home view.
 - Create Circle mutation.
 - Automatic shared-identity bootstrap when a local authenticated user has no persisted `server_user_id`.
 - Persist the returned shared user ID locally after successful identity bootstrap.
+- Make a newly created Circle the viewer's active Circle locally.
 - Invite Member mutation for Circle owners.
 - Fixed invitation-role dropdown.
-- Open/View Circle action.
 - Cache invalidation and authoritative refresh after successful mutations.
 - Stable user-facing mutation outcomes.
-- TDD coverage at adapter, service, IPC/preload, renderer, and boundary levels.
+- TDD coverage at repository, adapter, service, IPC/preload, renderer, migration, and boundary levels.
 
 ### Excluded
 
@@ -40,6 +43,7 @@ This work must preserve Jose's current Circle API behind the Electron main-proce
 - Directly adding placeholder family members.
 - Relationship editing.
 - Node-position editing.
+- Detailed Members or Invitations management screens.
 - New `/v2` backend work.
 
 These remain later management/tree slices.
@@ -85,6 +89,8 @@ React: My Circles / Create / Invite
 The renderer may submit only business input:
 
 ```ts
+selectCircle({ circleId: '<circle-id>' })
+
 createCircle({ name: 'Kasule Family' })
 
 inviteMember({
@@ -105,6 +111,66 @@ The renderer must not supply or receive:
 - temporary password
 
 All legacy identity/header/path shaping stays in `LegacyCircleAuthAdapter`.
+
+## Active Circle Semantics
+
+Which Circle the viewer is currently looking at is **viewer state**, not shared family state. It belongs locally on that desktop user record.
+
+Add a nullable local `active_circle_id` field through the existing copy-safe migration system and expose it internally as `activeCircleId` on the user record.
+
+Rules:
+
+1. `CircleService.getOverview()` prefers the persisted `activeCircleId` only if the current shared membership list still contains that Circle.
+2. If the persisted selection is absent or stale, fall back to the invited onboarding Circle when valid, otherwise the first available Circle.
+3. `selectCircle({ circleId })` re-derives the signed-in user, loads the user's real shared Circle memberships, validates that `circleId` belongs to that user, then persists `active_circle_id` locally.
+4. `selectCircle` is not a shared-data mutation and does not call a legacy write endpoint.
+5. After successful selection, invalidate the renderer's Circle overview cache and navigate to Home. Home and the top bar then reflect the newly selected Circle through the existing overview path.
+6. A newly created Circle becomes the local active Circle immediately after the server confirms creation.
+7. No Circle selection supplied by React is trusted until main-process membership validation succeeds.
+
+This also gives Open Circle precise behavior without adding Family Tree or Members management to this slice.
+
+## Multi-Circle Read Semantics
+
+The current overview loads a tree for only one active Circle, so it cannot supply truthful member counts for other Circles. This slice must add a protected main-process My Circles read rather than deriving every card from the active tree.
+
+Conceptually:
+
+```text
+getMyCircles()
+    |
+    v
+restore protected session
+    |
+    v
+resolve persisted serverUserId
+    |
+    v
+GET /api/me/{id}/groups
+    |
+    v
+for each accessible Circle, GET its tree in parallel
+    |
+    v
+return safe Circle summaries with real user-member counts
+```
+
+The number of Circles per family user is expected to be small, so parallel tree reads are acceptable for this compatibility slice. If scale later requires it, `/v2` can expose member counts directly without changing the renderer contract.
+
+A public Circle summary contains only fields needed by the UI, for example:
+
+```ts
+{
+  id: string
+  name: string
+  role: string
+  memberCount: number
+  isActive: boolean
+  canInvite: boolean
+}
+```
+
+`canInvite` derives from shared ownership semantics in main-process normalized data; it is not inferred from a family-role dropdown value.
 
 ## Identity Bootstrap
 
@@ -140,6 +206,7 @@ Rules:
 3. If identity bootstrap succeeds but Circle creation fails, keep the valid persisted `server_user_id`; retrying Circle creation must reuse it.
 4. If shared identity cannot be established, Circle creation fails without mutating Circle state.
 5. The renderer receives a stable business error, not raw backend internals.
+6. Shared identity persistence uses a narrow user-repository method and does not change local password, session version, onboarding flags, or profile fields.
 
 ## My Circles UX
 
@@ -169,10 +236,10 @@ My Circles                                  + Create Circle
 
 Rules:
 
-- Member counts come from real normalized Circle/tree data.
+- Member counts come from each Circle's real normalized tree data.
 - Circle owner is a permission state, not an invitation role.
 - Only Circle owners see Invite.
-- Open Circle navigates into the selected Circle's view context; this slice does not add management mutations there.
+- Open Circle validates membership in main, persists that Circle as the viewer's local active Circle, then navigates to Home.
 - The page must not fabricate counts or pending state.
 
 ### No Circles
@@ -209,13 +276,13 @@ Validation and behavior:
 - duplicate submissions disabled while in flight;
 - backend remains authoritative—no optimistic fabricated Circle;
 - inline error does not erase the entered name;
-- success closes the dialog, invalidates Circle caches, refreshes authoritative data, and makes the new Circle visible to My Circles, Home, and shell state.
+- success persists the new Circle as the viewer's local active Circle, closes the dialog, invalidates Circle caches, refreshes authoritative data, and makes Home/top bar render the new Circle.
 
 Jose's existing backend creates the Circle and inserts the creator as a Circle member with owner semantics.
 
 ## Invite Member UX
 
-Owners may invite from their Circle card or selected Circle context.
+Owners may invite from their Circle card.
 
 ```text
 Invite to Kasule Family
@@ -283,18 +350,27 @@ Responsible for:
 - restoring the protected local session;
 - resolving the local user record;
 - deriving the persisted shared identity;
+- listing truthful summaries for all accessible Circles;
+- validating and persisting local active-Circle selection;
 - bootstrapping and persisting a shared identity when required;
 - ensuring mutation authorization comes from protected state;
 - validating allowed invitation roles;
 - invoking the legacy adapter;
-- invalidating any cached Circle overview after successful writes;
+- invalidating/refreshing Circle data after successful writes;
 - returning safe desktop DTOs.
 
 The renderer must never be able to impersonate another shared user through mutation input.
 
-### User repository
+### User repository and migration
 
-The existing repository needs a narrow operation to persist a resolved `server_user_id` for the authenticated local user without altering unrelated local profile/authentication state.
+Use the existing copy-safe migration path to add nullable `active_circle_id` without disturbing unrelated legacy/local tables.
+
+The repository needs narrow operations to:
+
+- persist a resolved `server_user_id` for the authenticated local user;
+- persist/clear the local `active_circle_id` viewer preference.
+
+Neither operation may alter unrelated local profile/authentication state.
 
 ## IPC / Preload Contract
 
@@ -302,6 +378,7 @@ Add narrow public desktop operations analogous to:
 
 ```ts
 circle.getMyCircles()
+circle.selectCircle({ circleId })
 circle.createCircle({ name })
 circle.inviteMember({ circleId, email, role })
 ```
@@ -316,7 +393,22 @@ Names may be adjusted to match existing conventions, but the contract must prese
 
 ## Refresh and Cache Semantics
 
-The shared service is authoritative.
+The shared service is authoritative for shared state. Local active-Circle selection is authoritative only for the viewer preference.
+
+### Select
+
+```text
+validated local Circle selection
+      |
+      v
+persist active_circle_id
+      |
+      v
+invalidate renderer Circle overview
+      |
+      v
+navigate Home and re-read authoritative Circle data
+```
 
 ### Create
 
@@ -324,7 +416,10 @@ The shared service is authoritative.
 successful create
       |
       v
-invalidate cached Circle overview
+persist created Circle as active_circle_id
+      |
+      v
+invalidate cached Circle overview/list
       |
       v
 fetch authoritative overview/list
@@ -339,10 +434,10 @@ refresh My Circles + Home + shell
 successful invite / already-pending retry
       |
       v
-invalidate relevant Circle overview
+invalidate relevant Circle overview/list cache
       |
       v
-fetch authoritative selected Circle data
+fetch authoritative Circle data as needed
 ```
 
 No optimistic mutation should invent successful remote state before the server confirms it.
@@ -352,6 +447,10 @@ No optimistic mutation should invent successful remote state before the server c
 Public errors must be stable and useful while avoiding raw backend leakage.
 
 Examples:
+
+### Open Circle
+
+- That Circle is no longer available to your account.
 
 ### Create Circle
 
@@ -371,18 +470,29 @@ Unexpected backend/network failures should use a generic safe failure message wh
 
 ## Security and Privacy Invariants
 
-1. Every mutation starts from a valid protected desktop session.
+1. Every shared mutation starts from a valid protected desktop session.
 2. The main process re-derives the acting local/shared user on every mutation.
 3. React cannot supply `fromUserId` or `serverUserId`.
-4. `CIRCLE_API_KEY` and `X-Kin-Keepers-Key` remain main-process only.
-5. Legacy endpoint literals remain quarantined to `LegacyCircleAuthAdapter`.
-6. Temporary passwords and invitation tokens never cross the desktop API.
-7. Ownership authorization comes from shared Circle state, not from a role selected in React.
-8. Invitation roles are validated against the fixed allow-list in the main process, not only in the UI.
-9. Shared identity bootstrap never changes the user's local password/session semantics.
-10. Existing local/private data boundaries remain unchanged.
+4. A renderer-supplied `circleId` is validated against the signed-in user's real shared memberships before local selection or owner-only mutation use.
+5. `CIRCLE_API_KEY` and `X-Kin-Keepers-Key` remain main-process only.
+6. Legacy endpoint literals remain quarantined to `LegacyCircleAuthAdapter`.
+7. Temporary passwords and invitation tokens never cross the desktop API.
+8. Ownership authorization comes from shared Circle state, not from a role selected in React.
+9. Invitation roles are validated against the fixed allow-list in the main process, not only in the UI.
+10. Shared identity bootstrap never changes the user's local password/session semantics.
+11. `active_circle_id` is a local viewer preference only and does not alter shared ownership/membership.
+12. Existing local/private data boundaries remain unchanged.
 
 ## Testing Strategy
+
+### Migration and user repository
+
+Tests cover:
+
+- copy-safe migration adds nullable `active_circle_id` to existing users;
+- unrelated legacy tables/data remain untouched;
+- shared identity persistence changes only `server_user_id`;
+- active Circle persistence changes only `active_circle_id`.
 
 ### Legacy adapter
 
@@ -399,21 +509,27 @@ Tests cover:
 
 Tests cover:
 
-- no protected session -> mutation rejected;
+- no protected session -> mutation/selection rejected;
+- truthful summaries load a real member count per Circle;
+- existing valid active Circle is preferred by overview;
+- stale active Circle falls back safely;
+- select Circle validates membership before persisting;
 - renderer mutation inputs contain no acting identity;
 - existing `server_user_id` is reused;
 - missing identity -> register once -> persist ID -> create Circle;
 - successful identity bootstrap followed by failed Circle creation retains the valid shared ID;
-- create success invalidates cached overview;
+- create success persists the created Circle as active and invalidates cached data;
 - fixed invitation roles accepted;
 - unknown role rejected in main process;
 - non-owner invite is rejected/normalized;
-- invite success invalidates relevant cached overview.
+- invite success invalidates relevant cached data.
 
 ### IPC / preload
 
 Tests cover:
 
+- get My Circles channel/capability;
+- select Circle channel/capability;
 - create Circle channel/capability;
 - invite Member channel/capability;
 - only approved business fields cross IPC;
@@ -425,7 +541,9 @@ Tests cover:
 
 - no-Circle empty state;
 - real Circle list;
-- member counts;
+- accurate per-Circle member counts;
+- active Circle state;
+- Open Circle selection + Home navigation;
 - owner sees Invite;
 - non-owner does not see Invite;
 - Create Circle validation;
@@ -437,7 +555,7 @@ Tests cover:
 - already pending;
 - already member;
 - email delivery failed;
-- refresh behavior after successful mutations.
+- refresh behavior after successful mutations/selections.
 
 ### Boundary verifier
 
