@@ -26,6 +26,7 @@ function createFreshUsersTable(db: DatabaseSync): void {
       password_hash TEXT NOT NULL,
       name TEXT,
       server_user_id TEXT,
+      active_circle_id TEXT,
       session_version INTEGER NOT NULL DEFAULT 0,
       must_change_password INTEGER NOT NULL DEFAULT 0,
       onboarding_completed INTEGER NOT NULL DEFAULT 0,
@@ -53,6 +54,7 @@ function migrateExistingUsersTable(db: DatabaseSync): void {
 
   addColumnIfMissing(db, 'users', columns, 'name TEXT')
   addColumnIfMissing(db, 'users', columns, 'server_user_id TEXT')
+  addColumnIfMissing(db, 'users', columns, 'active_circle_id TEXT')
   addColumnIfMissing(db, 'users', columns, 'session_version INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing(db, 'users', columns, 'must_change_password INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing(db, 'users', columns, 'onboarding_completed INTEGER NOT NULL DEFAULT 1')
