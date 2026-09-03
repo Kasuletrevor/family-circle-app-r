@@ -6,7 +6,7 @@ import type {
   CircleTreePositionRecord,
 } from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
-import type { ActivityItem, CircleSummary, HomeSnapshot } from './types'
+import type { ActivityItem, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 type GetOverview = () => Promise<CircleOverview>
 
@@ -81,13 +81,15 @@ function mapCircle(circle: CircleGroupRecord, activeCircleId: string, memberCoun
 }
 
 export class DesktopCircleClient implements CircleClient {
+  private overviewInFlight: Promise<CircleOverview> | null = null
+
   constructor(
     private readonly getOverview: GetOverview = defaultOverview,
     private readonly now: () => number = Date.now,
   ) {}
 
   async getHomeSnapshot(): Promise<HomeSnapshot> {
-    const overview = await this.getOverview()
+    const overview = await this.readOverview()
     if (overview.status === 'empty') {
       return { state: 'empty', reason: overview.reason }
     }
@@ -140,7 +142,7 @@ export class DesktopCircleClient implements CircleClient {
   }
 
   async getMyCircles(): Promise<CircleSummary[]> {
-    const overview = await this.getOverview()
+    const overview = await this.readOverview()
     if (overview.status === 'empty') return []
     const memberCount = overview.tree.people.filter((person) => person.kind === 'user').length
     return overview.circles.map((circle) => mapCircle(
@@ -148,5 +150,37 @@ export class DesktopCircleClient implements CircleClient {
       overview.activeCircleId,
       circle.id === overview.activeCircleId ? memberCount : null,
     ))
+  }
+
+  async getShellSnapshot(): Promise<ShellSnapshot> {
+    const overview = await this.readOverview()
+    if (overview.status === 'empty') {
+      return {
+        activeCircleName: null,
+        unreadNotifications: overview.notifications.filter((notification) => !notification.read).length,
+      }
+    }
+
+    const activeCircle = overview.circles.find((circle) => circle.id === overview.activeCircleId)
+    return {
+      activeCircleName: activeCircle?.name ?? overview.tree.group.name ?? null,
+      unreadNotifications: overview.notifications.filter((notification) => !notification.read).length,
+    }
+  }
+
+  private readOverview(): Promise<CircleOverview> {
+    if (this.overviewInFlight) return this.overviewInFlight
+
+    const request = this.getOverview()
+    this.overviewInFlight = request
+    void request.then(
+      () => {
+        if (this.overviewInFlight === request) this.overviewInFlight = null
+      },
+      () => {
+        if (this.overviewInFlight === request) this.overviewInFlight = null
+      },
+    )
+    return request
   }
 }
