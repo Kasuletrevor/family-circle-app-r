@@ -44,6 +44,70 @@ export interface CircleContext {
   groups: Array<{ id: string; name: string; role: string }>
 }
 
+export interface CircleGroupRecord {
+  id: string
+  name: string
+  ownerId: string
+  role: string
+}
+
+export interface CircleTreePersonRecord {
+  id: string
+  kind: 'user' | 'placeholder' | 'invite'
+  userId: string | null
+  name: string
+  email: string | null
+  role: string
+}
+
+export interface CircleTreeRelationRecord {
+  id: string
+  kind: string
+  aPersonId: string
+  bPersonId: string
+}
+
+export interface CircleTreePositionRecord {
+  personId: string
+  x: number
+  y: number
+}
+
+export interface CircleTreeRecord {
+  group: { id: string; name: string; ownerId: string }
+  people: CircleTreePersonRecord[]
+  relations: CircleTreeRelationRecord[]
+  positions: CircleTreePositionRecord[]
+}
+
+export interface CircleNotificationRecord {
+  id: string
+  type: string
+  title: string
+  message: string
+  groupId: string | null
+  groupName: string | null
+  createdAt: number | null
+  read: boolean
+}
+
+export type CircleOverview =
+  | {
+      status: 'empty'
+      reason: 'not-linked' | 'no-circles'
+      circles: CircleGroupRecord[]
+      activeCircleId: null
+      tree: null
+      notifications: CircleNotificationRecord[]
+    }
+  | {
+      status: 'ready'
+      circles: CircleGroupRecord[]
+      activeCircleId: string
+      tree: CircleTreeRecord
+      notifications: CircleNotificationRecord[]
+    }
+
 export interface DesktopApi {
   app: {
     getVersion(): Promise<string>
@@ -64,5 +128,8 @@ export interface DesktopApi {
     updateProfile(name: string): Promise<AuthState>
     getCircleContext(): Promise<CircleContext>
     complete(nextAction: OnboardingNextAction): Promise<AuthState>
+  }
+  circle: {
+    getOverview(): Promise<CircleOverview>
   }
 }
