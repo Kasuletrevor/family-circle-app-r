@@ -9,6 +9,7 @@ import { MemberDetailsPanel } from './MemberDetailsPanel'
 import { MetricCard } from './MetricCard'
 import { UpcomingList } from './UpcomingList'
 import './Home.css'
+import './HomeEmpty.css'
 
 type HomeLoadState = 'loading' | 'ready' | 'error'
 
