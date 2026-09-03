@@ -9,10 +9,11 @@ function jsonResponse(value: unknown, status = 200): Response {
 }
 
 describe('LegacyCircleAuthAdapter read model', () => {
-  it('normalizes group ownership and infers the owner role when Jose omits role', async () => {
+  it('normalizes group ownership and keeps Circle owner authoritative over descriptive roles', async () => {
     const fetcher = vi.fn(async () => jsonResponse({
       groups: [
         { id: 'g-owner', name: 'Owner Family', ownerId: 88 },
+        { id: 'g-owner-role', name: 'Owner With Role', ownerId: 88, role: 'Sibling' },
         { id: 'g-member', name: 'Member Family', ownerId: 1 },
         { id: 'g-role', name: 'Historian Family', ownerId: 1, role: 'Family historian' },
       ],
@@ -21,6 +22,7 @@ describe('LegacyCircleAuthAdapter read model', () => {
 
     await expect(adapter.listGroups('88')).resolves.toEqual([
       { id: 'g-owner', name: 'Owner Family', ownerId: '88', role: 'Circle owner' },
+      { id: 'g-owner-role', name: 'Owner With Role', ownerId: '88', role: 'Circle owner' },
       { id: 'g-member', name: 'Member Family', ownerId: '1', role: 'Family member' },
       { id: 'g-role', name: 'Historian Family', ownerId: '1', role: 'Family historian' },
     ])

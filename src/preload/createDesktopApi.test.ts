@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDesktopApi } from './createDesktopApi'
 
 describe('createDesktopApi', () => {
-  it('exposes only approved application, auth, onboarding, and read-only Circle capabilities', async () => {
+  it('exposes only approved application, auth, onboarding, and protected Circle capabilities', async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'app:get-version') return '0.1.0'
       if (channel === 'app:get-platform') return 'win32'
@@ -18,9 +18,14 @@ describe('createDesktopApi', () => {
         reason: 'no-circles',
         circles: [],
         activeCircleId: null,
+        viewerPersonId: null,
         tree: null,
         notifications: [],
       }
+      if (channel === 'circle:get-my-circles') return []
+      if (channel === 'circle:select') return { success: true }
+      if (channel === 'circle:create') return { circleId: 'g-2' }
+      if (channel === 'circle:invite-member') return { outcome: 'sent' }
       return { status: 'unauthenticated' }
     })
     const api = createDesktopApi(invoke)
@@ -43,7 +48,13 @@ describe('createDesktopApi', () => {
       'getCircleContext',
       'complete',
     ])
-    expect(Object.keys(api.circle)).toEqual(['getOverview'])
+    expect(Object.keys(api.circle)).toEqual([
+      'getOverview',
+      'getMyCircles',
+      'selectCircle',
+      'createCircle',
+      'inviteMember',
+    ])
 
     const serialized = JSON.stringify(api).toLowerCase()
     expect(serialized).not.toContain('api_key')
@@ -51,6 +62,7 @@ describe('createDesktopApi', () => {
     expect(serialized).not.toContain('decodetoken')
     expect(serialized).not.toContain('rawfetch')
     expect(serialized).not.toContain('serveruserid')
+    expect(serialized).not.toContain('fromuserid')
 
     await expect(api.app.getVersion()).resolves.toBe('0.1.0')
     await expect(api.app.getPlatform()).resolves.toBe('win32')
@@ -60,7 +72,24 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('auth:sign-in', { email: 'a@example.com', password: '123456789012' })
     await api.onboarding.complete('home')
     expect(invoke).toHaveBeenCalledWith('onboarding:complete', 'home')
+
     await api.circle.getOverview()
     expect(invoke).toHaveBeenCalledWith('circle:get-overview')
+    await api.circle.getMyCircles()
+    expect(invoke).toHaveBeenCalledWith('circle:get-my-circles')
+    await api.circle.selectCircle('g-1')
+    expect(invoke).toHaveBeenCalledWith('circle:select', 'g-1')
+    await api.circle.createCircle({ name: 'Kasule Family' })
+    expect(invoke).toHaveBeenCalledWith('circle:create', { name: 'Kasule Family' })
+    await api.circle.inviteMember({
+      circleId: 'g-1',
+      email: 'relative@example.test',
+      role: 'Sibling',
+    })
+    expect(invoke).toHaveBeenCalledWith('circle:invite-member', {
+      circleId: 'g-1',
+      email: 'relative@example.test',
+      role: 'Sibling',
+    })
   })
 })

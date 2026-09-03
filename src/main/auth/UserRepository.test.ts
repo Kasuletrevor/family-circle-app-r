@@ -67,9 +67,29 @@ describe('UserRepository', () => {
     expect(user).toMatchObject({ accountOrigin: 'invited', mustChangePassword: true, onboardingCompleted: false })
     expect(record).toMatchObject({
       serverUserId: '42',
+      activeCircleId: null,
       sessionVersion: 0,
       invitation: { groupId: 'g-1', groupName: 'Kasule Family', role: 'Family member' },
     })
+  })
+
+  it('persists the resolved shared identity and local active Circle independently', async () => {
+    const { repository } = freshRepository()
+    const user = await repository.createRegisteredUser({
+      name: 'Trevor Kasule',
+      email: 'trevor@example.com',
+      password: 'correct horse battery staple',
+    })
+
+    await repository.setServerUserId(user.id, '88')
+    await repository.setActiveCircleId(user.id, 'circle-a')
+
+    const record = await repository.getRecordById(user.id)
+    expect(record?.serverUserId).toBe('88')
+    expect(record?.activeCircleId).toBe('circle-a')
+
+    await repository.setActiveCircleId(user.id, null)
+    await expect(repository.getRecordById(user.id)).resolves.toMatchObject({ activeCircleId: null })
   })
 
   it('updates profile and replaces the initial password while rotating sessionVersion', async () => {

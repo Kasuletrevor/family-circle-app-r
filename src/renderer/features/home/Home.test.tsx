@@ -53,13 +53,12 @@ describe('Home', () => {
       status: 'ready',
       activeCircleId: 'g-1',
       viewerPersonId: 'user:88',
-      circles: [{ id: 'g-1', name: 'Test Family', ownerId: '1', role: 'Family member' }],
+      circles: [{ id: 'g-1', name: 'Test Family', role: 'Family member' }],
       tree: {
-        group: { id: 'g-1', name: 'Test Family', ownerId: '1' },
+        group: { id: 'g-1', name: 'Test Family' },
         people: [{
           id: 'user:88',
           kind: 'user',
-          userId: '88',
           name: 'Member Example',
           email: 'member@example.test',
           role: 'Family member',
@@ -102,6 +101,9 @@ describe('Home', () => {
       getHomeSnapshot,
       getMyCircles: vi.fn(async () => [snapshot.activeCircle]),
       getShellSnapshot: vi.fn(async () => ({ activeCircleName: snapshot.activeCircle.name, unreadNotifications: 0 })),
+      selectCircle: vi.fn(async () => undefined),
+      createCircle: vi.fn(async () => ({ circleId: snapshot.activeCircle.id })),
+      inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
     })
 
     expect(await screen.findByText('We could not load your family overview.')).toBeInTheDocument()

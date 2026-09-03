@@ -1,9 +1,14 @@
 import type {
   AuthState,
   CircleContext,
+  CircleListItem,
   CircleOverview,
+  CreateCircleInput,
+  CreateCircleResult,
   DesktopApi,
   InvitationCheckResult,
+  InviteMemberInput,
+  InviteMemberResult,
   OnboardingNextAction,
   RegisterInput,
   ResetPasswordInput,
@@ -26,6 +31,10 @@ type DesktopChannel =
   | 'onboarding:get-circle-context'
   | 'onboarding:complete'
   | 'circle:get-overview'
+  | 'circle:get-my-circles'
+  | 'circle:select'
+  | 'circle:create'
+  | 'circle:invite-member'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 
@@ -86,6 +95,18 @@ export function createDesktopApi(invoke: Invoke): DesktopApi {
     circle: {
       getOverview() {
         return invoke('circle:get-overview') as Promise<CircleOverview>
+      },
+      getMyCircles() {
+        return invoke('circle:get-my-circles') as Promise<CircleListItem[]>
+      },
+      selectCircle(circleId: string) {
+        return invoke('circle:select', circleId) as Promise<{ success: true }>
+      },
+      createCircle(input: CreateCircleInput) {
+        return invoke('circle:create', input) as Promise<CreateCircleResult>
+      },
+      inviteMember(input: InviteMemberInput) {
+        return invoke('circle:invite-member', input) as Promise<InviteMemberResult>
       },
     },
   }

@@ -1,0 +1,233 @@
+.my-circles {
+  display: flex;
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.my-circles__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.my-circles__header h1,
+.my-circles__state h2,
+.my-circles__card h2 {
+  margin: 0;
+  color: var(--kk-navy);
+}
+
+.my-circles__header h1 {
+  margin-top: 4px;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.my-circles__header p,
+.my-circles__state p,
+.my-circles__card p {
+  margin: 0;
+  color: var(--kk-text);
+}
+
+.my-circles__header > div > p:last-child {
+  max-width: 620px;
+  margin-top: 8px;
+  line-height: 1.55;
+}
+
+.my-circles__eyebrow {
+  color: var(--kk-teal-dark) !important;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.my-circles__primary,
+.my-circles__secondary,
+.my-circles__link-action {
+  min-height: 40px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.my-circles__primary {
+  padding: 0 17px;
+  border: 1px solid var(--kk-teal);
+  color: white;
+  background: var(--kk-teal);
+}
+
+.my-circles__primary:hover {
+  background: var(--kk-teal-dark);
+}
+
+.my-circles__secondary {
+  padding: 0 15px;
+  border: 1px solid var(--kk-border);
+  color: var(--kk-navy);
+  background: white;
+}
+
+.my-circles__secondary:hover:not(:disabled) {
+  border-color: var(--kk-teal);
+  background: var(--kk-mint);
+}
+
+.my-circles__secondary:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.my-circles__link-action {
+  padding: 0 10px;
+  border: 0;
+  color: var(--kk-teal-dark);
+  background: transparent;
+}
+
+.my-circles__link-action:hover {
+  background: var(--kk-mint);
+}
+
+.my-circles__primary:focus-visible,
+.my-circles__secondary:focus-visible,
+.my-circles__link-action:focus-visible {
+  outline: 0;
+  box-shadow: var(--kk-focus);
+}
+
+.my-circles__notice {
+  padding: 12px 14px;
+  border: 1px solid var(--kk-border);
+  border-radius: 10px;
+  color: var(--kk-navy);
+  background: var(--kk-cool-tint);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.my-circles__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.my-circles__card {
+  display: flex;
+  min-height: 230px;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--kk-border);
+  border-radius: 16px;
+  background: white;
+}
+
+.my-circles__card--active {
+  border-color: var(--kk-teal);
+}
+
+.my-circles__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.my-circles__circle-mark,
+.my-circles__empty-mark {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--kk-teal);
+  color: var(--kk-teal-dark);
+  background: var(--kk-mint);
+  font-family: Georgia, serif;
+  font-weight: 800;
+}
+
+.my-circles__circle-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+}
+
+.my-circles__active-label {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--kk-teal-dark);
+  background: var(--kk-mint);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.my-circles__card-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px 0;
+}
+
+.my-circles__card h2 {
+  font-size: 20px;
+}
+
+.my-circles__role {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.my-circles__members {
+  margin-top: 5px !important;
+  font-size: 13px;
+}
+
+.my-circles__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.my-circles__state {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 36px;
+  border: 1px solid var(--kk-border);
+  border-radius: 16px;
+  text-align: center;
+  background: white;
+}
+
+.my-circles__state h2 {
+  font-size: 21px;
+}
+
+.my-circles__state p {
+  max-width: 470px;
+  line-height: 1.6;
+}
+
+.my-circles__empty-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  font-size: 20px;
+}
+
+@media (max-width: 900px) {
+  .my-circles__header {
+    flex-direction: column;
+  }
+}

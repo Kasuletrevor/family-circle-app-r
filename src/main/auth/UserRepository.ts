@@ -10,6 +10,7 @@ interface UserRow {
   password_hash: string
   name: string | null
   server_user_id: string | null
+  active_circle_id: string | null
   session_version: number
   must_change_password: number
   onboarding_completed: number
@@ -23,6 +24,7 @@ export interface UserRecord {
   user: AuthUser
   passwordHash: string
   serverUserId: string | null
+  activeCircleId: string | null
   sessionVersion: number
   invitation: null | { groupId: string; groupName: string; role: string }
 }
@@ -52,6 +54,7 @@ function shapeRecord(row: UserRow | undefined): UserRecord | null {
     user: shapeUser(row),
     passwordHash: String(row.password_hash),
     serverUserId: row.server_user_id ?? null,
+    activeCircleId: row.active_circle_id ?? null,
     sessionVersion: Number(row.session_version || 0),
     invitation: row.invitation_group_id
       ? {
@@ -68,7 +71,7 @@ export class UserRepository {
 
   async getRecordByEmail(email: string): Promise<UserRecord | null> {
     const row = this.db.prepare(`
-      SELECT id, email, password_hash, name, server_user_id, session_version,
+      SELECT id, email, password_hash, name, server_user_id, active_circle_id, session_version,
              must_change_password, onboarding_completed, account_origin,
              invitation_group_id, invitation_group_name, invitation_role
         FROM users
@@ -79,7 +82,7 @@ export class UserRepository {
 
   async getRecordById(id: number): Promise<UserRecord | null> {
     const row = this.db.prepare(`
-      SELECT id, email, password_hash, name, server_user_id, session_version,
+      SELECT id, email, password_hash, name, server_user_id, active_circle_id, session_version,
              must_change_password, onboarding_completed, account_origin,
              invitation_group_id, invitation_group_name, invitation_role
         FROM users
@@ -158,6 +161,23 @@ export class UserRepository {
     const record = await this.getRecordById(id)
     if (!record) throw new Error('Failed to read the invited account')
     return record.user
+  }
+
+  async setServerUserId(userId: number, serverUserId: string): Promise<void> {
+    const value = String(serverUserId).trim()
+    if (!value) throw new Error('Shared user ID is required')
+    const result = this.db.prepare(
+      'UPDATE users SET server_user_id = ?, updated_at = ? WHERE id = ?',
+    ).run(value, Date.now(), userId)
+    if (Number(result.changes) !== 1) throw new Error('User not found')
+  }
+
+  async setActiveCircleId(userId: number, circleId: string | null): Promise<void> {
+    const value = circleId == null ? null : String(circleId).trim() || null
+    const result = this.db.prepare(
+      'UPDATE users SET active_circle_id = ?, updated_at = ? WHERE id = ?',
+    ).run(value, Date.now(), userId)
+    if (Number(result.changes) !== 1) throw new Error('User not found')
   }
 
   async verifyPassword(userId: number, password: string): Promise<boolean> {
