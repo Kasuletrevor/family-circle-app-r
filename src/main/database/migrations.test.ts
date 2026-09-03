@@ -31,6 +31,7 @@ describe('auth database migrations', () => {
       'password_hash',
       'name',
       'server_user_id',
+      'active_circle_id',
       'session_version',
       'must_change_password',
       'onboarding_completed',
@@ -63,6 +64,16 @@ describe('auth database migrations', () => {
       must_change_password: 0,
       session_version: 0,
     })
+    db.close()
+  })
+
+  it('adds active_circle_id to legacy users without losing existing data', () => {
+    const db = createLegacyDatabase()
+    runMigrations(db)
+
+    const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>
+    expect(columns.map((column) => column.name)).toContain('active_circle_id')
+    expect(db.prepare('SELECT email FROM users WHERE id = 1').get()).toEqual({ email: 'legacy@example.com' })
     db.close()
   })
 
