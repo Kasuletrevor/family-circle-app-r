@@ -43,6 +43,7 @@ function emptyOverview(
     reason,
     circles: [],
     activeCircleId: null,
+    viewerPersonId: null,
     tree: null,
     notifications,
   }
@@ -75,11 +76,13 @@ export class CircleService {
     const invitedCircleId = String(record.invitation?.groupId ?? '')
     const activeCircle = circles.find((circle) => circle.id === invitedCircleId) ?? circles[0]
     const tree = await this.circle.getTree(activeCircle.id, serverUserId)
+    const viewerPersonId = tree.people.find((person) => person.userId === serverUserId)?.id ?? null
 
     return {
       status: 'ready',
       circles,
       activeCircleId: activeCircle.id,
+      viewerPersonId,
       tree,
       notifications,
     }
