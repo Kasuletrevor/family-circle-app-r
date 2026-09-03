@@ -60,14 +60,12 @@ export interface CircleContext {
 export interface CircleGroupRecord {
   id: string
   name: string
-  ownerId: string
   role: string
 }
 
 export interface CircleTreePersonRecord {
   id: string
   kind: 'user' | 'placeholder' | 'invite'
-  userId: string | null
   name: string
   email: string | null
   role: string
@@ -87,7 +85,7 @@ export interface CircleTreePositionRecord {
 }
 
 export interface CircleTreeRecord {
-  group: { id: string; name: string; ownerId: string }
+  group: { id: string; name: string }
   people: CircleTreePersonRecord[]
   relations: CircleTreeRelationRecord[]
   positions: CircleTreePositionRecord[]
