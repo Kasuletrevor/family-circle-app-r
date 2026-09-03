@@ -193,8 +193,8 @@ export class LegacyCircleAuthAdapter {
     })
 
     if (data.alreadyMember) return { outcome: 'already-member' }
-    if (data.alreadyPending) return { outcome: 'already-pending' }
     if (data.emailSent === false) return { outcome: 'delivery-failed' }
+    if (data.alreadyPending) return { outcome: 'already-pending' }
     return { outcome: 'sent' }
   }
 
