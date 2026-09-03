@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAppServices } from '../../app/services'
 import type { CircleSummary } from '../../services/circle/types'
 import { CreateCircleDialog } from './CreateCircleDialog'
+import { InviteMemberDialog } from './InviteMemberDialog'
 import './MyCircles.css'
 
 type LoadState =
@@ -23,6 +24,7 @@ export function MyCircles() {
   const [openingCircleId, setOpeningCircleId] = useState<string | null>(null)
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [inviteCircle, setInviteCircle] = useState<CircleSummary | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -124,7 +126,12 @@ export function MyCircles() {
                       {isOpening ? 'Opening…' : 'Open Circle'}
                     </button>
                     {canInvite ? (
-                      <button className="my-circles__link-action" type="button" aria-label={`Invite to ${item.name}`}>
+                      <button
+                        className="my-circles__link-action"
+                        type="button"
+                        aria-label={`Invite to ${item.name}`}
+                        onClick={() => setInviteCircle(item)}
+                      >
                         Invite
                       </button>
                     ) : null}
@@ -141,6 +148,16 @@ export function MyCircles() {
         onClose={() => setCreateOpen(false)}
         onCreated={() => {
           setSelectionError(null)
+          setReloadVersion((value) => value + 1)
+        }}
+      />
+
+      <InviteMemberDialog
+        open={inviteCircle !== null}
+        circleId={inviteCircle?.id ?? ''}
+        circleName={inviteCircle?.name ?? ''}
+        onClose={() => setInviteCircle(null)}
+        onInvited={() => {
           setReloadVersion((value) => value + 1)
         }}
       />
