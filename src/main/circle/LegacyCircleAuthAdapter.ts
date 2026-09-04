@@ -274,9 +274,9 @@ export class LegacyCircleAuthAdapter {
             id,
             kind,
             userId: stringOrNull(person.userId ?? person.user_id),
-            invitationId: kind === 'invite'
-              ? stringOrNull(person.invitationId ?? person.invitation_id)
-              : null,
+            ...(kind === 'invite'
+              ? { invitationId: stringOrNull(person.invitationId ?? person.invitation_id) }
+              : {}),
             name: String(person.name ?? person.email ?? 'Family member'),
             email: stringOrNull(person.email),
             role: String(person.role ?? 'Family member'),
