@@ -141,4 +141,40 @@ describe('auth database migrations', () => {
     })
     db.close()
   })
+
+  it('creates persistent Vault chunk/vector storage owned through vault_documents', () => {
+    const db = new DatabaseSync(':memory:')
+    runMigrations(db)
+
+    const columns = db.prepare('PRAGMA table_info(vault_chunks)').all() as Array<{ name: string }>
+    expect(columns.map((column) => column.name)).toEqual([
+      'id',
+      'document_id',
+      'chunk_index',
+      'text',
+      'embedding_blob',
+      'embedding_model',
+      'index_version',
+      'created_at',
+      'updated_at',
+    ])
+    expect(columns.map((column) => column.name)).not.toContain('local_user_id')
+
+    const foreignKeys = db.prepare('PRAGMA foreign_key_list(vault_chunks)').all() as Array<{
+      table: string
+      from: string
+      to: string
+      on_delete: string
+    }>
+    expect(foreignKeys).toContainEqual(expect.objectContaining({
+      table: 'vault_documents',
+      from: 'document_id',
+      to: 'id',
+      on_delete: 'CASCADE',
+    }))
+
+    const indexes = db.prepare('PRAGMA index_list(vault_chunks)').all() as Array<{ name: string }>
+    expect(indexes.map((index) => index.name)).toContain('idx_vault_chunks_document')
+    db.close()
+  })
 })
