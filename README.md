@@ -4,7 +4,7 @@ A clean Electron + React + TypeScript rebuild of the Kin-Keepers Family Circle d
 
 ## Current slice
 
-This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, and the first protected shared-state management slice: **My Circles, Open Circle, Create Circle, and Invite Member**.
+This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, and protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, and Invitations**.
 
 - Electron desktop shell with `contextIsolation: true`, renderer sandboxing, and Node integration disabled.
 - React + TypeScript renderer with routed desktop navigation.
@@ -18,16 +18,20 @@ This branch includes the secure desktop shell, protected authentication and onbo
 - Copy-safe migration of the old local Family Circle database.
 - Real shared Circle Home reads for memberships, family tree state, and notifications through the protected desktop boundary.
 - Real **My Circles** cards with authoritative per-Circle member counts.
-- Membership-validated **Open Circle** with a local `active_circle_id` viewer preference.
+- Membership-validated **Open Circle** and **Manage** actions using a local `active_circle_id` viewer preference.
 - **Create Circle** through Jose's current API, including automatic shared-identity bootstrap when an authenticated local account has not yet been linked.
 - Owner-only **Invite Member** flow with a fixed descriptive family-role list and normalized delivery outcomes.
+- Real active-Circle **Members** and **Invitations** views.
+- Owner-only invitation resend/cancel and non-owner member removal controls, with authorization repeated in `CircleService`.
+- Non-owner **Leave Circle** with safe active-Circle fallback after the server confirms the leave.
+- Confirmation dialogs for destructive remove/cancel/leave operations; destructive rows are never optimistically removed.
 - Intentional no-Circle state for accounts that have no memberships.
 - Authenticated user identity, active Circle, and unread notification count in the shell without hardcoded profile or badge values.
 - Automated renderer/main-process/public-contract boundary checks and dependency audit in CI.
 
 Stories, Memories, and Upcoming items are not presented as fabricated real data. Those values remain absent until their actual source slices are migrated.
 
-This slice intentionally does **not** add Circle rename/delete, member removal, leaving a Circle, invitation cancellation, or relationship/tree mutations. Those remain later slices.
+This slice intentionally does **not** add Circle rename/delete, ownership transfer, or relationship/tree mutations. Those remain later protected slices.
 
 ## Desktop architecture
 
@@ -49,7 +53,8 @@ main-process services
    └── CircleService
             ├── protected session identity
             ├── local active-Circle preference
-            └── authorization / DTO sanitization
+            ├── authorization / DTO sanitization
+            └── safe person-handle → internal identity resolution
                     ↓
             LegacyCircleAuthAdapter
                     ↓
@@ -59,7 +64,7 @@ main-process services
 For Circle management specifically:
 
 ```text
-React My Circles
+React My Circles / Members / Invitations
       ↓
 DesktopCircleClient
       ↓
@@ -67,9 +72,11 @@ typed preload methods
       ↓
 CircleService
   ├── derives the local account from the protected session
-  ├── resolves/persists server_user_id
+  ├── resolves persisted server_user_id
   ├── validates Circle membership and ownership
   ├── stores active_circle_id locally
+  ├── re-fetches authoritative tree data before management mutations
+  ├── resolves safe personId handles to internal member/invitation identities
   └── removes shared-service identity fields from public DTOs
       ↓
 LegacyCircleAuthAdapter
@@ -77,9 +84,9 @@ LegacyCircleAuthAdapter
 Jose's current Circle API
 ```
 
-`DesktopCircleClient` is the single production renderer adapter for Circle reads and mutations. React feature components do not call Circle URLs directly and do not receive the compatibility API key, shared service identity, invitation token, or temporary password.
+`DesktopCircleClient` is the single production renderer adapter for Circle reads and mutations. React feature components do not call Circle URLs directly and do not receive the compatibility API key, shared service identity, invitation ID/token, or temporary password.
 
-The renderer never receives a password hash, session credential, database handle, Circle API key, raw Circle API URL, raw shared `ownerId`, raw shared `userId`, or `serverUserId`. Auth state is not stored in renderer `localStorage` or `sessionStorage`, and there is no local JWT.
+The renderer never receives a password hash, session credential, database handle, Circle API key, raw Circle API URL, raw shared `ownerId`, raw shared `userId`, `serverUserId`, `targetServerUserId`, or trusted invitation ID. Auth state is not stored in renderer `localStorage` or `sessionStorage`, and there is no local JWT.
 
 Password changes and resets increment `session_version`, invalidating older protected sessions.
 
@@ -95,11 +102,13 @@ The renderer never supplies a trusted caller identity such as `fromUserId` or `s
 
 ## Active Circle preference
 
-The selected Circle is a local viewer preference stored as `active_circle_id` in the desktop user record. It is not shared authorization state.
+The selected Circle is a local viewer preference stored as `active_circle_id` in the desktop user record. It is not shared authorization state and there is no separate “managed Circle” store.
 
 Before `CircleService` persists a requested active Circle, it loads the signed-in user's memberships from the shared service and verifies that the Circle is still accessible. A stale local preference is repaired to a valid membership or cleared when no memberships remain.
 
-Home, shell state, and My Circles are refreshed from authoritative shared state after confirmed mutations; the renderer does not optimistically invent remote success.
+`Open Circle` selects the Circle and opens Home. `Manage` selects the same Circle through the same protected path and opens Members.
+
+Home, shell state, My Circles, and Circle details are refreshed from authoritative shared state after confirmed mutations; the renderer does not optimistically invent remote success.
 
 ## Circle reads and management
 
@@ -108,9 +117,14 @@ The public Circle preload surface is deliberately narrow:
 ```text
 circle.getOverview()
 circle.getMyCircles()
+circle.getCircleDetails()
 circle.selectCircle(circleId)
 circle.createCircle({ name })
 circle.inviteMember({ circleId, email, role })
+circle.resendInvitation({ personId })
+circle.cancelInvitation({ personId })
+circle.removeMember({ personId })
+circle.leaveCircle()
 ```
 
 The IPC layer accepts only those business inputs and reconstructs safe payloads before calling `CircleService`. Extra renderer-supplied identity or secret-shaped fields are ignored.
@@ -153,6 +167,28 @@ delivery-failed
 
 Temporary passwords, invitation tokens, raw API responses, and mail/service details stay behind the main-process adapter.
 
+### Members and Invitations
+
+`getCircleDetails()` reads the active Circle from protected desktop state and returns only safe member/invitation records. Confirmed members and pending invitations use a public `personId` handle; that handle is not a trusted shared-service user or invitation ID.
+
+Before resend, cancel, or member removal, `CircleService` re-fetches the active Circle's authoritative memberships/tree and resolves the public `personId` to the internal identity required by Jose's compatibility API.
+
+Authorization is enforced in main regardless of what the renderer displays:
+
+```text
+View details          current Circle member
+Resend invitation     Circle owner only
+Cancel invitation     Circle owner only
+Remove member         Circle owner only; owner target forbidden
+Leave Circle          non-owner member only
+```
+
+Resend reuses Jose's existing invite endpoint for an already-pending invitation. Cancel, member removal, and leave use Jose's existing compatibility endpoints, all quarantined in `LegacyCircleAuthAdapter`.
+
+Remove, cancel, and leave require explicit confirmation. The renderer waits for the server result, then reloads authoritative details rather than removing rows optimistically. After a successful leave, `CircleService` selects another available Circle or clears `active_circle_id`, and the renderer returns to My Circles.
+
+Known authorization/stale-state failures map to stable non-sensitive UI messages; SQL, SMTP, tokens, API details, and internal IDs are not rendered.
+
 ## Real Home flow
 
 ```text
@@ -175,7 +211,7 @@ CircleService
 
 The main process selects the active Circle, identifies the signed-in tree person from the protected shared identity, and returns a normalized safe DTO. The renderer maps that DTO into Home and shell view models.
 
-Simultaneous Home and shell consumers share one in-flight overview request. After Circle selection, creation, or invitation, `DesktopCircleClient` invalidates any prior in-flight overview reference so subsequent reads cannot reuse stale Circle state.
+Simultaneous Home and shell consumers share one in-flight overview request. Circle details have an independent in-flight read. Selection, creation, invitation, and management mutations invalidate relevant Circle reads so subsequent consumers cannot reuse stale state.
 
 `MockCircleClient` remains available only for tests/demo fixtures. It is not the production service default.
 
@@ -303,7 +339,7 @@ npm run build
 npm audit
 ```
 
-The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, and shared-service identity fields in the public Circle contract or production Circle renderer code.
+The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, and shared-service identity/invitation-secret fields in the public Circle contract or production Circle renderer code.
 
 ## Product boundary
 
@@ -311,15 +347,14 @@ Private/local responsibilities stay on the desktop: the copied SQLite database, 
 
 Shared family responsibilities remain server-owned: Circles, memberships, invitations, relationships, shared tree state, notifications, and deliberately shared profile/content data.
 
-This slice adds only the minimum shared writes required for Circle creation and owner invitations. Still excluded:
+This slice includes the minimum protected shared writes for Circle creation, invitation delivery/management, member removal, and leaving a Circle. Still excluded:
 
 - Circle rename
 - Circle delete
-- member removal
-- leaving a Circle
-- invitation cancellation
+- ownership transfer
 - relationship mutations
+- tree placeholder mutations
 - tree/node-position mutations
 - secure `/v2` migration
 
-Those can be added as separate protected slices without widening the renderer trust boundary.
+Those can be added as separate protected slices without widening the renderer trust boundary. Circle settings are the next management slice; Family Tree editing follows after that.
