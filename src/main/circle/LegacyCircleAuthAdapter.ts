@@ -198,6 +198,37 @@ export class LegacyCircleAuthAdapter {
     return { outcome: 'sent' }
   }
 
+  async cancelInvitation(input: {
+    serverUserId: string
+    circleId: string
+    invitationId: string
+  }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/invitation/cancel`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      invitationId: String(input.invitationId ?? '').trim(),
+    })
+    return { success: true }
+  }
+
+  async removeMember(input: {
+    serverUserId: string
+    circleId: string
+    targetServerUserId: string
+  }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/member/remove`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      userId: String(input.targetServerUserId ?? '').trim(),
+    })
+    return { success: true }
+  }
+
+  async leaveCircle(input: { serverUserId: string; circleId: string }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/leave`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+    })
+    return { success: true }
+  }
+
   async getMemberships(serverUserId: string): Promise<Array<{ id: string; name: string; role: string }>> {
     const groups = await this.listGroups(serverUserId)
     return groups.map(({ id, name, role }) => ({ id, name, role }))
@@ -238,10 +269,14 @@ export class LegacyCircleAuthAdapter {
     const people: CircleTreePersonInternal[] = Array.isArray(data.people)
       ? data.people.map((person) => {
           const id = String(person.id ?? '').trim()
+          const kind = normalizePersonKind(person.kind, id)
           return {
             id,
-            kind: normalizePersonKind(person.kind, id),
+            kind,
             userId: stringOrNull(person.userId ?? person.user_id),
+            invitationId: kind === 'invite'
+              ? stringOrNull(person.invitationId ?? person.invitation_id)
+              : null,
             name: String(person.name ?? person.email ?? 'Family member'),
             email: stringOrNull(person.email),
             role: String(person.role ?? 'Family member'),
