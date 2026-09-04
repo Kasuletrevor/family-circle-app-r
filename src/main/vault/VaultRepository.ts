@@ -172,6 +172,26 @@ export class VaultRepository {
     requireSingleChange(result.changes)
   }
 
+  async markIndexing(localUserId: number, documentId: number): Promise<void> {
+    const result = this.db.prepare(`
+      UPDATE vault_documents
+         SET index_status = 'indexing', last_error_code = NULL, updated_at = ?
+       WHERE id = ? AND local_user_id = ?
+         AND extraction_status = 'ready' AND delete_status = 'active'
+    `).run(Date.now(), documentId, localUserId)
+    requireSingleChange(result.changes)
+  }
+
+  async markIndexFailure(localUserId: number, documentId: number, errorCode: string): Promise<void> {
+    const result = this.db.prepare(`
+      UPDATE vault_documents
+         SET index_status = 'failed', last_error_code = ?, updated_at = ?
+       WHERE id = ? AND local_user_id = ?
+         AND extraction_status = 'ready' AND delete_status = 'active'
+    `).run(errorCode, Date.now(), documentId, localUserId)
+    requireSingleChange(result.changes)
+  }
+
   async markDeletePending(localUserId: number, documentId: number): Promise<void> {
     const result = this.db.prepare(`
       UPDATE vault_documents
