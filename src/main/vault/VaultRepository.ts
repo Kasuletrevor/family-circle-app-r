@@ -116,7 +116,7 @@ export class VaultRepository {
         FROM vault_documents
        WHERE local_user_id = ? AND delete_status = 'active'
        ORDER BY uploaded_at DESC, id DESC
-    `).all(localUserId) as VaultDocumentRow[]
+    `).all(localUserId) as unknown as VaultDocumentRow[]
     return rows.map((row) => shapeDocument(row) as VaultDocumentInternal)
   }
 
@@ -126,7 +126,7 @@ export class VaultRepository {
         FROM vault_documents
        WHERE local_user_id = ? AND delete_status = 'pending'
        ORDER BY uploaded_at ASC, id ASC
-    `).all(localUserId) as VaultDocumentRow[]
+    `).all(localUserId) as unknown as VaultDocumentRow[]
     return rows.map((row) => shapeDocument(row) as VaultDocumentInternal)
   }
 
