@@ -9,6 +9,7 @@ on:
       - feature/real-circle-home
       - feature/circles-create-invite
       - feature/circle-members-invitations
+      - feature/vault-private-ai
   pull_request:
     branches:
       - main
