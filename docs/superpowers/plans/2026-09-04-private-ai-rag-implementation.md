@@ -2,62 +2,56 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add user-triggered verified Private AI setup, persistent Nomic indexing and local Granite question answering on top of the already-shipped private Vault without re-uploading documents or re-embedding document chunks on every question.
+**Goal:** Add user-triggered verified Private AI setup, persistent Nomic indexing and local Granite Q&A on top of the shipped private Vault without re-uploading documents or re-embedding document chunks on each question.
 
-**Architecture:** Electron main owns a seven-state Private AI installer, lazy llama.cpp runtime processes, chunk/vector persistence, indexing and grounded retrieval/generation. The existing Vault document rows remain the source of truth; extracted text is chunked and embedded once into SQLite Float32 BLOB vectors. Renderer uses narrow typed `privateAi` and `vault` APIs and receives only setup status, document/index status, answers and safe source excerpts.
+**Architecture:** Electron main owns the seven-state AI installer, lazy llama.cpp processes, chunk/vector persistence, indexing and grounded retrieval/generation. `vault_documents` remains the source of truth; extracted text is deterministically chunked and embedded once into SQLite Float32 BLOBs. React receives only safe status, document/index state, answers and source excerpts.
 
-**Tech Stack:** Electron 44.1.1, TypeScript 7.0.2, Node 24, `node:sqlite`, `node:child_process`, `node:http`/`node:https`, llama.cpp b8772 Windows x64 runtime, IBM Granite 4.0 H Micro Q4_K_M GGUF, Nomic Embed Text v1.5 Q4_K_M GGUF, React 19.2.7, Vitest 4.1.11.
+**Tech Stack:** Electron 44.1.1, TypeScript 7.0.2, Node 24, `node:sqlite`, `node:child_process`, `node:http`/`node:https`, llama.cpp b8772 Windows x64, IBM Granite 4.0 H Micro Q4_K_M, Nomic Embed Text v1.5 Q4_K_M, React 19.2.7, Vitest 4.1.11.
 
 **Spec:** `docs/superpowers/specs/2026-09-04-vault-private-ai-design.md`
 
-**Prerequisite:** `docs/superpowers/plans/2026-09-04-vault-foundation-implementation.md` has been implemented and merged. The repository therefore already has `vault_documents`, `VaultRepository`, protected `VaultService`, real `/vault`, and document rows whose successful extraction has `index_status='waiting_for_ai'`.
+**Prerequisite:** `docs/superpowers/plans/2026-09-04-vault-foundation-implementation.md` is merged and verified on `main`. Start this implementation from a fresh branch named **`feature/private-ai-rag`** created from that updated green `main`.
 
 ## Global Constraints
 
-- Private AI setup is always **user-triggered**; never auto-download ~2 GB of assets at app start.
-- Upload/storage/extraction remain enabled in every Private AI state.
-- Reuse Jose's verified asset identities exactly unless an explicit future upgrade changes the manifest/version and hashes together.
-- Private AI states are exactly: `not_installed`, `downloading`, `paused`, `verifying`, `ready`, `repair_required`, `failed`.
-- Install/download assets only under the Electron application-data directory; never the renderer-visible filesystem.
-- Partial downloads are never considered ready. Verify expected size and SHA-256 before promotion.
-- Indexing uses **Nomic only** and starts its runtime lazily.
-- Q&A uses Nomic for the query embedding and Granite for generation; both start lazily.
-- Document chunks are embedded once and persisted. Asking a question must never re-embed all document chunks.
-- Nomic prefixes are exact: `search_document: ` for stored chunks and `search_query: ` for the user question.
-- Initial persistent retrieval uses SQLite + in-process cosine similarity; no Qdrant/FAISS/LanceDB/vector server.
-- Query scope v1 is only `all` or an explicit set of Vault document IDs.
-- Every selected document ID is revalidated against the protected local user in main.
-- Granite is instructed to answer from retrieved Vault context only. No cloud fallback.
-- Renderer never receives model paths, localhost model URLs, process IDs, embeddings, extracted full text or stored paths.
-- CI tests must fake downloader/runtime/model clients and must not download models or start real llama.cpp.
+- Private AI setup is **user-triggered**; never auto-download ~2 GB on app start.
+- Upload/storage/extraction remain enabled in every AI state.
+- States are exactly `not_installed | downloading | paused | verifying | ready | repair_required | failed`.
+- Required assets are verified by immutable expected size/SHA-256 before promotion.
+- Indexing starts Nomic only; Q&A uses Nomic query embedding + Granite generation.
+- Stored document chunks are embedded once and persisted; query-time re-embedding of all document chunks is forbidden.
+- Prefixes are exact: `search_document: ` and `search_query: `.
+- Retrieval v1 is SQLite + in-process cosine similarity; no Qdrant/FAISS/LanceDB.
+- Scope v1 is `all` or explicit Vault document IDs validated against the protected local user.
+- Granite receives retrieved context only; no cloud fallback.
+- Renderer never receives model paths, endpoints, PIDs, embeddings, full extracted text or stored paths.
+- CI uses fake downloader/runtime/model ports; CI never downloads or starts the real 2+ GB model stack.
 
 ---
 
-### Task 1: Private AI manifest, seven-state asset service and resumable verified setup
+### Task 1: Feature-branch CI and verified Private AI asset service
 
 **Files:**
+- Modify: `.github/workflows/desktop-shell-ci.yml`
 - Create: `config/offline-ai-manifest.json`
 - Create: `src/main/ai/privateAiModels.ts`
-- Create: `src/main/ai/OfflineAiAssetService.ts`
-- Create: `src/main/ai/OfflineAiAssetService.test.ts`
-- Create: `src/main/ai/OfflineAiDownloader.ts`
-- Create: `src/main/ai/OfflineAiDownloader.test.ts`
+- Create: `src/main/ai/OfflineAiAssetService.ts`, `OfflineAiAssetService.test.ts`
+- Create: `src/main/ai/OfflineAiDownloader.ts`, `OfflineAiDownloader.test.ts`
 
-**Interfaces:**
-- Consumes: Electron `userDataPath` injected from main.
-- Produces:
-  - `PrivateAiState`
-  - `PrivateAiStatusInternal`
-  - `PrivateAiProgress`
-  - `OfflineAiAssetService.getStatus()`
-  - `OfflineAiAssetService.startSetup(onProgress)`
-  - `OfflineAiAssetService.pauseSetup()`
-  - `OfflineAiAssetService.repair(onProgress)`
-  - verified installed paths for later runtime startup.
+**Interfaces:** produces seven-state status/progress, `getStatus`, `getInstalledPaths`, `startSetup`, `pauseSetup`, `repair`.
 
-- [ ] **Step 1: Add the exact verified asset manifest**
+- [ ] **Step 1: Enable push CI on the fresh RAG branch**
 
-Create `config/offline-ai-manifest.json` with:
+Add `feature/private-ai-rag` to workflow push branches and commit alone:
+
+```bash
+git add .github/workflows/desktop-shell-ci.yml
+git commit -m "ci: verify Private AI feature branch"
+```
+
+- [ ] **Step 2: Add exact Jose-proven manifest**
+
+Create:
 
 ```json
 {
@@ -97,144 +91,69 @@ Create `config/offline-ai-manifest.json` with:
 }
 ```
 
-Do not rename target files independently of manifest/version/hash changes.
-
-- [ ] **Step 2: Write failing seven-state/status tests**
-
-Create `privateAiModels.ts` with the expected public/internal enums referenced by tests:
+`main.ts` later injects manifest path as:
 
 ```ts
-export type PrivateAiState =
-  | 'not_installed'
-  | 'downloading'
-  | 'paused'
-  | 'verifying'
-  | 'ready'
-  | 'repair_required'
-  | 'failed'
+join(app.getAppPath(), 'config', 'offline-ai-manifest.json')
 ```
 
-Tests must cover:
+so the installer service does not depend on `process.cwd()`.
+
+- [ ] **Step 3: Write asset-state RED tests**
 
 ```ts
-it('reports not_installed when required assets are absent')
-it('reports repair_required when an installed-version marker exists but an asset is missing or invalid')
-it('reports ready only when every required asset and installed version verify')
-it('never treats a .part file as installed')
-it('reports the manifest total download size')
+it('reports not_installed with no assets')
+it('never considers .part ready')
+it('reports repair_required when marker exists but required asset is invalid')
+it('reports ready only after all required assets verify')
+it('reports manifest total bytes')
 ```
 
-Run:
-
-```bash
-npm test -- src/main/ai/OfflineAiAssetService.test.ts
-```
-
-Expected: FAIL because the service does not exist.
-
-- [ ] **Step 3: Implement installed asset resolution and verification**
-
-Root:
+State type:
 
 ```ts
-join(userDataPath, 'offline-ai')
+type PrivateAiState = 'not_installed'|'downloading'|'paused'|'verifying'|'ready'|'repair_required'|'failed'
 ```
 
-Installed marker:
+- [ ] **Step 4: Implement installed asset verification**
+
+Root: `join(userDataPath, 'offline-ai')`; marker: `installed-version.json`. Internal `InstalledAiPaths` contains `llamaDir`, `serverExe`, `graniteModel`, `nomicModel` and never leaves main.
+
+For model files verify exact size + SHA-256. For runtime, verify downloaded ZIP before extraction, then require `llama-server.exe` in the extracted target before writing the marker.
+
+- [ ] **Step 5: Write downloader RED tests**
+
+```ts
+it('resumes .part via Range bytes=<existing>-')
+it('restarts when server ignores resume')
+it('emits aggregate/per-file progress')
+it('pause keeps valid partial bytes')
+it('rejects size mismatch')
+it('rejects SHA mismatch')
+it('promotes only verified files')
+it('extracts runtime only after zip verification')
+```
+
+Inject HTTP/filesystem/process ports; tests stay offline.
+
+- [ ] **Step 6: Implement download/verify/promotion**
+
+Stage under:
 
 ```text
-offline-ai/installed-version.json
+<userData>/offline-ai/.staging/<version>/
 ```
 
-The asset service validates required file/directory presence. For non-extracted files it validates exact `sizeBytes` and SHA-256. For the extracted runtime it validates the downloaded archive before extraction, then verifies `llama-server.exe` exists in the target directory before writing the installed-version marker.
+Use `.part`, Range requests, SHA-256 streaming and atomic marker write. Windows runtime extraction uses main-owned child-process arguments for PowerShell `Expand-Archive`; no renderer string reaches the command.
 
-Expose absolute paths only through an internal return type:
+Public progress contains state/phase/percent/file counts/name/byte metrics/message only—no URLs or paths.
 
-```ts
-export interface InstalledAiPaths {
-  root: string
-  llamaDir: string
-  serverExe: string
-  graniteModel: string
-  nomicModel: string
-}
-```
-
-This type must never be imported into shared/renderer code.
-
-- [ ] **Step 4: Write failing downloader tests for resume/pause/verify/promotion**
-
-Inject HTTP and filesystem ports so tests use byte buffers, not internet.
-
-Cover:
-
-```ts
-it('continues a partial download using Range bytes=<existing>-')
-it('restarts cleanly when the server does not honor resume')
-it('emits aggregate and per-file progress')
-it('pauses without deleting a valid partial file')
-it('rejects a completed file whose size differs')
-it('rejects a completed file whose SHA-256 differs')
-it('promotes only a verified completed file')
-it('extracts the verified runtime archive only after hash verification')
-```
-
-- [ ] **Step 5: Implement setup/downloader with Windows runtime extraction**
-
-Download into:
-
-```text
-<userData>/offline-ai/.staging/<version>/...
-```
-
-Use `.part` files and HTTP Range requests. Progress DTO:
-
-```ts
-export interface PrivateAiProgress {
-  state: PrivateAiState
-  phase: 'downloading' | 'verifying' | 'extracting'
-  percent: number | null
-  filePercent: number | null
-  fileIndex: number | null
-  totalFiles: number
-  fileName: string | null
-  totalSizeBytes: number
-  downloadedBytes: number
-  bytesPerSecond: number | null
-  remainingSeconds: number | null
-  message: string
-}
-```
-
-On Windows, extract the verified llama.cpp ZIP with a child process using PowerShell `Expand-Archive`:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '<zip>' -DestinationPath '<dir>' -Force"
-```
-
-Pass the command as child-process arguments; do not invoke through a renderer shell or interpolate renderer-provided paths.
-
-Only after every required asset verifies and runtime extraction succeeds:
-
-```text
-promote staging files -> offline-ai target paths
-write installed-version.json atomically
-state = ready
-```
-
-Pause aborts the active request/process but preserves `.part` files. `repair()` reuses any verified existing asset and downloads only missing/invalid ones.
-
-- [ ] **Step 6: Verify Task 1 green and commit**
+- [ ] **Step 7: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/ai/OfflineAiAssetService.test.ts src/main/ai/OfflineAiDownloader.test.ts
 npm run typecheck
-```
-
-Expected: PASS without network access.
-
-```bash
-git add config/offline-ai-manifest.json src/main/ai
+git add config/offline-ai-manifest.json src/main/ai .github/workflows/desktop-shell-ci.yml
 git commit -m "feat: add verified Private AI setup service"
 ```
 
@@ -243,85 +162,48 @@ git commit -m "feat: add verified Private AI setup service"
 ### Task 2: Lazy split llama.cpp runtime manager
 
 **Files:**
-- Create: `src/main/ai/AiRuntimeManager.ts`
-- Create: `src/main/ai/AiRuntimeManager.test.ts`
+- Create: `src/main/ai/AiRuntimeManager.ts`, `AiRuntimeManager.test.ts`
 
-**Interfaces:**
-- Consumes: `OfflineAiAssetService.getInstalledPaths()` from Task 1.
-- Produces:
-  - `ensureEmbeddingRuntime(): Promise<boolean>`
-  - `ensureGenerationRuntime(): Promise<boolean>`
-  - `stopAll(): Promise<void>`
-  - internal embedding URL `http://127.0.0.1:8081`
-  - internal generation URL `http://127.0.0.1:8080`
+**Interfaces:** `ensureEmbeddingRuntime()`, `ensureGenerationRuntime()`, `stopAll()`; internal ports `8081` Nomic and `8080` Granite.
 
-- [ ] **Step 1: Write failing lifecycle tests**
-
-Use injected process-spawn and health-check ports. Cover:
+- [ ] **Step 1: Write lifecycle RED tests**
 
 ```ts
-it('does not start any process at construction/app launch')
-it('starts Nomic only when ensureEmbeddingRuntime is requested')
-it('starts Granite only when ensureGenerationRuntime is requested')
-it('does not duplicate an already healthy process')
-it('restarts an unhealthy managed process')
-it('returns false when verified assets are unavailable')
-it('stops both child processes on stopAll')
+it('starts nothing at construction')
+it('starts only Nomic for embedding request')
+it('starts only Granite for generation request')
+it('reuses healthy managed process')
+it('restarts unhealthy managed process')
+it('returns false without verified assets')
+it('stops both managed children')
 ```
 
-- [ ] **Step 2: Implement health checking and process startup**
+- [ ] **Step 2: Implement health and startup**
 
-Use internal constants only:
-
-```ts
-const LLM_URL = 'http://127.0.0.1:8080'
-const EMBED_URL = 'http://127.0.0.1:8081'
-```
-
-Health request:
+Health: `GET /health`. Nomic args:
 
 ```text
-GET /health
-2xx -> healthy
+--model <nomic> --port 8081 --threads <cpu-count> --ctx-size 2048 --embeddings --pooling mean
 ```
 
-Embedding runtime arguments:
+Granite:
 
 ```text
---model <nomic>
---port 8081
---threads <os.cpus().length>
---ctx-size 2048
---embeddings
---pooling mean
+--model <granite> --port 8080 --threads <cpu-count> --ctx-size 4096
 ```
 
-Generation runtime arguments:
+Use `windowsHide:true`; default CPU path must work. Optional GPU detection may only optimize and must fall back to CPU.
 
-```text
---model <granite>
---port 8080
---threads <os.cpus().length>
---ctx-size 4096
-```
+- [ ] **Step 3: Add 60-second startup timeout and cleanup**
 
-Set `windowsHide: true` and keep child stdio out of the renderer. Initial implementation may run CPU-only by default. If GPU offload is added, hardware detection is main-process best-effort and failure must fall back to CPU rather than blocking AI.
+Poll ~500 ms; kill only the failed managed child on timeout/error.
 
-- [ ] **Step 3: Implement startup timeout and safe process cleanup**
-
-Poll health every ~500 ms with a maximum startup window of 60 seconds. A startup failure kills only the process this manager launched and returns a stable runtime-not-ready result to callers.
-
-- [ ] **Step 4: Verify Task 2 green and commit**
+- [ ] **Step 4: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/ai/AiRuntimeManager.test.ts
 npm run typecheck
-```
-
-Expected: PASS.
-
-```bash
-git add src/main/ai/AiRuntimeManager.ts src/main/ai/AiRuntimeManager.test.ts
+git add src/main/ai/AiRuntimeManager*
 git commit -m "feat: add lazy local AI runtime manager"
 ```
 
@@ -330,29 +212,16 @@ git commit -m "feat: add lazy local AI runtime manager"
 ### Task 3: Persistent chunk/vector schema and repository
 
 **Files:**
-- Modify: `src/main/database/migrations.ts`
-- Modify: `src/main/database/migrations.test.ts`
-- Create: `src/main/vault/VaultChunkRepository.ts`
-- Create: `src/main/vault/VaultChunkRepository.test.ts`
-- Create: `src/main/vault/vectorCodec.ts`
-- Create: `src/main/vault/vectorCodec.test.ts`
+- Modify: `src/main/database/migrations.ts`, `migrations.test.ts`
+- Create: `src/main/vault/vectorCodec.ts`, `vectorCodec.test.ts`
+- Create: `src/main/vault/VaultChunkRepository.ts`, `VaultChunkRepository.test.ts`
 
-**Interfaces:**
-- Consumes: `vault_documents` from the Vault foundation.
-- Produces:
-  - `vault_chunks` table
-  - `float32ToBlob(vector)`
-  - `blobToFloat32(buffer)`
-  - `VaultChunkRepository.replaceDocumentIndex(...)`
-  - `VaultChunkRepository.listQueryChunks(localUserId, documentIds?)`
-  - `VaultChunkRepository.deleteDocumentChunks(...)`
+**Interfaces:** `float32ToBlob`, `blobToFloat32`, `replaceDocumentIndex`, `listQueryChunks`.
 
-- [ ] **Step 1: Write failing chunk migration tests**
-
-Required schema:
+- [ ] **Step 1: Write migration RED test and create table**
 
 ```sql
-CREATE TABLE vault_chunks (
+CREATE TABLE IF NOT EXISTS vault_chunks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   document_id INTEGER NOT NULL,
   chunk_index INTEGER NOT NULL,
@@ -364,276 +233,159 @@ CREATE TABLE vault_chunks (
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (document_id) REFERENCES vault_documents(id) ON DELETE CASCADE,
   UNIQUE(document_id, chunk_index)
-)
+);
+CREATE INDEX IF NOT EXISTS idx_vault_chunks_document ON vault_chunks(document_id);
 ```
 
-Also index `document_id`.
+No duplicate `local_user_id` on chunks; ownership joins through `vault_documents`.
 
-Run migration tests; expected FAIL.
+- [ ] **Step 2: Write/implement Float32 codec**
 
-- [ ] **Step 2: Implement migration without changing Vault document ownership**
-
-Add `ensureVaultChunks(db)` inside the existing migration transaction. Do not put `local_user_id` on chunks; ownership is joined through `vault_documents` so it cannot drift independently.
-
-- [ ] **Step 3: Write failing Float32 codec tests**
-
-Cover exact round-trip for positive, negative and zero values:
+Round-trip:
 
 ```ts
-const source = new Float32Array([0.25, -1.5, 0, 3.125])
-expect(Array.from(blobToFloat32(float32ToBlob(source)))).toEqual(Array.from(source))
+new Float32Array([0.25, -1.5, 0, 3.125])
 ```
 
-Codec must copy the exact byte range and not accidentally expose a larger pooled Buffer.
+Copy exact byte range; never expose pooled Buffer excess bytes.
 
-- [ ] **Step 4: Write failing repository ownership/replace tests**
-
-Cover:
+- [ ] **Step 3: Write repository RED tests**
 
 ```ts
-it('replaces all chunks for one document atomically')
-it('never returns another local user chunks')
-it('filters selected document ids through local-user ownership')
-it('stores embedding model and index version')
-it('cascades chunks when the document is deleted')
+it('atomically replaces one document index')
+it('keeps prior index on failed replacement')
+it('never returns another user chunks')
+it('filters selected ids by local-user ownership')
+it('returns documentId,fileName,chunkIndex,text,embedding for query use')
+it('stores model/version metadata')
+it('cascades on document delete')
 ```
 
-Selected IDs must use parameterized placeholders; never concatenate unvalidated strings into SQL.
+`listQueryChunks(localUserId, documentIds?)` joins `vault_documents` and returns internal rows including `fileName`; SQL placeholders are parameterized.
 
-- [ ] **Step 5: Implement codec and repository**
+- [ ] **Step 4: Implement transaction**
 
-`replaceDocumentIndex()` uses one SQLite transaction:
+One transaction deletes old chunks, inserts all replacements, and updates document `index_status='indexed', last_error_code=NULL`. Roll back entirely on failure.
 
-```text
-DELETE old chunks for document
-INSERT every new chunk/vector
-UPDATE vault_documents index_status='indexed', last_error_code=NULL, updated_at=?
-COMMIT
-```
-
-If any insert fails, rollback leaves the previous index intact.
-
-- [ ] **Step 6: Verify Task 3 green and commit**
+- [ ] **Step 5: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/database/migrations.test.ts src/main/vault/vectorCodec.test.ts src/main/vault/VaultChunkRepository.test.ts
 npm run typecheck
-```
-
-Expected: PASS.
-
-```bash
-git add src/main/database/migrations.ts src/main/database/migrations.test.ts src/main/vault/VaultChunkRepository.ts src/main/vault/VaultChunkRepository.test.ts src/main/vault/vectorCodec.ts src/main/vault/vectorCodec.test.ts
+git add src/main/database src/main/vault/vectorCodec* src/main/vault/VaultChunkRepository*
 git commit -m "feat: persist Vault embeddings"
 ```
 
 ---
 
-### Task 4: Nomic client, deterministic chunking and background indexing
+### Task 4: Nomic client, deterministic chunking and indexing service
 
 **Files:**
-- Create: `src/main/ai/NomicClient.ts`
-- Create: `src/main/ai/NomicClient.test.ts`
-- Create: `src/main/vault/chunkDocument.ts`
-- Create: `src/main/vault/chunkDocument.test.ts`
-- Create: `src/main/vault/VaultIndexService.ts`
-- Create: `src/main/vault/VaultIndexService.test.ts`
-- Modify: `src/main/vault/VaultService.ts`
-- Modify: `src/main/vault/VaultService.test.ts`
+- Create: `src/main/ai/NomicClient.ts`, `NomicClient.test.ts`
+- Create: `src/main/vault/chunkDocument.ts`, `chunkDocument.test.ts`
+- Create: `src/main/vault/VaultIndexService.ts`, `VaultIndexService.test.ts`
+- Modify: `src/main/vault/VaultService.ts`, `VaultService.test.ts`
 
 **Interfaces:**
-- Consumes: `AiRuntimeManager.ensureEmbeddingRuntime()`, `VaultRepository`, `VaultChunkRepository`.
-- Produces:
-  - `INDEX_VERSION = 1`
-  - `EMBEDDING_MODEL_ID = 'nomic-embed-text-v1.5.Q4_K_M'`
-  - `chunkDocument(text): Array<{ index: number; text: string }>`
-  - `NomicClient.embedDocument(text)`
-  - `NomicClient.embedQuery(text)`
-  - `VaultIndexService.indexDocument(localUserId, documentId)`
-  - `VaultIndexService.indexPendingDocuments(localUserId)`
 
-- [ ] **Step 1: Write failing Nomic response-shape and prefix tests**
+```ts
+const INDEX_VERSION = 1
+const EMBEDDING_MODEL_ID = 'nomic-embed-text-v1.5.Q4_K_M'
+```
 
-Prove calls use:
+Produces `embedDocument`, `embedQuery`, `indexDocument`, `indexPendingDocuments`.
+
+- [ ] **Step 1: Write Nomic RED tests**
+
+POST internal `/embedding`. Exact bodies:
+
+```ts
+{ content: `search_document: ${chunk}` }
+{ content: `search_query: ${question}` }
+```
+
+Normalize `[{embedding:[...]}]`, `{embedding:[...]}` and direct numeric arrays. Empty/non-numeric vectors -> stable `embedding-failed`.
+
+- [ ] **Step 2: Write deterministic chunker RED tests**
+
+Version 1:
+
+```ts
+MAX_CHARS = 1000
+OVERLAP_CHARS = 150
+```
+
+Same text must always produce same numbered non-empty chunks; short text is one chunk.
+
+- [ ] **Step 3: Write index-service RED tests**
+
+```ts
+it('requires owned extraction-ready document')
+it('starts only embedding runtime')
+it('marks indexing')
+it('embeds each chunk once')
+it('persists model/version Float32 vectors')
+it('marks failed without harming source/text')
+it('retries without re-upload')
+it('indexes pending docs for supplied user only')
+```
+
+- [ ] **Step 4: Implement index flow**
 
 ```text
-POST http://127.0.0.1:8081/embedding
+owned ready doc -> indexing -> ensure Nomic -> deterministic chunks
+-> search_document embeddings -> atomic replace -> indexed
 ```
 
-Document body:
+Failure -> `index_status='failed', last_error_code='indexing-failed'`; source/extracted text remain healthy.
 
-```json
-{ "content": "search_document: <chunk>" }
-```
+Background jobs always capture explicit `localUserId`; no mutable global current user.
 
-Query body:
+- [ ] **Step 5: Queue indexing after extraction without blocking upload**
 
-```json
-{ "content": "search_query: <question>" }
-```
-
-Normalize all llama-server shapes Jose encountered:
+Inject into `VaultService`:
 
 ```ts
-[{ embedding: [number, ...] }]
-{ embedding: [number, ...] }
-[number, ...]
+interface VaultIndexQueue { queueDocument(localUserId: number, documentId: number): void }
 ```
 
-Empty/non-numeric vectors throw a stable embedding-failed error.
+Queue checks AI ready; otherwise leaves `waiting_for_ai`. Upload returns before indexing finishes.
 
-- [ ] **Step 2: Write failing deterministic chunker tests**
-
-Use version-1 constants:
-
-```ts
-const MAX_CHARS = 1000
-const OVERLAP_CHARS = 150
-```
-
-Tests prove:
-
-```ts
-same text -> exactly same chunks/indexes
-no chunk is empty
-normal documents produce overlapping boundaries
-very short text is one chunk
-```
-
-Do not use an LLM/tokenizer for chunking v1.
-
-- [ ] **Step 3: Write failing index-service tests**
-
-Cover:
-
-```ts
-it('requires an owned document with extraction_status ready')
-it('starts only the embedding runtime')
-it('marks indexing before embedding work')
-it('embeds each deterministic chunk exactly once')
-it('persists Float32 vectors with model/version metadata')
-it('marks failed without harming source text when one embedding fails')
-it('retries a failed index from extracted text without re-upload')
-it('indexes all waiting_for_ai documents for the supplied local user only')
-```
-
-- [ ] **Step 4: Implement indexing**
-
-Index flow:
-
-```text
-owned document + extracted_text ready
--> mark index_status='indexing'
--> ensureEmbeddingRuntime()
--> chunkDocument(text)
--> embed every chunk with search_document prefix
--> VaultChunkRepository.replaceDocumentIndex(...)
--> indexed
-```
-
-On failure:
-
-```text
-index_status='failed'
-last_error_code='indexing-failed'
-source file and extracted_text remain unchanged
-```
-
-Background work always carries an explicit captured `localUserId`; never consult a mutable global current-user variable inside the worker.
-
-- [ ] **Step 5: Integrate indexing after upload without blocking upload**
-
-Extend `VaultService` with an injected optional index scheduler port:
-
-```ts
-export interface VaultIndexQueue {
-  queueDocument(localUserId: number, documentId: number): void
-}
-```
-
-After extraction success:
-
-```ts
-this.indexQueue?.queueDocument(user.id, document.id)
-```
-
-The queue implementation checks `OfflineAiAssetService.getStatus().state === 'ready'`. If AI is not ready, it leaves `waiting_for_ai`. Upload returns before indexing completes.
-
-- [ ] **Step 6: Verify Task 4 green and commit**
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/ai/NomicClient.test.ts src/main/vault/chunkDocument.test.ts src/main/vault/VaultIndexService.test.ts src/main/vault/VaultService.test.ts
 npm run typecheck
-```
-
-Expected: PASS without real model processes.
-
-```bash
-git add src/main/ai/NomicClient.ts src/main/ai/NomicClient.test.ts src/main/vault/chunkDocument.ts src/main/vault/chunkDocument.test.ts src/main/vault/VaultIndexService.ts src/main/vault/VaultIndexService.test.ts src/main/vault/VaultService.ts src/main/vault/VaultService.test.ts
+git add src/main/ai/NomicClient* src/main/vault/chunkDocument* src/main/vault/VaultIndexService* src/main/vault/VaultService*
 git commit -m "feat: index Vault documents with Nomic"
 ```
 
 ---
 
-### Task 5: Private AI desktop API, setup UI and Vault indexing controls
+### Task 5: Safe Private AI API and Vault setup/indexing UI
 
 **Files:**
 - Modify: `src/shared/desktopApi.ts`
-- Modify: `src/preload/createDesktopApi.ts`
-- Modify: `src/preload/createDesktopApi.test.ts`
-- Modify: `src/preload/preload.ts`
-- Create: `src/main/ai/privateAiIpc.ts`
-- Create: `src/main/ai/privateAiIpc.test.ts`
-- Modify: `src/main/vault/vaultIpc.ts`
-- Modify: `src/main/vault/vaultIpc.test.ts`
+- Modify: `src/preload/createDesktopApi.ts`, `createDesktopApi.test.ts`, `preload.ts`
+- Create: `src/main/ai/privateAiIpc.ts`, `privateAiIpc.test.ts`
+- Modify: `src/main/vault/vaultIpc.ts`, `vaultIpc.test.ts`
 - Modify: `src/main/main.ts`
-- Modify: `src/renderer/features/vault/Vault.tsx`
-- Modify: `src/renderer/features/vault/Vault.css`
-- Modify: `src/renderer/features/vault/Vault.test.tsx`
-- Create: `src/renderer/services/ai/PrivateAiClient.ts`
-- Create: `src/renderer/services/ai/DesktopPrivateAiClient.ts`
-- Create: `src/renderer/services/ai/DesktopPrivateAiClient.test.ts`
+- Create: `src/renderer/services/ai/PrivateAiClient.ts`, `DesktopPrivateAiClient.ts`, `DesktopPrivateAiClient.test.ts`
+- Modify: `src/renderer/features/vault/Vault.tsx`, `Vault.css`, `Vault.test.tsx`
 
-**Interfaces:**
-- Consumes: asset service, index service, existing Vault UI.
-- Produces safe `privateAi` API and `vault.retryIndexing({documentId})`.
+**Interfaces:** safe `privateAi.getStatus/startSetup/pauseSetup/repair/onProgress` and `vault.retryIndexing({documentId})`.
 
-- [ ] **Step 1: Write failing shared/preload contract tests**
+- [ ] **Step 1: Write public/preload RED tests**
 
-Public status:
+Public status contains only:
 
 ```ts
-export interface PrivateAiStatus {
-  state: PrivateAiState
-  ready: boolean
-  repairRequired: boolean
-  totalSizeBytes: number
-  version: string | null
-  message: string
-}
+state, ready, repairRequired, totalSizeBytes, version, message
 ```
 
-Public API:
+Progress contains friendly transfer metrics, not URL/path/hash/model/PID/port.
 
-```ts
-privateAi: {
-  getStatus(): Promise<PrivateAiStatus>
-  startSetup(): Promise<PrivateAiStatus>
-  pauseSetup(): Promise<PrivateAiStatus>
-  repair(): Promise<PrivateAiStatus>
-  onProgress(listener: (progress: PrivateAiProgress) => void): () => void
-}
-```
-
-Extend Vault API:
-
-```ts
-retryIndexing(input: { documentId: number }): Promise<VaultDocumentSummary>
-```
-
-No model names, paths, URLs, ports, PIDs or SHA hashes are in public status/progress.
-
-- [ ] **Step 2: Write failing IPC authorization/sanitization tests**
+- [ ] **Step 2: Write IPC RED tests**
 
 Channels:
 
@@ -645,55 +397,25 @@ private-ai:repair
 vault:retry-indexing
 ```
 
-Events:
+Event: `private-ai:progress`. No renderer URL/path is accepted. Retry-index reconstructs numeric document ID and re-derives user in main.
 
-```text
-private-ai:progress
-```
+- [ ] **Step 3: Wire services in `main.ts`**
 
-`vault:retry-indexing` reconstructs a numeric document ID and the service re-derives local user ownership from the protected session.
+Use one shared `OfflineAiAssetService`, `AiRuntimeManager`, `VaultChunkRepository`, `NomicClient`, `VaultIndexService`.
 
-Starting/repairing AI is application-local and does not accept renderer URLs/paths.
-
-- [ ] **Step 3: Wire main services and setup-completion indexing**
-
-`createAppServices()` creates one shared:
-
-```text
-OfflineAiAssetService
-AiRuntimeManager
-VaultChunkRepository
-NomicClient
-VaultIndexService
-```
-
-On a successful transition to `ready`, restore the protected session again. If a user is still signed in, call:
+On transition to `ready`, restore protected session again; if a user is still signed in:
 
 ```ts
 void vaultIndexService.indexPendingDocuments(current.id)
 ```
 
-If no user is signed in, do not guess a user. The next signed-in Vault read/setup action can schedule that user's pending index work.
+No session -> no guessed user. `before-quit` awaits/stops managed AI children before DB close.
 
-On `before-quit`, call `runtime.stopAll()` before closing the database.
+- [ ] **Step 4: Write Vault setup UI RED tests**
 
-- [ ] **Step 4: Write failing Private AI/Vault UI tests**
+Cover all seven states, explicit setup click, pause/continue/repair, progress, indexing/retry, and **Upload remains enabled in every state**.
 
-Cover all seven setup states and the approved product rule:
-
-```ts
-it('always leaves Upload documents enabled')
-it('shows optional setup copy when not installed')
-it('starts setup only after user clicks Set up Private AI')
-it('shows aggregate/file progress while downloading')
-it('offers Continue when paused')
-it('offers Repair when repair_required')
-it('shows Ready when verified')
-it('shows Indexing and Retry indexing per document')
-it('refreshes documents authoritatively after indexing state changes')
-```
-
-Approved not-installed copy:
+Approved copy:
 
 ```text
 Private AI is optional
@@ -701,226 +423,103 @@ Your documents are already stored privately. Set up Private AI to search them se
 Set up Private AI
 ```
 
-- [ ] **Step 5: Implement clients/UI**
+- [ ] **Step 5: Implement client/UI**
 
-`DesktopPrivateAiClient` is the only production renderer file allowed to access `window.familyCircle.privateAi`.
+Only `DesktopPrivateAiClient.ts` may access `window.familyCircle.privateAi`. Unsubscribing a React listener never cancels the main-process download.
 
-Vault page adds the setup panel above the document list and a `Retry indexing` action only for `indexStatus === 'failed'` with successful extraction.
-
-Setup navigation must not cancel an active main-process download. Subscriptions are renderer listeners only; unsubscribing a component removes its listener but leaves setup running.
-
-- [ ] **Step 6: Verify Task 5 green and commit**
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
-npm test -- src/main/ai/privateAiIpc.test.ts src/main/vault/vaultIpc.test.ts src/preload/createDesktopApi.test.ts src/renderer/services/ai/DesktopPrivateAiClient.test.ts src/renderer/features/vault/Vault.test.tsx
+npm test -- src/main/ai/privateAiIpc.test.ts src/main/vault/vaultIpc.test.ts src/preload/createDesktopApi.test.ts src/renderer/services/ai src/renderer/features/vault/Vault.test.tsx
 npm run typecheck
 npm run build:electron
 npm run build:renderer
-```
-
-Expected: PASS.
-
-```bash
-git add src/shared/desktopApi.ts src/preload src/main/ai/privateAiIpc.ts src/main/ai/privateAiIpc.test.ts src/main/vault/vaultIpc.ts src/main/vault/vaultIpc.test.ts src/main/main.ts src/renderer/services/ai src/renderer/features/vault
+git add src/shared/desktopApi.ts src/preload src/main/ai/privateAiIpc* src/main/vault/vaultIpc* src/main/main.ts src/renderer/services/ai src/renderer/features/vault
 git commit -m "feat: add Private AI setup and Vault indexing UI"
 ```
 
 ---
 
-### Task 6: Persistent retrieval, Granite client and real Ask your Vault page
+### Task 6: Granite grounded retrieval and real `/ai` Ask your Vault
 
 **Files:**
-- Create: `src/main/ai/GraniteClient.ts`
-- Create: `src/main/ai/GraniteClient.test.ts`
-- Create: `src/main/vault/cosineSimilarity.ts`
-- Create: `src/main/vault/cosineSimilarity.test.ts`
-- Create: `src/main/vault/VaultQueryService.ts`
-- Create: `src/main/vault/VaultQueryService.test.ts`
-- Modify: `src/main/vault/vaultIpc.ts`
-- Modify: `src/main/vault/vaultIpc.test.ts`
+- Create: `src/main/ai/GraniteClient.ts`, `GraniteClient.test.ts`
+- Create: `src/main/vault/cosineSimilarity.ts`, `cosineSimilarity.test.ts`
+- Create: `src/main/vault/VaultQueryService.ts`, `VaultQueryService.test.ts`
+- Modify: `src/main/vault/vaultIpc.ts`, `vaultIpc.test.ts`
 - Modify: `src/shared/desktopApi.ts`
-- Modify: `src/preload/createDesktopApi.ts`
-- Modify: `src/preload/createDesktopApi.test.ts`
-- Modify: `src/renderer/services/vault/VaultClient.ts`
-- Modify: `src/renderer/services/vault/DesktopVaultClient.ts`
-- Modify: `src/renderer/services/vault/DesktopVaultClient.test.ts`
-- Create: `src/renderer/features/vault/AskVault.tsx`
-- Create: `src/renderer/features/vault/AskVault.css`
-- Create: `src/renderer/features/vault/AskVault.test.tsx`
-- Modify: `src/renderer/app/App.tsx`
-- Modify: `src/renderer/app/App.test.tsx`
+- Modify: `src/preload/createDesktopApi.ts`, `createDesktopApi.test.ts`
+- Modify: `src/renderer/services/vault/VaultClient.ts`, `DesktopVaultClient.ts`, `DesktopVaultClient.test.ts`
+- Create: `src/renderer/features/vault/AskVault.tsx`, `AskVault.css`, `AskVault.test.tsx`
+- Modify: `src/renderer/app/App.tsx`, `App.test.tsx`
 
-**Interfaces:**
-- Consumes: persistent chunks/vectors, Nomic query embeddings, lazy Granite runtime.
-- Produces: `vault.ask(...)` and real `/ai` route.
+**Interfaces:** `vault.ask({question, scope})`; scope is `all` or selected document IDs.
 
-- [ ] **Step 1: Write failing Granite client tests**
+- [ ] **Step 1: Write Granite client RED tests**
 
-Granite call:
+Internal POST: `http://127.0.0.1:8080/v1/chat/completions`. System instruction:
 
 ```text
-POST http://127.0.0.1:8080/v1/chat/completions
+You are a private family-knowledge assistant. Answer using ONLY the provided Vault source context. If the answer is not supported by the context, say you could not find it in the selected Vault documents.
 ```
 
-Request:
+Use `max_tokens:512`, `temperature:0`, `top_k:40`, `top_p:0.95`, `stream:false`. Normalize `choices[0].message.content`; empty/transport failures map to stable generation failure.
+
+- [ ] **Step 2: Write retrieval-service RED tests**
 
 ```ts
-{
-  messages: [
-    {
-      role: 'system',
-      content: 'You are a private family-knowledge assistant. Answer using ONLY the provided Vault source context. If the answer is not supported by the context, say you could not find it in the selected Vault documents.'
-    },
-    { role: 'user', content: prompt }
-  ],
-  max_tokens: 512,
-  temperature: 0,
-  top_k: 40,
-  top_p: 0.95,
-  stream: false
-}
+it('requires protected session and non-empty question')
+it('validates every selected id belongs to local user')
+it('loads persisted chunks instead of extracted docs')
+it('never calls document embedding')
+it('embeds question exactly once')
+it('sorts cosine and takes top 5')
+it('starts Granite only after context exists')
+it('grounds prompt in top chunks only')
+it('returns safe documentId,fileName,excerpt sources')
+it('returns no vector/path/full text/endpoint')
+it('handles no indexed context safely')
 ```
 
-Tests normalize `choices[0].message.content`, reject empty output and map transport details to stable generation-failed errors.
+Source excerpt <=320 chars.
 
-- [ ] **Step 2: Write failing similarity/retrieval tests**
-
-`cosineSimilarity()` tests cover identical, orthogonal and negative vectors plus mismatched dimensions.
-
-`VaultQueryService` tests cover:
-
-```ts
-it('requires a protected local session')
-it('requires a non-empty question')
-it('validates every selected document belongs to the local user')
-it('uses persisted chunks and never calls document embedding')
-it('embeds the question once with Nomic search_query prefix')
-it('sorts by cosine score and uses top 5 chunks')
-it('starts Granite only after relevant chunks exist')
-it('grounds the prompt in retrieved chunks only')
-it('returns safe sources with document id, file name and excerpt')
-it('does not return vectors, paths, full extracted text or model endpoints')
-it('returns a stable message when no indexed context exists')
-```
-
-- [ ] **Step 3: Implement query service**
-
-Public input:
-
-```ts
-export type VaultQueryScope =
-  | { type: 'all' }
-  | { type: 'documents'; documentIds: number[] }
-
-export interface VaultAskInput {
-  question: string
-  scope: VaultQueryScope
-}
-```
-
-Main query flow:
+- [ ] **Step 3: Implement query flow**
 
 ```text
-restore session
--> validate selected IDs through VaultRepository ownership
--> ensureEmbeddingRuntime()
--> embed question once
--> load persisted indexed chunks scoped to user/document IDs
--> decode Float32 vectors
--> score cosine similarity
--> top 5
--> ensureGenerationRuntime()
--> Granite grounded prompt
--> safe answer + sources
+restore user -> validate scope -> ensure Nomic -> embed query once
+-> listQueryChunks(user.id, ids?) -> decode persisted vectors -> cosine
+-> top 5 -> ensure Granite -> grounded answer -> safe sources
 ```
 
-Source DTO:
+Public types:
 
 ```ts
-export interface VaultAnswerSource {
-  documentId: number
-  fileName: string
-  excerpt: string
-}
+type VaultQueryScope = {type:'all'} | {type:'documents'; documentIds:number[]}
+interface VaultAnswerSource { documentId:number; fileName:string; excerpt:string }
 ```
 
-Excerpt is at most 320 characters and is derived only from the retrieved chunk.
+- [ ] **Step 4: Write IPC/client/UI RED tests**
 
-- [ ] **Step 4: Write failing IPC/client/UI tests**
+`vault.ask` IPC reconstructs question/scope and rejects non-numeric selected IDs. `AskVault` tests composer visible, all/selected modes, empty question guard, generating state, answer and sources, and no technical filesystem/model detail.
 
-Add public API:
+- [ ] **Step 5: Implement `/ai`**
 
-```ts
-vault.ask(input: VaultAskInput): Promise<VaultAskResult>
-```
+Replace `/ai` placeholder with `<AskVault />`. Selected mode lists only `indexed` Vault documents.
 
-IPC reconstructs and validates question/scope shapes; it does not accept local-user IDs.
-
-`AskVault` tests cover:
-
-```ts
-it('shows Private AI setup guidance when AI is not ready')
-it('keeps the question composer visible')
-it('supports All documents')
-it('supports selecting indexed Vault documents')
-it('disables Ask for an empty question')
-it('shows an explicit generating state')
-it('renders answer and source file/excerpts')
-it('does not show filesystem or model technical details')
-```
-
-- [ ] **Step 5: Implement Ask your Vault and route**
-
-Page structure:
-
-```text
-Ask your Vault
-Ask something about your private documents.
-
-Question
-[________________________________]
-
-Search
-(o) All documents
-( ) Selected documents
-
-[Ask]
-
-Answer
-...
-
-Sources
-Family History.pdf
-<excerpt>
-```
-
-Replace only `/ai` in `placeholderRoutes`:
-
-```tsx
-<Route path="/ai" element={<AskVault />} />
-```
-
-The page loads document summaries through `DesktopVaultClient`; only `indexed` documents are selectable for selected-document scope.
-
-- [ ] **Step 6: Verify Task 6 green and commit**
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
-npm test -- src/main/ai/GraniteClient.test.ts src/main/vault/cosineSimilarity.test.ts src/main/vault/VaultQueryService.test.ts src/main/vault/vaultIpc.test.ts src/preload/createDesktopApi.test.ts src/renderer/services/vault/DesktopVaultClient.test.ts src/renderer/features/vault/AskVault.test.tsx src/renderer/app/App.test.tsx
+npm test -- src/main/ai/GraniteClient.test.ts src/main/vault/cosineSimilarity.test.ts src/main/vault/VaultQueryService.test.ts src/main/vault/vaultIpc.test.ts src/preload/createDesktopApi.test.ts src/renderer/services/vault src/renderer/features/vault/AskVault.test.tsx src/renderer/app/App.test.tsx
 npm run typecheck
 npm run build:electron
 npm run build:renderer
-```
-
-Expected: PASS without any real model files.
-
-```bash
-git add src/main/ai/GraniteClient.ts src/main/ai/GraniteClient.test.ts src/main/vault/cosineSimilarity.ts src/main/vault/cosineSimilarity.test.ts src/main/vault/VaultQueryService.ts src/main/vault/VaultQueryService.test.ts src/main/vault/vaultIpc.ts src/main/vault/vaultIpc.test.ts src/shared/desktopApi.ts src/preload src/renderer/services/vault src/renderer/features/vault/AskVault.tsx src/renderer/features/vault/AskVault.css src/renderer/features/vault/AskVault.test.tsx src/renderer/app/App.tsx src/renderer/app/App.test.tsx
+git add src/main/ai/GraniteClient* src/main/vault/cosineSimilarity* src/main/vault/VaultQueryService* src/main/vault/vaultIpc* src/shared/desktopApi.ts src/preload src/renderer/services/vault src/renderer/features/vault/AskVault* src/renderer/app/App*
 git commit -m "feat: add local Granite Vault questions"
 ```
 
 ---
 
-### Task 7: AI/Vault privacy boundaries, lifecycle hardening, docs and full gate
+### Task 7: RAG privacy/lifecycle hardening, docs and final verification
 
 **Files:**
 - Modify: `scripts/verify-boundaries.mjs`
@@ -928,108 +527,56 @@ git commit -m "feat: add local Granite Vault questions"
 - Modify: `README.md`
 - Create: `docs/PRIVATE_AI.md`
 
-**Interfaces:**
-- Consumes: complete Private AI/RAG implementation.
-- Produces: mechanical privacy guarantees, documented clean-machine/manual model validation path and merge-ready evidence.
+- [ ] **Step 1: Strengthen boundary verifier**
 
-- [ ] **Step 1: Strengthen the boundary verifier**
-
-For production Vault/AI renderer code and public desktop contract, reject:
+Reject from production Vault/AI renderer and public contract:
 
 ```text
-embeddingBlob
-Float32Array
-storedRelativePath
-extractedText
-modelPath
-graniteModel
-nomicModel
-llama-server.exe
-127.0.0.1:8080
-127.0.0.1:8081
-llmPid
-embPid
+embeddingBlob, Float32Array, storedRelativePath, extractedText, modelPath,
+graniteModel, nomicModel, llama-server.exe, 127.0.0.1:8080,
+127.0.0.1:8081, llmPid, embPid
 ```
 
-Enforce:
+Allow `window.familyCircle.privateAi` only in `DesktopPrivateAiClient.ts`; `window.familyCircle.vault` only in `DesktopVaultClient.ts`.
 
-```text
-window.familyCircle.privateAi -> DesktopPrivateAiClient.ts only
-window.familyCircle.vault -> DesktopVaultClient.ts only
-```
-
-Do not ban user-facing terms `Private AI`, `Vault`, `Granite` from developer documentation; the rule targets production renderer/shared code for technical paths/endpoints/process details.
-
-- [ ] **Step 2: Write merge-blocking privacy/security regression tests**
-
-Cover:
+- [ ] **Step 2: Add merge-blocking regression tests**
 
 ```ts
-it('cannot query another local user selected document IDs')
-it('cannot retrieve another user chunks even with guessed document IDs')
-it('never sends Vault content to the Circle adapter')
-it('never calls a cloud fallback when local AI is unavailable')
-it('never re-embeds document chunks while answering a question')
-it('never downloads Private AI until startSetup or repair is explicitly called')
-it('does not start Granite during document indexing')
-it('does not start either runtime at app/service construction')
-it('keeps upload/extraction available in every Private AI state')
+it('cannot query another user selected ids')
+it('cannot retrieve another user chunks')
+it('never sends Vault content to Circle adapter')
+it('never cloud-falls-back')
+it('never re-embeds document chunks on ask')
+it('never downloads until explicit setup/repair')
+it('never starts Granite for indexing')
+it('starts no AI process at construction')
+it('keeps upload/extraction available in all AI states')
 ```
 
-- [ ] **Step 3: Document developer/runtime behavior**
+- [ ] **Step 3: Document developer/runtime contract**
 
-`docs/PRIVATE_AI.md` must record:
+`docs/PRIVATE_AI.md` records manifest/hashes, AppData layout, seven states, explicit setup/repair, developer-only ports, Nomic prefixes, `INDEX_VERSION=1`, Float32 BLOB persistence, lazy lifecycle and no-cloud/no-Circle content rule.
+
+README states upload works before AI; setup later indexes existing docs; Ask Vault is local Nomic + Granite.
+
+- [ ] **Step 4: Document manual Windows clean-machine test**
 
 ```text
-Asset manifest + hashes
-AppData offline-ai layout
-Seven states
-User-triggered setup/repair
-Ports 8080/8081 (developer-only detail)
-Nomic document/query prefixes
-INDEX_VERSION=1
-persistent Float32 BLOB indexing
-lazy runtime lifecycle
-no-cloud/no-Circle Vault content rule
+1 no offline-ai directory
+2 upload/extract docs before setup
+3 explicit setup
+4 pause/continue uses partial bytes
+5 verify hashes before ready
+6 Nomic indexes and docs become Ready to ask
+7 ask known-answer question and inspect sources
+8 disconnect internet and ask again
+9 switch local account; no cross-user docs/sources
+10 exit; managed llama.cpp processes stop
 ```
 
-README user/product architecture should state:
+CI mirrors orchestration with fakes, not real model downloads.
 
-```text
-Vault upload/extraction is usable without Private AI.
-Private AI can be installed later and indexes existing documents automatically.
-Ask your Vault uses local Nomic retrieval + Granite generation.
-```
-
-- [ ] **Step 4: Add a manual clean-machine validation checklist without putting models in CI**
-
-Document this exact manual Windows path:
-
-```text
-1. Start with no <userData>/offline-ai directory.
-2. Upload TXT/PDF/DOCX documents successfully before AI setup.
-3. Start Private AI setup explicitly.
-4. Interrupt/pause and continue; verify partial bytes are reused.
-5. Verify all three SHA-256 checks before ready.
-6. Confirm Nomic starts for indexing and documents become Ready to ask.
-7. Ask a known-answer question; verify source excerpts match local documents.
-8. Disconnect internet and ask again; verify local Q&A still works.
-9. Switch local account; verify the first user's documents/sources cannot be seen or selected.
-10. Exit app; verify managed llama.cpp processes stop.
-```
-
-CI must test the same orchestration with fake downloader/process/HTTP ports rather than downloading 2+ GB.
-
-- [ ] **Step 5: Run focused final tests**
-
-```bash
-npm test -- src/main/ai src/main/vault src/renderer/services/ai src/renderer/services/vault src/renderer/features/vault
-npm run verify:boundaries
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Run the exact repository gate**
+- [ ] **Step 5: Full exact-head gate**
 
 ```bash
 npm ci
@@ -1041,29 +588,15 @@ npm run build:renderer
 npm audit --audit-level=high
 ```
 
-Expected: all application checks/builds pass with no high/critical dependency findings. Do not claim model runtime verification from CI because CI intentionally uses fakes and has no 2 GB model assets.
+- [ ] **Step 6: Merge-blocking review**
 
-- [ ] **Step 7: Perform merge-blocking review and commit**
+Confirm: no auto-download, cloud fallback, Circle content path, public model technicals/vectors, query-time document re-embedding, cross-user leakage, Granite during index-only path or upload lock tied to AI readiness.
 
-Review `main...feature/vault-private-ai` for:
-
-```text
-no AI auto-download
-no cloud fallback
-no Circle API Vault content
-no public paths/endpoints/process IDs/vectors
-no query-time document re-embedding
-no cross-user document/chunk leakage
-no Granite startup during indexing-only path
-no upload lock tied to AI readiness
-verified-before-ready install semantics
-```
-
-Then commit hardening:
+- [ ] **Step 7: Commit hardening**
 
 ```bash
 git add scripts/verify-boundaries.mjs src/main/vault/VaultRagSecurity.test.ts README.md docs/PRIVATE_AI.md
 git commit -m "test: harden Private AI Vault boundaries"
 ```
 
-The Private AI/RAG branch is ready for PR only after CI passes on the exact final head. After merge, run CI again on the exact resulting `main` SHA before calling the complete Vault + Private AI feature finished.
+Open the PR only after CI is green on the exact final `feature/private-ai-rag` head. After merge, verify the exact resulting `main` SHA before declaring the full Vault + Private AI feature complete.
