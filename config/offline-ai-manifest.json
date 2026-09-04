@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "files": [
+    {
+      "name": "AI engine",
+      "type": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b8772/llama-b8772-bin-win-cpu-x64.zip",
+      "targetPath": "bin/llama-b8772-bin-win-cpu-x64",
+      "sha256": "1C18C414B86E8F84D61D003F8605159ACF97492EEECF6891B2D879AF4A0DBFD2",
+      "sizeBytes": 39870081,
+      "extract": true,
+      "required": true
+    },
+    {
+      "name": "AI knowledge",
+      "type": "model",
+      "url": "https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF/resolve/main/granite-4.0-h-micro-Q4_K_M.gguf?download=true",
+      "targetPath": "models/granite-4.0-h-micro-Q4_K_M.gguf",
+      "sha256": "BCC78B9B25450101D1AD90D4B9A264E1BAC892F534DFB76066F4EEC792FDF023",
+      "sizeBytes": 1942564512,
+      "extract": false,
+      "required": true
+    },
+    {
+      "name": "AI search",
+      "type": "embedding",
+      "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q4_K_M.gguf?download=true",
+      "targetPath": "models/nomic-embed-text-v1.5.Q4_K_M.gguf",
+      "sha256": "D4E388894E09CF3816E8B0896D81D265B55E7A9FFF9AB03FE8BF4EF5E11295AC",
+      "sizeBytes": 84106624,
+      "extract": false,
+      "required": true
+    }
+  ]
+}
