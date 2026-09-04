@@ -51,11 +51,16 @@ describe('App shell', () => {
     expect(screen.getByRole('link', { name: 'Invitations' }).querySelector('.sidebar-link__badge')).toBeNull()
 
     fireEvent.click(screen.getByRole('link', { name: 'Members' }))
+    expect(await screen.findByRole('heading', { name: 'Kasule Family' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Invitations' }))
+    expect(await screen.findByRole('heading', { name: 'Pending invitations' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: 'My Circles' }))
     expect(await screen.findByRole('heading', { name: 'My Circles' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Circle' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Kasule Family' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage Kasule Family' })).toBeInTheDocument()
   })
 })
