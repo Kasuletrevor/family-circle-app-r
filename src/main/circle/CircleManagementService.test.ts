@@ -117,6 +117,13 @@ describe('CircleService management boundary', () => {
     })
   })
 
+  it('treats a resend race that finds an existing member as a stale pending invitation', async () => {
+    const { service, circle } = setup()
+    circle.inviteMember.mockResolvedValueOnce({ outcome: 'already-member' } as never)
+
+    await expect(service.resendInvitation({ personId: 'invite:inv-1' })).rejects.toThrow('no longer pending')
+  })
+
   it('cancels a pending invitation by internally resolved invitation ID', async () => {
     const { service, circle } = setup()
     await expect(service.cancelInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ success: true })
