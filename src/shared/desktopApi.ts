@@ -179,6 +179,51 @@ export type CircleOverview =
       notifications: CircleNotificationRecord[]
     }
 
+export type VaultFileType = 'pdf' | 'docx' | 'txt'
+export type VaultExtractionStatus = 'pending' | 'extracting' | 'ready' | 'failed'
+export type VaultIndexStatus = 'not_indexed' | 'waiting_for_ai' | 'indexing' | 'indexed' | 'failed'
+export type VaultDocumentIssue = 'extraction-failed' | 'delete-failed' | null
+export type VaultUploadOutcome =
+  | 'uploaded'
+  | 'already-exists'
+  | 'unsupported'
+  | 'too-large'
+  | 'extraction-failed'
+  | 'failed'
+export type VaultUploadStage = 'validating' | 'saving' | 'extracting' | 'done'
+
+export interface VaultDocumentSummary {
+  id: number
+  fileName: string
+  fileType: VaultFileType
+  sizeBytes: number
+  extractionStatus: VaultExtractionStatus
+  indexStatus: VaultIndexStatus
+  wordCount: number
+  preview: string | null
+  issue: VaultDocumentIssue
+  uploadedAt: number
+}
+
+export interface VaultUploadItemResult {
+  fileName: string
+  outcome: VaultUploadOutcome
+  documentId?: number
+}
+
+export interface VaultUploadBatchResult {
+  canceled: boolean
+  items: VaultUploadItemResult[]
+}
+
+export interface VaultUploadProgress {
+  fileIndex: number
+  fileCount: number
+  fileName: string
+  stage: VaultUploadStage
+  percent: number
+}
+
 export interface DesktopApi {
   app: {
     getVersion(): Promise<string>
@@ -211,5 +256,13 @@ export interface DesktopApi {
     cancelInvitation(input: { personId: string }): Promise<{ success: true }>
     removeMember(input: { personId: string }): Promise<{ success: true }>
     leaveCircle(): Promise<{ success: true }>
+  }
+  vault: {
+    listDocuments(): Promise<VaultDocumentSummary[]>
+    chooseAndUploadDocuments(): Promise<VaultUploadBatchResult>
+    openDocument(input: { documentId: number }): Promise<{ success: true }>
+    retryExtraction(input: { documentId: number }): Promise<VaultDocumentSummary>
+    deleteDocument(input: { documentId: number }): Promise<{ success: true }>
+    onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
   }
 }
