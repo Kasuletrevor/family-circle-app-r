@@ -29,7 +29,21 @@ const user: AuthUser = {
 }
 
 describe('App shell', () => {
-  it('renders stable desktop navigation and changes routes without leaving the shell', async () => {
+  it('renders stable desktop navigation and routes /vault to the real private Vault screen', async () => {
+    Object.defineProperty(window, 'familyCircle', {
+      configurable: true,
+      value: {
+        vault: {
+          listDocuments: async () => [],
+          chooseAndUploadDocuments: async () => ({ canceled: true, items: [] }),
+          openDocument: async () => ({ success: true }),
+          retryExtraction: async () => { throw new Error('not used') },
+          deleteDocument: async () => ({ success: true }),
+          onUploadProgress: () => () => undefined,
+        },
+      },
+    })
+
     render(
       <MemoryRouter initialEntries={['/family-tree']}>
         <AppServicesProvider services={{ circle: new MockCircleClient() }}>
@@ -63,5 +77,10 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Create Circle' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Kasule Family' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Manage Kasule Family' })).toBeInTheDocument()
+
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Vault' }))
+    expect(await screen.findByRole('heading', { name: 'Vault' })).toBeInTheDocument()
+    expect(screen.getByText('Your private documents stay on this computer.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
   })
 })
