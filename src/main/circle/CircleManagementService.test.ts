@@ -11,6 +11,8 @@ const user: AuthUser = {
   onboardingCompleted: true,
 }
 
+type Group = { id: string; name: string; ownerId: string; role: string }
+
 function tree(ownerId = '88') {
   return {
     group: { id: 'g-1', name: 'Test Family', ownerId },
@@ -29,16 +31,18 @@ function setup(options: {
   serverUserId?: string | null
   activeCircleId?: string | null
   ownerId?: string
-  groupsAfterLeave?: Array<{ id: string; name: string; ownerId: string; role: string }>
+  initialGroups?: Group[]
+  groupsAfterLeave?: Group[]
 } = {}) {
   const serverUserId = options.serverUserId === undefined ? '88' : options.serverUserId
   const ownerId = options.ownerId ?? '88'
-  const initialGroups = [{
+  const defaultInitialGroups: Group[] = [{
     id: 'g-1',
     name: 'Test Family',
     ownerId,
     role: ownerId === serverUserId ? 'Circle owner' : 'Sibling',
   }]
+  const initialGroups = options.initialGroups ?? defaultInitialGroups
   const sessions = { restore: vi.fn(async () => user) }
   const users = {
     getRecordById: vi.fn(async () => ({
@@ -123,6 +127,19 @@ describe('CircleService management boundary', () => {
     const { service, circle } = setup()
     await expect(service.removeMember({ personId: 'user:99' })).resolves.toEqual({ success: true })
     expect(circle.removeMember).toHaveBeenCalledWith({ serverUserId: '88', circleId: 'g-1', targetServerUserId: '99' })
+  })
+
+  it('aborts a mutation when the persisted active Circle disappeared instead of falling back to another Circle', async () => {
+    const fallback: Group = { id: 'g-2', name: 'Other Family', ownerId: '88', role: 'Circle owner' }
+    const { service, users, circle } = setup({
+      activeCircleId: 'g-1',
+      initialGroups: [fallback],
+    })
+
+    await expect(service.removeMember({ personId: 'user:99' })).rejects.toThrow('no longer available')
+    expect(circle.getTree).not.toHaveBeenCalled()
+    expect(circle.removeMember).not.toHaveBeenCalled()
+    expect(users.setActiveCircleId).toHaveBeenCalledWith(7, 'g-2')
   })
 
   it('rejects owner-only actions for a non-owner and never calls legacy writes', async () => {
