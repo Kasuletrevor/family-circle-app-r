@@ -52,6 +52,7 @@ export interface VaultOpenPort {
 
 export interface VaultIndexQueue {
   queueDocument(localUserId: number, documentId: number): void
+  indexDocument?(localUserId: number, documentId: number): Promise<void>
 }
 
 export interface VaultRepositoryPort {
@@ -95,6 +96,7 @@ type VaultServiceErrorCode =
   | 'not-found'
   | 'open-failed'
   | 'extraction-failed'
+  | 'indexing-failed'
   | 'delete-failed'
 
 export class VaultServiceError extends Error {
@@ -235,7 +237,7 @@ export class VaultService {
           await this.dependencies.repository.markExtractionFailure(
             user.id,
             storedDocument.id,
-            code === 'extraction-failed' ? 'extraction-failed' : 'extraction-failed',
+            'extraction-failed',
           )
           items.push({ fileName: displayName, outcome, documentId: storedDocument.id })
         }
@@ -287,6 +289,22 @@ export class VaultService {
     return updated
   }
 
+  async retryIndexing(documentId: number): Promise<{ success: true }> {
+    const user = await this.requireUser()
+    const id = requireDocumentId(documentId)
+    await this.requireOwnedActiveDocument(user.id, id)
+    const indexDocument = this.dependencies.indexQueue?.indexDocument
+    if (!indexDocument) {
+      throw new VaultServiceError('indexing-failed', 'Private AI indexing is unavailable')
+    }
+    try {
+      await indexDocument.call(this.dependencies.indexQueue, user.id, id)
+      return { success: true }
+    } catch {
+      throw new VaultServiceError('indexing-failed', 'Document indexing failed')
+    }
+  }
+
   async deleteDocument(documentId: number): Promise<{ success: true }> {
     const user = await this.requireUser()
     const id = requireDocumentId(documentId)
@@ -304,7 +322,6 @@ export class VaultService {
       const deleted = await this.dependencies.repository.deleteByIdForUser(user.id, id)
       if (!deleted) throw new Error('Vault document row disappeared during deletion')
     } catch {
-      // Keep the pending row as a tombstone. A later list repairs the DB side.
       throw new VaultServiceError('delete-failed', 'Vault document cleanup is pending')
     }
 
