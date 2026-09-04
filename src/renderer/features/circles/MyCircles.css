@@ -196,6 +196,12 @@
   gap: 10px;
 }
 
+.my-circles__primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .my-circles__state {
   display: flex;
   min-height: 280px;
@@ -228,6 +234,11 @@
 
 @media (max-width: 900px) {
   .my-circles__header {
+    flex-direction: column;
+  }
+
+  .my-circles__actions {
+    align-items: flex-start;
     flex-direction: column;
   }
 }
