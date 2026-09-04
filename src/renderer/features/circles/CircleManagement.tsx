@@ -18,8 +18,14 @@ type PendingAction =
   | { kind: 'cancel'; personId: string; email: string }
   | { kind: 'leave' }
 
+const STALE_CIRCLE_MESSAGE = 'That Circle is no longer available to your account'
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`
+}
+
+function isStaleCircleError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(STALE_CIRCLE_MESSAGE)
 }
 
 function managementErrorMessage(error: unknown, fallback = "We couldn't update the Circle. Please try again."): string {
@@ -31,6 +37,7 @@ function managementErrorMessage(error: unknown, fallback = "We couldn't update t
     'Circle owners cannot leave their own Circle',
     'That member is no longer in this Circle',
     'That invitation is no longer pending',
+    STALE_CIRCLE_MESSAGE,
   ]
   const matched = known.find((candidate) => message.includes(candidate))
   return matched ? `${matched}.` : fallback
@@ -86,6 +93,7 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
         kind: 'error',
         text: managementErrorMessage(error, "We couldn't resend the invitation. Please try again."),
       })
+      if (isStaleCircleError(error)) setReloadVersion((value) => value + 1)
     } finally {
       setResendingPersonId(null)
     }
@@ -119,6 +127,7 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
     } catch (error) {
       setPendingAction(null)
       setNotice({ kind: 'error', text: managementErrorMessage(error) })
+      if (isStaleCircleError(error)) setReloadVersion((value) => value + 1)
     }
   }
 
