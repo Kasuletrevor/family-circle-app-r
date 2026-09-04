@@ -9,6 +9,7 @@ export interface CircleTreePersonInternal {
   id: string
   kind: 'user' | 'placeholder' | 'invite'
   userId: string | null
+  invitationId?: string | null
   name: string
   email: string | null
   role: string
