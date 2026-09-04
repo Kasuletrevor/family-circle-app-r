@@ -50,6 +50,10 @@ export interface VaultOpenPort {
   openPath(absolutePath: string): Promise<string>
 }
 
+export interface VaultIndexQueue {
+  queueDocument(localUserId: number, documentId: number): void
+}
+
 export interface VaultRepositoryPort {
   findByHash(localUserId: number, sha256: string): Promise<VaultDocumentInternal | null>
   insertStoredDocument(input: InsertStoredDocumentInput): Promise<VaultDocumentInternal>
@@ -81,6 +85,7 @@ interface VaultServiceDependencies {
   fileStore: VaultFileStorePort
   extractor: VaultDocumentExtractorPort
   opener: VaultOpenPort
+  indexQueue?: VaultIndexQueue
   validateDocument?: (sourcePath: string) => Promise<ValidatedSelectedDocument>
   hashFile?: (sourcePath: string) => Promise<string>
 }
@@ -222,6 +227,7 @@ export class VaultService {
           const absolutePath = this.dependencies.fileStore.resolveOwnedPath(user.id, storedRelativePath)
           const extracted = await this.dependencies.extractor.extract(absolutePath, validated.fileType)
           await this.dependencies.repository.markExtractionSuccess(user.id, storedDocument.id, extracted)
+          this.queueIndexing(user.id, storedDocument.id)
           items.push({ fileName: displayName, outcome: 'uploaded', documentId: storedDocument.id })
         } catch (error) {
           const code = errorCode(error)
@@ -268,6 +274,7 @@ export class VaultService {
       const absolutePath = this.dependencies.fileStore.resolveOwnedPath(user.id, row.storedRelativePath)
       const extracted = await this.dependencies.extractor.extract(absolutePath, row.fileType)
       await this.dependencies.repository.markExtractionSuccess(user.id, id, extracted)
+      this.queueIndexing(user.id, id)
     } catch {
       await this.dependencies.repository.markExtractionFailure(user.id, id, 'extraction-failed')
       throw new VaultServiceError('extraction-failed', 'Document text extraction failed')
@@ -302,6 +309,14 @@ export class VaultService {
     }
 
     return { success: true }
+  }
+
+  private queueIndexing(localUserId: number, documentId: number): void {
+    try {
+      this.dependencies.indexQueue?.queueDocument(localUserId, documentId)
+    } catch {
+      // Indexing is background-only. A queue failure must never turn a healthy upload into a failure.
+    }
   }
 
   private async requireUser(): Promise<AuthUser> {
