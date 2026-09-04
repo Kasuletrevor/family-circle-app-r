@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a fully usable, private local Vault with multi-file PDF/DOCX/TXT upload, extraction, listing, open/retry/delete, and truthful AI-readiness status without requiring Private AI to be installed.
+**Goal:** Ship a fully usable private Vault with multi-file PDF/DOCX/TXT upload, extraction, listing, open/retry/delete, and truthful AI-readiness status without requiring Private AI.
 
-**Architecture:** Renderer Vault UI talks only to a typed `DesktopVaultClient`, which calls a narrow preload API. Electron main restores the protected local session and owns file selection, user-scoped AppData storage, SHA-256 duplicate detection, extraction, SQLite persistence, opening, deletion and recovery. This plan deliberately does not start or download any model; successful extraction ends at `waiting_for_ai` so the next plan can index without changing the document model.
+**Architecture:** React talks only to `DesktopVaultClient` and the typed preload API. Electron main restores the protected local session and owns the file picker, AppData storage, hashing, duplicate/name handling, extraction and deletion recovery. This plan deliberately does not start or download models; successful extraction ends at `waiting_for_ai` for the linked RAG plan.
 
 **Tech Stack:** Electron 44.1.1, TypeScript 7.0.2, Node 24, `node:sqlite`, `node:fs`, `node:crypto`, React 19.2.7, Vitest 4.1.11, `pdf-parse@2.4.5`, `mammoth@1.12.2`.
 
@@ -12,23 +12,22 @@
 
 ## Global Constraints
 
-- Initial supported document formats are **PDF, DOCX and TXT only**.
-- Initial maximum selected file size is **50 MiB per document** (`50 * 1024 * 1024`).
-- Vault ownership is the authenticated **local user ID**, never the active Circle or shared server user ID.
-- Upload, storage and text extraction must work in every Private AI state; AI absence is not an upload failure.
-- Successfully extracted documents in this plan end with `indexStatus: 'waiting_for_ai'`.
-- The renderer never receives source paths, stored relative paths, extracted full text, SHA-256 values, SQLite paths or arbitrary filesystem destinations.
-- File selection is owned by Electron main through `dialog.showOpenDialog`; React never supplies source paths.
-- Duplicate identity is `(local_user_id, sha256)`. Same bytes are rejected as already present; same filename with different bytes is retained as a separate document.
-- Multi-file upload is independent per file: one failure never rolls back another file.
-- No document bytes/text are sent to Jose's Circle API, a cloud API, or a model service.
-- No optimistic deletion or extraction success: renderer state is refreshed from authoritative main-process data after operations.
-- Existing auth/Circle behavior and database-copy migration semantics must remain unchanged.
-- CI must run on `feature/vault-private-ai` before the first RED/GREEN application checkpoint.
+- Supported formats: **PDF, DOCX, TXT only**.
+- Maximum file size: **50 MiB** per selected document.
+- Vault ownership is authenticated local `AuthUser.id`, never active Circle/shared server identity.
+- Upload/storage/extraction work in every Private AI state.
+- Successful extraction ends at `indexStatus: 'waiting_for_ai'`.
+- Renderer never receives source/stored paths, full extracted text, SHA-256, SQLite paths or arbitrary filesystem destinations.
+- Electron main owns `dialog.showOpenDialog`; React never submits a path.
+- Duplicate identity is `(local_user_id, sha256)`.
+- Same bytes: return `already-exists`, no second copy. Same filename/different bytes: keep both and display `Name (2).ext`, `Name (3).ext`, etc.
+- Multi-file failures are independent.
+- No document bytes/text leave the machine or touch Jose's Circle adapter.
+- Existing auth/Circle migrations and behavior remain unchanged.
 
 ---
 
-### Task 1: Vault schema, internal models and repository
+### Task 1: Schema, internal models and repository
 
 **Files:**
 - Modify: `.github/workflows/desktop-shell-ci.yml`
@@ -39,91 +38,38 @@
 - Create: `src/main/vault/VaultRepository.test.ts`
 
 **Interfaces:**
-- Consumes: existing `DatabaseSync`, users table and foreign-key/WAL setup.
-- Produces:
-  - `VaultDocumentInternal`
-  - `VaultExtractionStatus = 'pending' | 'extracting' | 'ready' | 'failed'`
-  - `VaultIndexStatus = 'not_indexed' | 'waiting_for_ai' | 'indexing' | 'indexed' | 'failed'`
-  - `VaultRepository.findByHash(localUserId, sha256)`
-  - `VaultRepository.insertStoredDocument(input)`
-  - `VaultRepository.getByIdForUser(documentId, localUserId)`
-  - `VaultRepository.listByUser(localUserId)`
-  - `VaultRepository.listPendingDeletions(localUserId)`
-  - `VaultRepository.markExtracting(...)`
-  - `VaultRepository.markExtractionReady(...)`
-  - `VaultRepository.markExtractionFailed(...)`
-  - `VaultRepository.markDeletePending(...)`
-  - `VaultRepository.markDeleteFailed(...)`
-  - `VaultRepository.deleteByIdForUser(...)`
+- Produces `VaultDocumentInternal`, extraction/index/delete status types, and repository methods `findByHash`, `insertStoredDocument`, `getByIdForUser`, `listByUser`, `listPendingDeletions`, extraction updates, delete-status updates and `deleteByIdForUser`.
 
-- [ ] **Step 1: Enable push CI for this feature branch**
+- [ ] **Step 1: Enable branch CI**
 
-Add the branch to `.github/workflows/desktop-shell-ci.yml`:
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-      - feature/desktop-shell
-      - feature/auth-onboarding
-      - feature/real-circle-home
-      - feature/circles-create-invite
-      - feature/circle-members-invitations
-      - feature/vault-private-ai
-```
-
-Commit this configuration-only change first so every later RED/GREEN commit generates evidence.
+Add `feature/vault-private-ai` under `on.push.branches` in `.github/workflows/desktop-shell-ci.yml` and commit it alone:
 
 ```bash
 git add .github/workflows/desktop-shell-ci.yml
 git commit -m "ci: verify Vault feature branch"
 ```
 
-- [ ] **Step 2: Write failing migration tests**
+- [ ] **Step 2: Write migration RED tests**
 
-Extend `src/main/database/migrations.test.ts` to prove a fresh DB and an upgraded legacy DB both contain `vault_documents` without changing existing user data.
+Assert `vault_documents` contains:
 
-Required schema assertions:
-
-```ts
-const columns = db.prepare('PRAGMA table_info(vault_documents)').all() as Array<{ name: string }>
-expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
-  'id',
-  'local_user_id',
-  'file_name',
-  'file_type',
-  'mime_type',
-  'size_bytes',
-  'sha256',
-  'stored_relative_path',
-  'extraction_status',
-  'index_status',
-  'word_count',
-  'preview',
-  'extracted_text',
-  'last_error_code',
-  'delete_status',
-  'uploaded_at',
-  'updated_at',
-]))
+```text
+id, local_user_id, file_name, file_type, mime_type, size_bytes, sha256,
+stored_relative_path, extraction_status, index_status, word_count, preview,
+extracted_text, last_error_code, delete_status, uploaded_at, updated_at
 ```
 
-Also assert the unique index on `(local_user_id, sha256)` and the foreign key to `users(id)` with `ON DELETE CASCADE`.
-
-Run:
+Also assert `UNIQUE(local_user_id, sha256)` and FK `local_user_id -> users(id) ON DELETE CASCADE`, while a legacy user row survives migration unchanged.
 
 ```bash
 npm test -- src/main/database/migrations.test.ts
 ```
 
-Expected: FAIL because `vault_documents` does not exist.
+Expected: FAIL because the table does not exist.
 
-- [ ] **Step 3: Implement the migration**
+- [ ] **Step 3: Implement migration**
 
-Add an `ensureVaultDocuments(db)` helper in `src/main/database/migrations.ts` and invoke it inside the existing migration transaction.
-
-Use this schema:
+Inside the existing migration transaction create:
 
 ```sql
 CREATE TABLE IF NOT EXISTS vault_documents (
@@ -153,235 +99,127 @@ CREATE INDEX IF NOT EXISTS idx_vault_documents_pending_delete
   ON vault_documents(local_user_id, delete_status);
 ```
 
-Do not rebuild or rename the existing users table.
-
-- [ ] **Step 4: Write failing repository tests**
-
-Create `src/main/vault/VaultRepository.test.ts` using an in-memory `DatabaseSync(':memory:')` and `runMigrations(db)`.
+- [ ] **Step 4: Write repository RED tests**
 
 Cover:
 
 ```ts
-it('scopes records to the local user')
-it('finds exact-byte duplicates only inside the same user')
-it('stores extraction success without exposing another user row')
-it('stores extraction failure with a stable error code')
-it('marks and lists pending deletions')
-it('deletes only when document id and local user id match')
+it('scopes rows to the local user')
+it('finds duplicate hashes only for that user')
+it('allows another user to own the same hash')
+it('stores extraction success and failure')
+it('lists pending deletions')
+it('cannot delete by id without the matching local user')
 ```
 
-The duplicate test must prove two different local users may independently own the same SHA-256.
-
-Run:
+Expected RED:
 
 ```bash
 npm test -- src/main/vault/VaultRepository.test.ts
 ```
 
-Expected: FAIL because the repository does not exist.
+- [ ] **Step 5: Implement repository and internal models**
 
-- [ ] **Step 5: Implement internal models and repository**
-
-Create `src/main/vault/vaultModels.ts`:
+`vaultModels.ts`:
 
 ```ts
 export type VaultFileType = 'pdf' | 'docx' | 'txt'
 export type VaultExtractionStatus = 'pending' | 'extracting' | 'ready' | 'failed'
 export type VaultIndexStatus = 'not_indexed' | 'waiting_for_ai' | 'indexing' | 'indexed' | 'failed'
 export type VaultDeleteStatus = 'active' | 'pending'
-
-export interface VaultDocumentInternal {
-  id: number
-  localUserId: number
-  fileName: string
-  fileType: VaultFileType
-  mimeType: string
-  sizeBytes: number
-  sha256: string
-  storedRelativePath: string
-  extractionStatus: VaultExtractionStatus
-  indexStatus: VaultIndexStatus
-  wordCount: number
-  preview: string | null
-  extractedText: string | null
-  lastErrorCode: string | null
-  deleteStatus: VaultDeleteStatus
-  uploadedAt: number
-  updatedAt: number
-}
 ```
 
-Implement `VaultRepository` with parameterized SQL only. Row mapping stays in this main-process file and never crosses preload.
+`VaultDocumentInternal` contains every DB field, including `localUserId`, `sha256`, `storedRelativePath` and `extractedText`; it is main-only.
 
-Extraction-success update must be exact:
+Extraction success SQL must set:
 
-```sql
-UPDATE vault_documents
-   SET extraction_status = 'ready',
-       index_status = 'waiting_for_ai',
-       extracted_text = ?,
-       word_count = ?,
-       preview = ?,
-       last_error_code = NULL,
-       updated_at = ?
- WHERE id = ? AND local_user_id = ?
+```text
+extraction_status='ready'
+index_status='waiting_for_ai'
+extracted_text=<text>
+word_count=<count>
+preview=<preview>
+last_error_code=NULL
 ```
 
-- [ ] **Step 6: Verify Task 1 green and commit**
+All SQL is parameterized.
 
-Run:
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/database/migrations.test.ts src/main/vault/VaultRepository.test.ts
 npm run typecheck
-```
-
-Expected: PASS.
-
-```bash
-git add src/main/database/migrations.ts src/main/database/migrations.test.ts src/main/vault/vaultModels.ts src/main/vault/VaultRepository.ts src/main/vault/VaultRepository.test.ts
+git add src/main/database src/main/vault/vaultModels.ts src/main/vault/VaultRepository.ts src/main/vault/VaultRepository.test.ts
 git commit -m "feat: add private Vault document persistence"
 ```
 
 ---
 
-### Task 2: Private file store and PDF/DOCX/TXT extraction
+### Task 2: Private file store and text extraction
 
 **Files:**
-- Modify: `package.json`
-- Modify: `package-lock.json`
-- Create: `src/main/vault/VaultFileStore.ts`
-- Create: `src/main/vault/VaultFileStore.test.ts`
-- Create: `src/main/vault/DocumentExtractor.ts`
-- Create: `src/main/vault/DocumentExtractor.test.ts`
+- Modify: `package.json`, `package-lock.json`
+- Create: `src/main/vault/VaultFileStore.ts`, `VaultFileStore.test.ts`
+- Create: `src/main/vault/DocumentExtractor.ts`, `DocumentExtractor.test.ts`
 
 **Interfaces:**
-- Consumes: `VaultFileType` from Task 1.
-- Produces:
-  - `MAX_VAULT_FILE_BYTES = 50 * 1024 * 1024`
-  - `validateSelectedDocument(sourcePath): Promise<SelectedVaultFile>`
-  - `sha256File(sourcePath): Promise<string>`
-  - `VaultFileStore.copyIntoVault(input): Promise<{ storedRelativePath: string; absolutePath: string }>`
-  - `VaultFileStore.resolveOwnedPath(localUserId, storedRelativePath): string`
-  - `VaultFileStore.deleteOwnedFile(localUserId, storedRelativePath): Promise<void>`
-  - `DocumentExtractor.extract(absolutePath, fileType): Promise<ExtractedDocument>`
+- Produces `MAX_VAULT_FILE_BYTES`, `validateSelectedDocument`, `sha256File`, `VaultFileStore.copyIntoVault/resolveOwnedPath/deleteOwnedFile`, `DocumentExtractor.extract`.
 
-- [ ] **Step 1: Install only the parser dependencies required by this slice**
+- [ ] **Step 1: Add only required parser dependencies**
 
 ```bash
 npm install pdf-parse@2.4.5 mammoth@1.12.2
 ```
 
-`pdf-parse@2.4.5` supports Node 24 and has TypeScript declarations; use its v2 `PDFParse` API. Do not add OCR, image, audio, vector-database or AI dependencies here.
+Do not add OCR/audio/vector/AI packages.
 
-- [ ] **Step 2: Write failing file-store tests**
-
-Create temp-directory tests covering:
+- [ ] **Step 2: Write file-store RED tests**
 
 ```ts
-it('accepts a valid txt file under 50 MiB')
+it('accepts valid txt under 50 MiB')
 it('rejects unsupported extensions')
-it('rejects a file larger than 50 MiB before extraction')
-it('requires a PDF header for .pdf files')
-it('requires a ZIP signature for .docx files')
-it('hashes the file with SHA-256')
-it('copies into vault/users/<id>/documents using a generated storage name')
-it('refuses stored-relative-path traversal outside the user root')
-it('treats ENOENT as successful cleanup during retryable deletion')
+it('rejects >50 MiB before extraction')
+it('checks %PDF- header for pdf')
+it('checks PK zip signature for docx')
+it('streams SHA-256 hashing')
+it('stores under vault/users/<id>/documents with random storage name')
+it('rejects relative-path traversal outside the user root')
+it('treats ENOENT as successful cleanup')
 ```
 
-Run:
-
-```bash
-npm test -- src/main/vault/VaultFileStore.test.ts
-```
-
-Expected: FAIL because `VaultFileStore` does not exist.
-
-- [ ] **Step 3: Implement file validation, hashing and private storage**
-
-Use `node:fs/promises`, `createReadStream`, `createHash('sha256')`, `randomUUID()` and `node:path`.
+- [ ] **Step 3: Implement validation/storage**
 
 Supported mapping:
 
 ```ts
-const SUPPORTED = {
-  '.pdf': { fileType: 'pdf', mimeType: 'application/pdf' },
-  '.docx': { fileType: 'docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-  '.txt': { fileType: 'txt', mimeType: 'text/plain' },
-} as const
+'.pdf'  -> { fileType: 'pdf',  mimeType: 'application/pdf' }
+'.docx' -> { fileType: 'docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+'.txt'  -> { fileType: 'txt',  mimeType: 'text/plain' }
 ```
 
-Validation rules:
-
-```ts
-if (sizeBytes > MAX_VAULT_FILE_BYTES) throw new VaultFileError('too-large')
-if (extension === '.pdf' && !header.startsWith('%PDF-')) throw new VaultFileError('unsupported')
-if (extension === '.docx' && firstTwoBytes !== 'PK') throw new VaultFileError('unsupported')
-```
-
-Storage root is injected as the Electron `userDataPath`; a user document directory is:
+Store at:
 
 ```ts
 join(userDataPath, 'vault', 'users', String(localUserId), 'documents')
 ```
 
-Persist only a relative path such as:
+Persist only paths relative to `userDataPath`; generated storage names use `randomUUID()` plus the validated extension.
 
-```text
-vault/users/42/documents/3b0b6...pdf
-```
-
-`resolveOwnedPath()` must normalize and reject any path that escapes `vault/users/<localUserId>/`.
-
-- [ ] **Step 4: Write failing extraction tests**
-
-Create `DocumentExtractor.test.ts` covering:
+- [ ] **Step 4: Write extractor RED tests**
 
 ```ts
-it('extracts UTF-8 TXT and returns word count and preview')
-it('normalizes repeated whitespace for preview without altering stored text')
-it('uses Mammoth raw-text extraction for DOCX')
-it('uses PDFParse.getText for PDF and always destroys the parser')
-it('rejects empty/unreadable extraction with a stable extraction-failed error')
+it('extracts UTF-8 txt')
+it('computes word count and <=240-char preview')
+it('uses mammoth.extractRawText for docx')
+it('uses PDFParse.getText and always destroy() for pdf')
+it('maps empty/parser failures to extraction-failed')
 ```
 
-Use dependency injection for PDF/DOCX parser functions so unit tests do not need binary fixtures.
-
-Run:
-
-```bash
-npm test -- src/main/vault/DocumentExtractor.test.ts
-```
-
-Expected: FAIL because the extractor does not exist.
+Inject PDF/DOCX parser functions in tests; no binary fixtures required.
 
 - [ ] **Step 5: Implement extraction**
 
-Public result:
-
-```ts
-export interface ExtractedDocument {
-  text: string
-  wordCount: number
-  preview: string
-}
-```
-
-TXT:
-
-```ts
-const text = (await readFile(filePath, 'utf8')).trim()
-```
-
-DOCX default parser:
-
-```ts
-const result = await mammoth.extractRawText({ buffer: await readFile(filePath) })
-const text = result.value.trim()
-```
-
-PDF default parser:
+TXT uses `readFile(..., 'utf8')`; DOCX uses `mammoth.extractRawText({buffer})`; PDF uses:
 
 ```ts
 const parser = new PDFParse({ data: await readFile(filePath) })
@@ -393,386 +231,232 @@ try {
 }
 ```
 
-Preview is at most 240 characters. Empty extracted text is a stable `extraction-failed`, not a raw parser error.
+Store original extracted text; normalize whitespace only for preview.
 
-- [ ] **Step 6: Verify Task 2 green and commit**
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/vault/VaultFileStore.test.ts src/main/vault/DocumentExtractor.test.ts
 npm run typecheck
 npm audit --audit-level=high
-```
-
-Expected: PASS and no high/critical dependency findings.
-
-```bash
-git add package.json package-lock.json src/main/vault/VaultFileStore.ts src/main/vault/VaultFileStore.test.ts src/main/vault/DocumentExtractor.ts src/main/vault/DocumentExtractor.test.ts
+git add package.json package-lock.json src/main/vault/VaultFileStore* src/main/vault/DocumentExtractor*
 git commit -m "feat: add local Vault file storage and extraction"
 ```
 
 ---
 
-### Task 3: Session-scoped Vault service and recovery semantics
+### Task 3: Session-scoped Vault service and deletion recovery
 
 **Files:**
-- Create: `src/main/vault/VaultService.ts`
-- Create: `src/main/vault/VaultService.test.ts`
+- Create: `src/main/vault/VaultService.ts`, `VaultService.test.ts`
 
 **Interfaces:**
-- Consumes: `VaultRepository`, `VaultFileStore`, `DocumentExtractor`, protected `SessionStore.restore()` semantics.
-- Produces:
-  - `VaultSessionSource`
-  - `VaultFilePicker`
-  - `VaultOpenPort`
-  - `VaultService.listDocuments()`
-  - `VaultService.chooseAndUploadDocuments(onProgress?)`
-  - `VaultService.openDocument(documentId)`
-  - `VaultService.retryExtraction(documentId)`
-  - `VaultService.deleteDocument(documentId)`
-  - safe document/result/progress types later exported from shared contract in Task 4.
-
-- [ ] **Step 1: Write failing service tests for authentication and ownership**
-
-Cover:
 
 ```ts
-it('requires a protected local session for every Vault operation')
-it('lists only documents owned by the restored local user')
-it('cannot open another local user document by guessing its id')
-it('cannot retry extraction for another local user')
-it('cannot delete another local user document')
+interface VaultSessionSource { restore(): Promise<AuthUser | null> }
+interface VaultFilePicker { chooseDocuments(): Promise<string[]> }
+interface VaultOpenPort { openPath(absolutePath: string): Promise<string> }
 ```
 
-The renderer never supplies `localUserId`; every method derives it from `sessions.restore()`.
+Produces `listDocuments`, `chooseAndUploadDocuments`, `openDocument`, `retryExtraction`, `deleteDocument`.
 
-- [ ] **Step 2: Write failing upload-flow tests**
-
-Use fake picker/file-store/extractor/repository ports and cover:
+- [ ] **Step 1: Write auth/ownership RED tests**
 
 ```ts
-it('returns canceled when the picker selects no files')
-it('uploads multiple selected files independently')
-it('rejects exact-byte duplicate before copying')
-it('keeps same-name different-content documents')
-it('cleans a copied file if inserting its DB row fails')
-it('keeps the stored source when extraction fails')
-it('marks successful extraction waiting_for_ai without checking model readiness')
-it('emits validating, saving, extracting and done progress without paths')
+it('requires a protected session for every operation')
+it('never accepts renderer localUserId')
+it('lists only the restored user documents')
+it('cannot open/retry/delete another user document by guessed id')
 ```
 
-Safe per-file outcome union:
+- [ ] **Step 2: Write upload RED tests including approved name collision**
 
 ```ts
-type VaultUploadOutcome =
-  | 'uploaded'
-  | 'already-exists'
-  | 'unsupported'
-  | 'too-large'
-  | 'extraction-failed'
-  | 'failed'
+it('returns canceled when no files are selected')
+it('processes multiple files independently')
+it('rejects exact-byte duplicate before copy')
+it('keeps same-name different bytes as separate documents')
+it('renames display collision Family History.pdf -> Family History (2).pdf')
+it('increments collision Family History (2).pdf -> Family History (3).pdf')
+it('cleans copied file if DB insert fails')
+it('keeps stored source when extraction fails')
+it('marks extraction success waiting_for_ai without checking model readiness')
+it('emits safe validating/saving/extracting/done progress')
 ```
 
-- [ ] **Step 3: Implement session-scoped ingestion**
-
-Define:
+Implement a pure helper:
 
 ```ts
-export interface VaultSessionSource {
-  restore(): Promise<AuthUser | null>
-}
-
-export interface VaultFilePicker {
-  chooseDocuments(): Promise<string[]>
-}
-
-export interface VaultOpenPort {
-  openPath(absolutePath: string): Promise<string>
-}
+uniqueDisplayName(originalName: string, existingNames: ReadonlySet<string>): string
 ```
 
-`chooseAndUploadDocuments()` must:
+Case-insensitive comparison on Windows-style names. Preserve extension; append ` (2)`, ` (3)` before it.
+
+- [ ] **Step 3: Implement ingestion**
+
+For each selected file:
 
 ```text
-restore session once for the operation
--> picker returns paths
--> for each path:
-   validate
-   hash
-   repository.findByHash(user.id, hash)
-   if duplicate: safe already-exists result
-   copy to private store
-   insert row with extraction_status='extracting', index_status='not_indexed'
-   extract
-   on success mark ready + waiting_for_ai
-   on extraction failure keep source + mark extraction failed
--> return every file outcome
+validate -> hash -> findByHash(user.id, hash)
+-> if duplicate return already-exists
+-> derive unique display name from repository.listByUser(user.id)
+-> copy private source
+-> insert extracting row
+-> extract
+-> success: ready + waiting_for_ai
+-> extraction failure: keep file + failed row
 ```
 
-Do not make any model/runtime/status call in this plan.
+Safe outcomes are `uploaded | already-exists | unsupported | too-large | extraction-failed | failed`.
 
-- [ ] **Step 4: Write failing open/retry/delete recovery tests**
-
-Cover:
+- [ ] **Step 4: Write open/retry/delete RED tests**
 
 ```ts
-it('opens a document only after resolving its owned path in main')
-it('maps shell.openPath non-empty response to a safe open-failed error')
-it('retry extraction reuses the stored source and resets a failed row on success')
-it('delete marks pending before filesystem removal')
-it('delete keeps metadata recoverable when filesystem removal fails')
-it('listDocuments repairs a previous pending deletion after the source file is already gone')
+it('opens only resolved owned path')
+it('maps shell.openPath error string to open-failed')
+it('retry re-extracts stored source')
+it('marks delete pending before file removal')
+it('keeps row retryable on file-delete failure')
+it('repairs a pending delete when file is already gone')
 ```
 
-- [ ] **Step 5: Implement open/retry/delete and pending-delete repair**
-
-Deletion order:
+- [ ] **Step 5: Implement deletion recovery**
 
 ```text
-load owned row
--> mark delete_status='pending'
--> delete source file (ENOENT counts as already deleted)
--> delete DB row for (id, local_user_id)
+owned row -> mark pending -> delete file (ENOENT succeeds) -> delete DB row
 ```
 
-If filesystem deletion fails, call `markDeleteFailed()` so the row remains visible/retryable with stable `last_error_code='delete-failed'`.
+On filesystem failure, reset to active and set stable `delete-failed`. If DB deletion fails after file deletion, row remains pending; `listDocuments()` starts by repairing pending rows and then returns authoritative active documents.
 
-If DB deletion fails after the file was removed, the row remains pending. At the start of `listDocuments()`, `recoverPendingDeletions(userId)` retries the file cleanup (ENOENT succeeds) and removes the row. This is the required crash/partial-delete recovery path.
-
-- [ ] **Step 6: Verify Task 3 green and commit**
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
 npm test -- src/main/vault/VaultService.test.ts
 npm run typecheck
-```
-
-Expected: PASS.
-
-```bash
-git add src/main/vault/VaultService.ts src/main/vault/VaultService.test.ts
+git add src/main/vault/VaultService*
 git commit -m "feat: add protected Vault service"
 ```
 
 ---
 
-### Task 4: Typed Vault IPC, preload API and safe progress subscription
+### Task 4: Typed IPC/preload and safe progress subscriptions
 
 **Files:**
 - Modify: `src/shared/desktopApi.ts`
-- Modify: `src/preload/createDesktopApi.ts`
-- Modify: `src/preload/createDesktopApi.test.ts`
-- Modify: `src/preload/preload.ts`
-- Create: `src/main/vault/vaultIpc.ts`
-- Create: `src/main/vault/vaultIpc.test.ts`
+- Modify: `src/preload/createDesktopApi.ts`, `createDesktopApi.test.ts`, `preload.ts`
+- Create: `src/main/vault/vaultIpc.ts`, `vaultIpc.test.ts`
 - Modify: `src/main/main.ts`
 
 **Interfaces:**
-- Consumes: `VaultService` methods from Task 3.
-- Produces public safe DTOs and `window.familyCircle.vault` methods.
 
-- [ ] **Step 1: Write failing public-contract/preload tests**
-
-Add these safe public types to the test expectations:
+Public `VaultDocumentSummary` contains only:
 
 ```ts
-export type VaultExtractionStatus = 'pending' | 'extracting' | 'ready' | 'failed'
-export type VaultIndexStatus = 'not_indexed' | 'waiting_for_ai' | 'indexing' | 'indexed' | 'failed'
-
-export interface VaultDocumentSummary {
-  id: number
-  fileName: string
-  fileType: 'pdf' | 'docx' | 'txt'
-  sizeBytes: number
-  extractionStatus: VaultExtractionStatus
-  indexStatus: VaultIndexStatus
-  wordCount: number
-  preview: string | null
-  issue: 'extraction-failed' | 'delete-failed' | null
-  uploadedAt: number
-}
+id, fileName, fileType, sizeBytes, extractionStatus, indexStatus,
+wordCount, preview, issue, uploadedAt
 ```
 
-Public API:
+Public Vault API:
 
 ```ts
-vault: {
-  listDocuments(): Promise<VaultDocumentSummary[]>
-  chooseAndUploadDocuments(): Promise<VaultUploadBatchResult>
-  openDocument(input: { documentId: number }): Promise<{ success: true }>
-  retryExtraction(input: { documentId: number }): Promise<VaultDocumentSummary>
-  deleteDocument(input: { documentId: number }): Promise<{ success: true }>
-  onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
-}
+listDocuments(): Promise<VaultDocumentSummary[]>
+chooseAndUploadDocuments(): Promise<VaultUploadBatchResult>
+openDocument({ documentId }): Promise<{ success: true }>
+retryExtraction({ documentId }): Promise<VaultDocumentSummary>
+deleteDocument({ documentId }): Promise<{ success: true }>
+onUploadProgress(listener): () => void
 ```
 
-Assert the public types do **not** include `localUserId`, `sha256`, `storedRelativePath`, `sourcePath`, `absolutePath` or `extractedText`.
+- [ ] **Step 1: Write preload/public-contract RED tests**
 
-- [ ] **Step 2: Extend `createDesktopApi` for invoke + subscriptions**
+Reject presence of `localUserId`, `sha256`, `storedRelativePath`, `sourcePath`, `absolutePath`, `extractedText` in public DTOs/results.
 
-Change the factory signature to:
+Extend `createDesktopApi` to accept:
 
 ```ts
-type Subscribe = (channel: DesktopEventChannel, listener: (payload: unknown) => void) => () => void
-
-export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = () => () => {}): DesktopApi
+type Subscribe = (channel: 'vault:upload-progress', listener: (payload: unknown) => void) => () => void
 ```
 
-Add channels:
+- [ ] **Step 2: Write IPC RED tests**
+
+Channels:
+
+```text
+vault:list
+vault:choose-and-upload
+vault:open
+vault:retry-extraction
+vault:delete
+```
+
+IPC must reconstruct numeric `documentId`; extra renderer fields like `localUserId`, `path`, `sha256` are discarded. Progress event contains only file index/count/name/stage/percent.
+
+- [ ] **Step 3: Implement preload subscription**
+
+`preload.ts` wraps `ipcRenderer.on` and returns an unsubscribe removing the exact listener. No event object crosses context bridge.
+
+- [ ] **Step 4: Wire main service**
+
+Construct one `VaultRepository`, `VaultFileStore(userDataPath)`, `DocumentExtractor`, `VaultService`. Picker:
 
 ```ts
-| 'vault:list'
-| 'vault:choose-and-upload'
-| 'vault:open'
-| 'vault:retry-extraction'
-| 'vault:delete'
+const result = await dialog.showOpenDialog({
+  properties: ['openFile', 'multiSelections'],
+  filters: [{ name: 'Documents', extensions: ['pdf', 'docx', 'txt'] }],
+})
+return result.canceled ? [] : result.filePaths
 ```
 
-and event channel:
+Open port uses `shell.openPath`.
 
-```ts
-type DesktopEventChannel = 'vault:upload-progress'
-```
-
-The preload implementation uses `ipcRenderer.on` and removes the exact listener on unsubscribe.
-
-- [ ] **Step 3: Write failing IPC tests**
-
-Create `vaultIpc.test.ts` with a fake IPC registrar and fake service. Prove:
-
-```ts
-it('registers the five Vault request channels')
-it('passes only numeric documentId business input')
-it('does not accept renderer-supplied localUserId or path fields')
-it('sends only sanitized VaultUploadProgress events')
-```
-
-For input sanitization, handlers reconstruct payloads:
-
-```ts
-const documentId = Number((payload as { documentId?: unknown })?.documentId)
-return service.openDocument(documentId)
-```
-
-No arbitrary payload object is forwarded to the service.
-
-- [ ] **Step 4: Implement IPC and wire production dependencies in main**
-
-In `main.ts`, import `dialog` and `shell` and construct:
-
-```ts
-const vaultRepository = new VaultRepository(database)
-const vaultFiles = new VaultFileStore(userDataPath)
-const extractor = new DocumentExtractor()
-const vaultService = new VaultService(
-  sessions,
-  vaultRepository,
-  vaultFiles,
-  extractor,
-  {
-    async chooseDocuments() {
-      const result = await dialog.showOpenDialog({
-        properties: ['openFile', 'multiSelections'],
-        filters: [{ name: 'Documents', extensions: ['pdf', 'docx', 'txt'] }],
-      })
-      return result.canceled ? [] : result.filePaths
-    },
-  },
-  { openPath: (filePath) => shell.openPath(filePath) },
-)
-```
-
-Return `vaultService` from `createAppServices()` and pass it to `registerDesktopIpc(...)`.
-
-- [ ] **Step 5: Verify Task 4 green and commit**
+- [ ] **Step 5: GREEN gate + commit**
 
 ```bash
 npm test -- src/preload/createDesktopApi.test.ts src/main/vault/vaultIpc.test.ts
 npm run typecheck
 npm run build:electron
-```
-
-Expected: PASS.
-
-```bash
-git add src/shared/desktopApi.ts src/preload/createDesktopApi.ts src/preload/createDesktopApi.test.ts src/preload/preload.ts src/main/vault/vaultIpc.ts src/main/vault/vaultIpc.test.ts src/main/main.ts
+git add src/shared/desktopApi.ts src/preload src/main/vault/vaultIpc* src/main/main.ts
 git commit -m "feat: expose safe Vault desktop API"
 ```
 
 ---
 
-### Task 5: DesktopVaultClient and real Vault UI
+### Task 5: DesktopVaultClient and real `/vault` UI
 
 **Files:**
-- Create: `src/renderer/services/vault/VaultClient.ts`
-- Create: `src/renderer/services/vault/DesktopVaultClient.ts`
-- Create: `src/renderer/services/vault/DesktopVaultClient.test.ts`
-- Create: `src/renderer/features/vault/Vault.tsx`
-- Create: `src/renderer/features/vault/Vault.css`
-- Create: `src/renderer/features/vault/Vault.test.tsx`
-- Create: `src/renderer/features/vault/VaultDeleteDialog.tsx`
-- Create: `src/renderer/features/vault/VaultDeleteDialog.test.tsx`
-- Modify: `src/renderer/app/App.tsx`
-- Modify: `src/renderer/app/App.test.tsx`
+- Create: `src/renderer/services/vault/VaultClient.ts`, `DesktopVaultClient.ts`, `DesktopVaultClient.test.ts`
+- Create: `src/renderer/features/vault/Vault.tsx`, `Vault.css`, `Vault.test.tsx`
+- Create: `src/renderer/features/vault/VaultDeleteDialog.tsx`, `VaultDeleteDialog.test.tsx`
+- Modify: `src/renderer/app/App.tsx`, `App.test.tsx`
 
-**Interfaces:**
-- Consumes: `window.familyCircle.vault` from Task 4.
-- Produces: real `/vault` document-management route.
+**Interfaces:** `VaultClient` mirrors the safe preload surface with numeric IDs only.
 
-- [ ] **Step 1: Write failing DesktopVaultClient tests**
+- [ ] **Step 1: Write DesktopVaultClient RED tests**
 
-Define:
-
-```ts
-export interface VaultClient {
-  listDocuments(): Promise<VaultDocumentSummary[]>
-  chooseAndUploadDocuments(): Promise<VaultUploadBatchResult>
-  openDocument(documentId: number): Promise<void>
-  retryExtraction(documentId: number): Promise<VaultDocumentSummary>
-  deleteDocument(documentId: number): Promise<void>
-  onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
-}
-```
-
-Tests must prove it calls only `window.familyCircle.vault`, forwards document IDs only, and clears its in-flight `listDocuments()` cache after upload/retry/delete success **or failure**.
-
-Run:
-
-```bash
-npm test -- src/renderer/services/vault/DesktopVaultClient.test.ts
-```
-
-Expected: FAIL because the client does not exist.
+Prove it is the only renderer path to `window.familyCircle.vault`, shares one in-flight list request, and invalidates list state in `finally` after upload/retry/delete.
 
 - [ ] **Step 2: Implement DesktopVaultClient**
 
-Use the same request-sharing pattern as `DesktopCircleClient`: one in-flight list promise, cleared when resolved/rejected. Mutations clear the list cache in `finally`.
+Follow `DesktopCircleClient` request-sharing style; no production mock fallback.
 
-- [ ] **Step 3: Write failing Vault UI tests**
-
-Cover:
+- [ ] **Step 3: Write Vault UI RED tests**
 
 ```ts
-it('shows a private local Vault empty state')
-it('uploads through the client and refreshes authoritative documents')
-it('renders PDF/DOCX/TXT metadata and truthful extraction/index states')
-it('shows Ready for Private AI for waiting_for_ai documents')
-it('shows per-file upload progress without filesystem paths')
-it('shows Retry extraction only for extraction failures')
-it('opens a document through the client')
-it('requires confirmation before delete')
-it('keeps a failed delete visible with stable safe copy')
-it('does not disable Upload documents because AI is unavailable')
+it('shows private local empty state')
+it('uploads and re-reads authoritative list')
+it('renders file type/size/word count/status')
+it('shows Ready for Private AI for waiting_for_ai')
+it('shows safe per-file progress')
+it('shows Retry extraction only for extraction failure')
+it('opens through client')
+it('confirms before delete')
+it('keeps failed delete visible')
+it('never disables Upload because AI is absent')
 ```
 
-Approved empty-state copy:
+- [ ] **Step 4: Implement UI**
 
-```text
-Your private Vault
-Keep family documents on this computer. You can add PDF, DOCX and TXT files now; Private AI can be set up later for searching and questions.
-```
-
-- [ ] **Step 4: Implement the Vault page and delete dialog**
-
-Header:
+Approved header:
 
 ```text
 Vault                                      Upload documents
@@ -781,137 +465,73 @@ Your private documents stay on this computer.
 
 Status mapping:
 
-```ts
-const indexCopy = {
-  not_indexed: 'Not indexed yet',
-  waiting_for_ai: 'Ready for Private AI',
-  indexing: 'Indexing...',
-  indexed: 'Ready to ask',
-  failed: 'AI indexing failed',
-}
+```text
+not_indexed -> Not indexed yet
+waiting_for_ai -> Ready for Private AI
+indexing -> Indexing...
+indexed -> Ready to ask
+failed -> AI indexing failed
 ```
 
-Extraction failure copy:
+Delete copy:
 
 ```text
-Stored, but text could not be extracted
-```
-
-Delete confirmation:
-
-```text
-Delete <file name>?
+Delete <file>?
 This removes the local file and its Vault data from this computer.
 Cancel | Delete document
 ```
 
-Do not add AI setup buttons yet; Plan 2 owns setup/indexing UX.
+Do not add AI setup controls in this plan.
 
-- [ ] **Step 5: Replace only the `/vault` placeholder route**
+- [ ] **Step 5: Route `/vault` only**
 
-In `App.tsx`, import `Vault`, add:
+Import/render `<Vault />`; remove `/vault` from placeholders. Keep `/ai` placeholder for the RAG plan.
 
-```tsx
-<Route path="/vault" element={<Vault />} />
-```
-
-and remove `/vault` from `placeholderRoutes`. Keep `/ai` as a placeholder until Plan 2.
-
-- [ ] **Step 6: Verify Task 5 green and commit**
+- [ ] **Step 6: GREEN gate + commit**
 
 ```bash
-npm test -- src/renderer/services/vault/DesktopVaultClient.test.ts src/renderer/features/vault/Vault.test.tsx src/renderer/features/vault/VaultDeleteDialog.test.tsx src/renderer/app/App.test.tsx
+npm test -- src/renderer/services/vault src/renderer/features/vault src/renderer/app/App.test.tsx
 npm run typecheck
 npm run build:renderer
-```
-
-Expected: PASS.
-
-```bash
-git add src/renderer/services/vault src/renderer/features/vault src/renderer/app/App.tsx src/renderer/app/App.test.tsx
+git add src/renderer/services/vault src/renderer/features/vault src/renderer/app/App*
 git commit -m "feat: add private local Vault UI"
 ```
 
 ---
 
-### Task 6: Vault security boundaries, recovery coverage, docs and final gate
+### Task 6: Security boundaries, recovery regression, docs and final gate
 
 **Files:**
 - Modify: `scripts/verify-boundaries.mjs`
 - Create: `src/main/vault/VaultSecurity.test.ts`
 - Modify: `README.md`
 
-**Interfaces:**
-- Consumes: complete Vault foundation.
-- Produces: mechanical privacy enforcement and merge-ready verification evidence.
+- [ ] **Step 1: Strengthen mechanical boundaries**
 
-- [ ] **Step 1: Write failing boundary/security assertions**
-
-Extend `verify-boundaries.mjs` with Vault-specific rules.
-
-For production files under `src/renderer/features/vault/` and `src/renderer/services/vault/`, reject:
+In production Vault renderer/service code and the public Vault contract, reject:
 
 ```text
-storedRelativePath
-sourcePath
-absolutePath
-extractedText
-sha256
-localUserId
-127.0.0.1:8080
-127.0.0.1:8081
+storedRelativePath, sourcePath, absolutePath, extractedText, sha256,
+localUserId, embeddingBlob, modelPath, 127.0.0.1:8080, 127.0.0.1:8081
 ```
 
-For the public desktop contract's Vault section, reject:
+Allow `window.familyCircle.vault` only inside `DesktopVaultClient.ts`.
 
-```text
-storedRelativePath
-sourcePath
-absolutePath
-extractedText
-sha256
-embeddingBlob
-modelPath
-```
-
-Also enforce that production renderer code may access `window.familyCircle.vault` only from `DesktopVaultClient.ts`.
-
-- [ ] **Step 2: Add main-process cross-user and crash-recovery regression tests**
-
-Create `VaultSecurity.test.ts` proving:
+- [ ] **Step 2: Add merge-blocking security/recovery tests**
 
 ```ts
-it('never opens another user document by guessed id')
-it('never retries another user document by guessed id')
-it('never deletes another user document by guessed id')
-it('never returns private paths or extracted text in summaries/results/progress')
-it('recovers a pending delete with an already-missing source file')
-it('does not call any Circle adapter during Vault operations')
+it('cannot open/retry/delete another user by guessed id')
+it('never returns private path/hash/full text in summary/result/progress')
+it('recovers pending deletion with missing source')
+it('never calls the Circle adapter')
+it('same-name upload does not replace old content')
 ```
 
-- [ ] **Step 3: Update README to describe the shipped boundary**
+- [ ] **Step 3: Update README**
 
-Document:
+State clearly: Vault is local-user private; PDF/DOCX/TXT upload/extraction works without AI; raw paths/full text stay in main; successful documents wait for the linked Private AI plan.
 
-```text
-Vault documents are local-user private data.
-PDF/DOCX/TXT upload and extraction work without Private AI.
-No raw paths or extracted document text cross into React.
-Successful extracted files remain Ready for Private AI until the next feature slice indexes them.
-```
-
-Keep Private AI/model setup explicitly described as the next linked plan, not as already implemented.
-
-- [ ] **Step 4: Run focused final checks**
-
-```bash
-npm test -- src/main/vault src/renderer/services/vault src/renderer/features/vault
-npm run verify:boundaries
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Run the exact full repository gate**
+- [ ] **Step 4: Full verification**
 
 ```bash
 npm ci
@@ -923,27 +543,15 @@ npm run build:renderer
 npm audit --audit-level=high
 ```
 
-Expected: all application checks/builds pass; audit has no high/critical findings. If the npm advisory service itself times out, use the repository CI retry behavior and distinguish infrastructure failure from a real vulnerability finding.
+- [ ] **Step 5: Merge-blocking review**
 
-- [ ] **Step 6: Review and commit hardening**
+Review `main...feature/vault-private-ai` for no path/text leakage, no renderer identity/path input, no Circle/cloud dependency, no upload-AI coupling, no optimistic destructive success and correct same-name version behavior.
 
-Review `main...feature/vault-private-ai` for:
-
-```text
-no renderer filesystem paths
-no extracted full text in public DTOs
-no localUserId supplied by renderer
-no Circle/shared API dependency
-no upload dependency on AI readiness
-no optimistic destructive success
-no same-name replacement behavior
-```
-
-Then commit:
+- [ ] **Step 6: Commit hardening**
 
 ```bash
 git add scripts/verify-boundaries.mjs src/main/vault/VaultSecurity.test.ts README.md
 git commit -m "test: harden private Vault boundaries"
 ```
 
-The branch is ready for a Vault-foundation PR only when CI passes on the exact final head.
+Open the Vault-foundation PR only after CI is green on the exact final head. After that PR merges and its `main` SHA is green, create `feature/private-ai-rag` from that updated `main` and execute the linked RAG plan.
