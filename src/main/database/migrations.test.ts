@@ -84,4 +84,61 @@ describe('auth database migrations', () => {
     expect(db.prepare('SELECT extracted_text FROM records WHERE id = 1').get()).toEqual({ extracted_text: 'preserve me' })
     db.close()
   })
+
+  it('creates private Vault document persistence without changing a legacy user row', () => {
+    const db = createLegacyDatabase()
+    runMigrations(db)
+
+    const columns = db.prepare('PRAGMA table_info(vault_documents)').all() as Array<{ name: string }>
+    expect(columns.map((column) => column.name)).toEqual([
+      'id',
+      'local_user_id',
+      'file_name',
+      'file_type',
+      'mime_type',
+      'size_bytes',
+      'sha256',
+      'stored_relative_path',
+      'extraction_status',
+      'index_status',
+      'word_count',
+      'preview',
+      'extracted_text',
+      'last_error_code',
+      'delete_status',
+      'uploaded_at',
+      'updated_at',
+    ])
+
+    const foreignKeys = db.prepare('PRAGMA foreign_key_list(vault_documents)').all() as Array<{
+      table: string
+      from: string
+      to: string
+      on_delete: string
+    }>
+    expect(foreignKeys).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        table: 'users',
+        from: 'local_user_id',
+        to: 'id',
+        on_delete: 'CASCADE',
+      }),
+    ]))
+
+    const uniqueIndexes = (db.prepare('PRAGMA index_list(vault_documents)').all() as Array<{
+      name: string
+      unique: number
+    }>).filter((index) => Number(index.unique) === 1)
+    const uniqueColumns = uniqueIndexes.map((index) =>
+      (db.prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`).all() as Array<{ name: string }>).map((column) => column.name),
+    )
+    expect(uniqueColumns).toContainEqual(['local_user_id', 'sha256'])
+
+    expect(db.prepare('SELECT id, email, password FROM users WHERE id = 1').get()).toEqual({
+      id: 1,
+      email: 'legacy@example.com',
+      password: '$2b$12$legacyhash',
+    })
+    db.close()
+  })
 })
