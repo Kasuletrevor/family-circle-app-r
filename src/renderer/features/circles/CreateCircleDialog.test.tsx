@@ -9,10 +9,15 @@ function service(createCircle: CircleClient['createCircle']): CircleClient {
   return {
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
+    getCircleDetails: vi.fn(async () => null),
     getShellSnapshot: vi.fn(async () => ({ activeCircleName: null, unreadNotifications: 0 })),
     selectCircle: vi.fn(async () => undefined),
     createCircle,
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
+    cancelInvitation: vi.fn(async () => undefined),
+    removeMember: vi.fn(async () => undefined),
+    leaveCircle: vi.fn(async () => undefined),
   }
 }
 
