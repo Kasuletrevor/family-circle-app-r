@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppServicesProvider } from '../../app/services'
@@ -66,8 +66,11 @@ describe('CircleManagement', () => {
     renderPage(service())
 
     expect(await screen.findByRole('heading', { name: 'Kasule Family' })).toBeInTheDocument()
-    expect(screen.getByText('2 members')).toBeInTheDocument()
-    expect(screen.getByText('1 pending invitation')).toBeInTheDocument()
+    expect(screen.getByText((_, element) => (
+      element?.classList.contains('circle-management__counts') === true
+      && element.textContent?.includes('2 members') === true
+      && element.textContent?.includes('1 pending invitation') === true
+    ))).toBeInTheDocument()
     expect(screen.getByText('John Kasule')).toBeInTheDocument()
     expect(screen.getByText('john@example.test')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Invite member' })).toBeInTheDocument()
@@ -82,7 +85,8 @@ describe('CircleManagement', () => {
     expect(await screen.findByText('mary@example.test')).toBeInTheDocument()
     expect(screen.getByText('Child')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Resend invitation to mary@example.test' }))
-    expect(resendInvitation).toHaveBeenCalledWith('invite:1')
+    await waitFor(() => expect(resendInvitation).toHaveBeenCalledWith('invite:1'))
+    expect(await screen.findByText('Invitation resent.')).toBeInTheDocument()
   })
 
   it('shows Leave only for a non-owner and hides all owner mutation controls', async () => {
@@ -101,9 +105,9 @@ describe('CircleManagement', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remove John Kasule' }))
     expect(removeMember).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Remove John Kasule from Kasule Family?' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Remove John Kasule from Kasule Family?' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove member' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove member' }))
     await waitFor(() => expect(removeMember).toHaveBeenCalledWith('user:99'))
     await waitFor(() => expect(getCircleDetails).toHaveBeenCalledTimes(2))
   })
@@ -114,9 +118,9 @@ describe('CircleManagement', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel invitation to mary@example.test' }))
     expect(cancelInvitation).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Cancel invitation to mary@example.test?' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Cancel invitation to mary@example.test?' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel invitation' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel invitation' }))
     await waitFor(() => expect(cancelInvitation).toHaveBeenCalledWith('invite:1'))
   })
 
@@ -129,25 +133,28 @@ describe('CircleManagement', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Leave Circle' }))
     expect(leaveCircle).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Leave Kasule Family?' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Leave Kasule Family?' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Leave Circle' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Leave Circle' }))
     expect(await screen.findByRole('heading', { name: 'My Circles destination' })).toBeInTheDocument()
     expect(leaveCircle).toHaveBeenCalledTimes(1)
   })
 
   it('maps known stale-state errors and never exposes raw backend details', async () => {
     const cancelInvitation = vi.fn(async () => { throw new Error('That invitation is no longer pending') })
-    renderPage(service({ cancelInvitation }), 'invitations')
+    const firstRender = renderPage(service({ cancelInvitation }), 'invitations')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel invitation to mary@example.test' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel invitation' }))
+    const staleDialog = screen.getByRole('dialog', { name: 'Cancel invitation to mary@example.test?' })
+    fireEvent.click(within(staleDialog).getByRole('button', { name: 'Cancel invitation' }))
     expect(await screen.findByText('That invitation is no longer pending.')).toBeInTheDocument()
+    firstRender.unmount()
 
     const rawRemove = vi.fn(async () => { throw new Error('SQL ORA-00942 serverUserId=88 secret') })
     renderPage(service({ removeMember: rawRemove }))
-    fireEvent.click(await screen.findAllByRole('button', { name: 'Remove John Kasule' }).then((items) => items.at(-1)!))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove member' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove John Kasule' }))
+    const rawDialog = screen.getByRole('dialog', { name: 'Remove John Kasule from Kasule Family?' })
+    fireEvent.click(within(rawDialog).getByRole('button', { name: 'Remove member' }))
     expect(await screen.findByText("We couldn't update the Circle. Please try again.")).toBeInTheDocument()
     expect(screen.queryByText(/ORA-00942|serverUserId|secret/)).not.toBeInTheDocument()
   })
