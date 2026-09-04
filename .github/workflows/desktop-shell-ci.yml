@@ -8,6 +8,7 @@ on:
       - feature/auth-onboarding
       - feature/real-circle-home
       - feature/circles-create-invite
+      - feature/circle-members-invitations
   pull_request:
     branches:
       - main
