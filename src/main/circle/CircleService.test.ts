@@ -111,6 +111,9 @@ function setup(options: {
           role: 'Circle owner',
         })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    cancelInvitation: vi.fn(async () => ({ success: true as const })),
+    removeMember: vi.fn(async () => ({ success: true as const })),
+    leaveCircle: vi.fn(async () => ({ success: true as const })),
   }
   return { sessions, users, circle, service: new CircleService(sessions, users, circle) }
 }
