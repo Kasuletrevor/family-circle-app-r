@@ -203,8 +203,13 @@ export interface DesktopApi {
   circle: {
     getOverview(): Promise<CircleOverview>
     getMyCircles(): Promise<CircleListItem[]>
+    getCircleDetails(): Promise<CircleDetails | null>
     selectCircle(circleId: string): Promise<{ success: true }>
     createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
     inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+    resendInvitation(input: { personId: string }): Promise<ResendInvitationResult>
+    cancelInvitation(input: { personId: string }): Promise<{ success: true }>
+    removeMember(input: { personId: string }): Promise<{ success: true }>
+    leaveCircle(): Promise<{ success: true }>
   }
 }
