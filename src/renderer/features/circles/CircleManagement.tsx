@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAppServices } from '../../app/services'
 import type { CircleManagementSnapshot } from '../../services/circle/types'
+import { ConfirmCircleActionDialog } from './ConfirmCircleActionDialog'
 import { InviteMemberDialog } from './InviteMemberDialog'
 import './CircleManagement.css'
 
@@ -10,17 +11,40 @@ type LoadState =
   | { status: 'ready'; details: CircleManagementSnapshot | null }
   | { status: 'error'; details: CircleManagementSnapshot | null }
 
+type Notice = { kind: 'status' | 'error'; text: string }
+
+type PendingAction =
+  | { kind: 'remove'; personId: string; name: string }
+  | { kind: 'cancel'; personId: string; email: string }
+  | { kind: 'leave' }
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`
 }
 
+function managementErrorMessage(error: unknown, fallback = "We couldn't update the Circle. Please try again."): string {
+  const message = error instanceof Error ? error.message : ''
+  const known = [
+    'Only the Circle owner can manage invitations',
+    'Only the Circle owner can remove members',
+    'The Circle owner cannot be removed',
+    'Circle owners cannot leave their own Circle',
+    'That member is no longer in this Circle',
+    'That invitation is no longer pending',
+  ]
+  const matched = known.find((candidate) => message.includes(candidate))
+  return matched ? `${matched}.` : fallback
+}
+
 export function CircleManagement({ initialSection }: { initialSection: 'members' | 'invitations' }) {
   const { circle } = useAppServices()
+  const navigate = useNavigate()
   const [reloadVersion, setReloadVersion] = useState(0)
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading', details: null })
   const [inviteOpen, setInviteOpen] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [resendingPersonId, setResendingPersonId] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -51,14 +75,50 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
     setNotice(null)
     try {
       const result = await circle.resendInvitation(personId)
-      setNotice(result.outcome === 'sent'
-        ? 'Invitation resent.'
-        : "We couldn't resend the invitation. Please try again.")
-      if (result.outcome === 'sent') setReloadVersion((value) => value + 1)
-    } catch {
-      setNotice("We couldn't resend the invitation. Please try again.")
+      if (result.outcome === 'sent') {
+        setNotice({ kind: 'status', text: 'Invitation resent.' })
+        setReloadVersion((value) => value + 1)
+      } else {
+        setNotice({ kind: 'error', text: "We couldn't resend the invitation. Please try again." })
+      }
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        text: managementErrorMessage(error, "We couldn't resend the invitation. Please try again."),
+      })
     } finally {
       setResendingPersonId(null)
+    }
+  }
+
+  async function confirmPendingAction(): Promise<void> {
+    const action = pendingAction
+    if (!action) return
+    setNotice(null)
+
+    try {
+      if (action.kind === 'remove') {
+        await circle.removeMember(action.personId)
+        setPendingAction(null)
+        setNotice({ kind: 'status', text: `${action.name} was removed from the Circle.` })
+        setReloadVersion((value) => value + 1)
+        return
+      }
+
+      if (action.kind === 'cancel') {
+        await circle.cancelInvitation(action.personId)
+        setPendingAction(null)
+        setNotice({ kind: 'status', text: 'Invitation cancelled.' })
+        setReloadVersion((value) => value + 1)
+        return
+      }
+
+      await circle.leaveCircle()
+      setPendingAction(null)
+      navigate('/circles')
+    } catch (error) {
+      setPendingAction(null)
+      setNotice({ kind: 'error', text: managementErrorMessage(error) })
     }
   }
 
@@ -87,6 +147,29 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
     )
   }
 
+  const confirmation = pendingAction?.kind === 'remove'
+    ? {
+        title: `Remove ${pendingAction.name} from ${details.circle.name}?`,
+        message: 'They will lose access to this Circle and their shared family-tree relationships may be removed.',
+        confirmLabel: 'Remove member',
+        busyLabel: 'Removing…',
+      }
+    : pendingAction?.kind === 'cancel'
+      ? {
+          title: `Cancel invitation to ${pendingAction.email}?`,
+          message: 'This pending invitation will be cancelled. You can invite this person again later.',
+          confirmLabel: 'Cancel invitation',
+          busyLabel: 'Cancelling…',
+        }
+      : pendingAction?.kind === 'leave'
+        ? {
+            title: `Leave ${details.circle.name}?`,
+            message: 'You will lose access to its members, relationships and shared family tree. Your account and private information remain.',
+            confirmLabel: 'Leave Circle',
+            busyLabel: 'Leaving…',
+          }
+        : null
+
   return (
     <>
       <section className="circle-management" aria-labelledby="circle-management-title">
@@ -112,7 +195,11 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
           <Link className={initialSection === 'invitations' ? 'is-active' : ''} to="/invitations">Invitations</Link>
         </nav>
 
-        {notice ? <div className="circle-management__notice" role="status">{notice}</div> : null}
+        {notice ? (
+          <div className="circle-management__notice" role={notice.kind === 'error' ? 'alert' : 'status'}>
+            {notice.text}
+          </div>
+        ) : null}
 
         <div className={`circle-management__panel${initialSection === 'members' ? ' is-primary' : ''}`}>
           <div className="circle-management__section-head">
@@ -135,7 +222,12 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
                   <small>{member.role}</small>
                 </div>
                 {isOwner && !member.isOwner ? (
-                  <button className="circle-management__danger-link" type="button" aria-label={`Remove ${member.name}`}>
+                  <button
+                    className="circle-management__danger-link"
+                    type="button"
+                    aria-label={`Remove ${member.name}`}
+                    onClick={() => setPendingAction({ kind: 'remove', personId: member.personId, name: member.name })}
+                  >
                     Remove
                   </button>
                 ) : null}
@@ -178,6 +270,7 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
                         type="button"
                         className="circle-management__danger-link"
                         aria-label={`Cancel invitation to ${invitation.email}`}
+                        onClick={() => setPendingAction({ kind: 'cancel', personId: invitation.personId, email: invitation.email })}
                       >
                         Cancel
                       </button>
@@ -195,7 +288,9 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
               <h2>Circle membership</h2>
               <p>Leaving removes your access to this Circle while keeping your private account data.</p>
             </div>
-            <button className="circle-management__danger" type="button">Leave Circle</button>
+            <button className="circle-management__danger" type="button" onClick={() => setPendingAction({ kind: 'leave' })}>
+              Leave Circle
+            </button>
           </section>
         ) : null}
       </section>
@@ -206,6 +301,16 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
         circleName={details.circle.name}
         onClose={() => setInviteOpen(false)}
         onInvited={() => setReloadVersion((value) => value + 1)}
+      />
+
+      <ConfirmCircleActionDialog
+        open={confirmation !== null}
+        title={confirmation?.title ?? ''}
+        message={confirmation?.message ?? ''}
+        confirmLabel={confirmation?.confirmLabel ?? ''}
+        busyLabel={confirmation?.busyLabel ?? ''}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={confirmPendingAction}
       />
     </>
   )
