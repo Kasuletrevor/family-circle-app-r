@@ -1,0 +1,308 @@
+.circle-management,
+.circle-management__state {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+}
+
+.circle-management {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.circle-management__header,
+.circle-management__section-head,
+.circle-management__membership,
+.circle-management__row,
+.circle-management__name-line,
+.circle-management__row-actions {
+  display: flex;
+  align-items: center;
+}
+
+.circle-management__header,
+.circle-management__section-head,
+.circle-management__membership {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.circle-management__header {
+  align-items: flex-start;
+}
+
+.circle-management h1,
+.circle-management h2,
+.circle-management h3,
+.circle-management p,
+.circle-management small,
+.circle-management__state h1,
+.circle-management__state p {
+  margin: 0;
+}
+
+.circle-management h1,
+.circle-management h2,
+.circle-management h3,
+.circle-management__state h1 {
+  color: var(--kk-navy);
+}
+
+.circle-management__header h1 {
+  margin-top: 4px;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.circle-management__eyebrow {
+  color: var(--kk-teal-dark);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.circle-management__role,
+.circle-management__counts,
+.circle-management__row-copy p,
+.circle-management__section-head p,
+.circle-management__membership p,
+.circle-management__state p {
+  color: var(--kk-text);
+}
+
+.circle-management__role {
+  margin-top: 7px !important;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.circle-management__counts {
+  margin-top: 6px !important;
+  font-size: 13px;
+}
+
+.circle-management__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--kk-border);
+  border-radius: 12px;
+  background: white;
+}
+
+.circle-management__tabs a {
+  padding: 9px 14px;
+  border-radius: 9px;
+  color: var(--kk-text);
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.circle-management__tabs a.is-active {
+  color: var(--kk-teal-dark);
+  background: var(--kk-mint);
+}
+
+.circle-management__panel,
+.circle-management__membership,
+.circle-management__state {
+  border: 1px solid var(--kk-border);
+  border-radius: 16px;
+  background: white;
+}
+
+.circle-management__panel {
+  padding: 20px;
+}
+
+.circle-management__panel.is-primary {
+  border-color: color-mix(in srgb, var(--kk-teal) 45%, var(--kk-border));
+}
+
+.circle-management__section-head {
+  margin-bottom: 14px;
+}
+
+.circle-management__section-head h2,
+.circle-management__membership h2 {
+  font-size: 18px;
+}
+
+.circle-management__section-head p,
+.circle-management__membership p {
+  margin-top: 5px !important;
+  font-size: 13px;
+}
+
+.circle-management__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.circle-management__row {
+  min-height: 78px;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--kk-border);
+}
+
+.circle-management__avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid var(--kk-border);
+  border-radius: 50%;
+  color: var(--kk-teal-dark);
+  background: var(--kk-mint);
+  font-weight: 800;
+}
+
+.circle-management__row-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.circle-management__row-copy h3 {
+  font-size: 14px;
+}
+
+.circle-management__row-copy p,
+.circle-management__row-copy small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.circle-management__name-line {
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.circle-management__name-line span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--kk-teal-dark);
+  background: var(--kk-mint);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.circle-management__row-actions {
+  gap: 8px;
+}
+
+.circle-management__primary,
+.circle-management__secondary,
+.circle-management__danger,
+.circle-management__danger-link {
+  min-height: 38px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.circle-management__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--kk-teal);
+  color: white;
+  background: var(--kk-teal);
+  text-decoration: none;
+}
+
+.circle-management__secondary {
+  padding: 0 13px;
+  border: 1px solid var(--kk-border);
+  color: var(--kk-navy);
+  background: white;
+}
+
+.circle-management__danger {
+  padding: 0 15px;
+  border: 1px solid #c94b4b;
+  color: white;
+  background: #c94b4b;
+}
+
+.circle-management__danger-link {
+  padding: 0 10px;
+  border: 0;
+  color: #a73535;
+  background: transparent;
+}
+
+.circle-management__primary:focus-visible,
+.circle-management__secondary:focus-visible,
+.circle-management__danger:focus-visible,
+.circle-management__danger-link:focus-visible,
+.circle-management__tabs a:focus-visible {
+  outline: 0;
+  box-shadow: var(--kk-focus);
+}
+
+.circle-management__secondary:disabled,
+.circle-management__danger:disabled,
+.circle-management__danger-link:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.circle-management__notice,
+.circle-management__empty-list {
+  padding: 12px 14px;
+  border: 1px solid var(--kk-border);
+  border-radius: 10px;
+  color: var(--kk-navy);
+  background: var(--kk-cool-tint);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.circle-management__empty-list {
+  font-weight: 500;
+}
+
+.circle-management__membership {
+  padding: 18px 20px;
+}
+
+.circle-management__state {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 36px;
+  text-align: center;
+}
+
+.circle-management__state h1 {
+  font-size: 21px;
+}
+
+.circle-management__state p {
+  max-width: 470px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .circle-management__header,
+  .circle-management__membership,
+  .circle-management__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .circle-management__row-actions {
+    justify-content: flex-start;
+  }
+}

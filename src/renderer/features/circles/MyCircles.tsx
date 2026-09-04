@@ -22,6 +22,7 @@ export function MyCircles() {
   const [reloadVersion, setReloadVersion] = useState(0)
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading', circles: [] })
   const [openingCircleId, setOpeningCircleId] = useState<string | null>(null)
+  const [managingCircleId, setManagingCircleId] = useState<string | null>(null)
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [inviteCircle, setInviteCircle] = useState<CircleSummary | null>(null)
@@ -45,7 +46,7 @@ export function MyCircles() {
   }, [circle, reloadVersion])
 
   async function openCircle(circleId: string): Promise<void> {
-    if (openingCircleId) return
+    if (openingCircleId || managingCircleId) return
     setOpeningCircleId(circleId)
     setSelectionError(null)
     try {
@@ -57,7 +58,21 @@ export function MyCircles() {
     }
   }
 
+  async function manageCircle(circleId: string): Promise<void> {
+    if (openingCircleId || managingCircleId) return
+    setManagingCircleId(circleId)
+    setSelectionError(null)
+    try {
+      await circle.selectCircle(circleId)
+      navigate('/members')
+    } catch {
+      setSelectionError('That Circle is no longer available to your account.')
+      setManagingCircleId(null)
+    }
+  }
+
   const circles = loadState.circles
+  const selecting = openingCircleId !== null || managingCircleId !== null
 
   return (
     <>
@@ -103,6 +118,7 @@ export function MyCircles() {
           <div className="my-circles__grid">
             {circles.map((item) => {
               const isOpening = openingCircleId === item.id
+              const isManaging = managingCircleId === item.id
               const canInvite = item.role === 'Circle owner'
               return (
                 <article className={`my-circles__card${item.isActive ? ' my-circles__card--active' : ''}`} key={item.id}>
@@ -116,15 +132,26 @@ export function MyCircles() {
                     <p className="my-circles__members">{memberLabel(item.memberCount)}</p>
                   </div>
                   <div className="my-circles__actions">
-                    <button
-                      className="my-circles__secondary"
-                      type="button"
-                      disabled={openingCircleId !== null}
-                      aria-label={`Open ${item.name}`}
-                      onClick={() => void openCircle(item.id)}
-                    >
-                      {isOpening ? 'Opening…' : 'Open Circle'}
-                    </button>
+                    <div className="my-circles__primary-actions">
+                      <button
+                        className="my-circles__secondary"
+                        type="button"
+                        disabled={selecting}
+                        aria-label={`Open ${item.name}`}
+                        onClick={() => void openCircle(item.id)}
+                      >
+                        {isOpening ? 'Opening…' : 'Open Circle'}
+                      </button>
+                      <button
+                        className="my-circles__secondary"
+                        type="button"
+                        disabled={selecting}
+                        aria-label={`Manage ${item.name}`}
+                        onClick={() => void manageCircle(item.id)}
+                      >
+                        {isManaging ? 'Opening…' : 'Manage'}
+                      </button>
+                    </div>
                     {canInvite ? (
                       <button
                         className="my-circles__link-action"

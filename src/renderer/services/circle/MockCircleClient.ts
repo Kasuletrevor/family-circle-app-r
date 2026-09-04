@@ -3,9 +3,10 @@ import type {
   CreateCircleResult,
   InviteMemberInput,
   InviteMemberResult,
+  ResendInvitationResult,
 } from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
-import type { CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
+import type { CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 const circles: CircleSummary[] = [
   { id: 'kasule-family', name: 'Kasule Family', ownerName: 'Trevor Kasule', role: 'Circle owner', memberCount: 12, isActive: true },
@@ -65,6 +66,23 @@ const homeSnapshot: HomeSnapshot = {
   selectedPersonId: 'trevor',
 }
 
+const managementSnapshot: CircleManagementSnapshot = {
+  circle: {
+    id: 'kasule-family',
+    name: 'Kasule Family',
+    role: 'Circle owner',
+    memberCount: 2,
+    pendingInvitationCount: 1,
+  },
+  members: [
+    { personId: 'trevor', name: 'Trevor Kasule', email: 'trevor@kasule.family', role: 'Parent', isViewer: true, isOwner: true },
+    { personId: 'jane', name: 'Jane Kasule', email: 'jane@kasule.family', role: 'Sibling', isViewer: false, isOwner: false },
+  ],
+  invitations: [
+    { personId: 'invite:mock-1', email: 'relative@example.test', role: 'Child', status: 'pending' },
+  ],
+}
+
 export class MockCircleClient implements CircleClient {
   private activeCircleId = 'kasule-family'
 
@@ -77,6 +95,20 @@ export class MockCircleClient implements CircleClient {
       ...circle,
       isActive: circle.id === this.activeCircleId,
     })))
+  }
+
+  async getCircleDetails(): Promise<CircleManagementSnapshot | null> {
+    const active = circles.find((circle) => circle.id === this.activeCircleId)
+    if (!active) return null
+    return structuredClone({
+      ...managementSnapshot,
+      circle: {
+        ...managementSnapshot.circle,
+        id: active.id,
+        name: active.name,
+        role: active.role ?? 'Family member',
+      },
+    })
   }
 
   async getShellSnapshot(): Promise<ShellSnapshot> {
@@ -97,5 +129,19 @@ export class MockCircleClient implements CircleClient {
 
   async inviteMember(_input: InviteMemberInput): Promise<InviteMemberResult> {
     return { outcome: 'sent' }
+  }
+
+  async resendInvitation(_personId: string): Promise<ResendInvitationResult> {
+    return { outcome: 'sent' }
+  }
+
+  async cancelInvitation(_personId: string): Promise<void> {}
+
+  async removeMember(_personId: string): Promise<void> {}
+
+  async leaveCircle(): Promise<void> {
+    const currentIndex = circles.findIndex((circle) => circle.id === this.activeCircleId)
+    const fallback = circles.find((_circle, index) => index !== currentIndex)
+    this.activeCircleId = fallback?.id ?? ''
   }
 }

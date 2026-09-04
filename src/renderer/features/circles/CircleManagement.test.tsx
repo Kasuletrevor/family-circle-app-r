@@ -1,0 +1,181 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { describe, expect, it, vi } from 'vitest'
+import { AppServicesProvider } from '../../app/services'
+import type { CircleClient } from '../../services/circle/CircleClient'
+import type { CircleManagementSnapshot } from '../../services/circle/types'
+import { CircleManagement } from './CircleManagement'
+
+const ownerDetails: CircleManagementSnapshot = {
+  circle: {
+    id: 'g-1',
+    name: 'Kasule Family',
+    role: 'Circle owner',
+    memberCount: 2,
+    pendingInvitationCount: 1,
+  },
+  members: [
+    { personId: 'user:88', name: 'Trevor Kasule', email: 'trevor@example.test', role: 'Parent', isViewer: true, isOwner: true },
+    { personId: 'user:99', name: 'John Kasule', email: 'john@example.test', role: 'Sibling', isViewer: false, isOwner: false },
+  ],
+  invitations: [
+    { personId: 'invite:1', email: 'mary@example.test', role: 'Child', status: 'pending' },
+  ],
+}
+
+const memberDetails: CircleManagementSnapshot = {
+  ...ownerDetails,
+  circle: { ...ownerDetails.circle, role: 'Sibling' },
+  members: ownerDetails.members.map((member) => ({ ...member, isOwner: false })),
+}
+
+function service(overrides: Partial<CircleClient> = {}): CircleClient {
+  return {
+    getHomeSnapshot: vi.fn(),
+    getMyCircles: vi.fn(async () => []),
+    getCircleDetails: vi.fn(async () => ownerDetails),
+    getShellSnapshot: vi.fn(async () => ({ activeCircleName: 'Kasule Family', unreadNotifications: 0 })),
+    selectCircle: vi.fn(async () => undefined),
+    createCircle: vi.fn(async () => ({ circleId: 'g-new' })),
+    inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
+    cancelInvitation: vi.fn(async () => undefined),
+    removeMember: vi.fn(async () => undefined),
+    leaveCircle: vi.fn(async () => undefined),
+    ...overrides,
+  }
+}
+
+function renderPage(circle: CircleClient, initialSection: 'members' | 'invitations' = 'members') {
+  const path = initialSection === 'members' ? '/members' : '/invitations'
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <AppServicesProvider services={{ circle }}>
+        <Routes>
+          <Route path="/members" element={<CircleManagement initialSection="members" />} />
+          <Route path="/invitations" element={<CircleManagement initialSection="invitations" />} />
+          <Route path="/circles" element={<h1>My Circles destination</h1>} />
+        </Routes>
+      </AppServicesProvider>
+    </MemoryRouter>,
+  )
+}
+
+describe('CircleManagement', () => {
+  it('renders authoritative active-Circle members and owner controls', async () => {
+    renderPage(service())
+
+    expect(await screen.findByRole('heading', { name: 'Kasule Family' })).toBeInTheDocument()
+    expect(screen.getByText((_, element) => (
+      element?.classList.contains('circle-management__counts') === true
+      && element.textContent?.includes('2 members') === true
+      && element.textContent?.includes('1 pending invitation') === true
+    ))).toBeInTheDocument()
+    expect(screen.getByText('John Kasule')).toBeInTheDocument()
+    expect(screen.getByText('john@example.test')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Invite member' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove John Kasule' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Leave Circle' })).not.toBeInTheDocument()
+  })
+
+  it('renders pending invitations and lets the owner resend authoritatively', async () => {
+    const resendInvitation = vi.fn(async () => ({ outcome: 'sent' as const }))
+    renderPage(service({ resendInvitation }), 'invitations')
+
+    expect(await screen.findByText('mary@example.test')).toBeInTheDocument()
+    expect(screen.getByText('Child')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Resend invitation to mary@example.test' }))
+    await waitFor(() => expect(resendInvitation).toHaveBeenCalledWith('invite:1'))
+    expect(await screen.findByText('Invitation resent.')).toBeInTheDocument()
+  })
+
+  it('shows Leave only for a non-owner and hides all owner mutation controls', async () => {
+    renderPage(service({ getCircleDetails: vi.fn(async () => memberDetails) }))
+
+    expect(await screen.findByRole('button', { name: 'Leave Circle' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Invite member' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove John Kasule/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Resend invitation/ })).not.toBeInTheDocument()
+  })
+
+  it('requires confirmation before removing a member, then reloads authoritative details', async () => {
+    const removeMember = vi.fn(async () => undefined)
+    const getCircleDetails = vi.fn(async () => ownerDetails)
+    renderPage(service({ removeMember, getCircleDetails }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove John Kasule' }))
+    expect(removeMember).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Remove John Kasule from Kasule Family?' })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove member' }))
+    await waitFor(() => expect(removeMember).toHaveBeenCalledWith('user:99'))
+    await waitFor(() => expect(getCircleDetails).toHaveBeenCalledTimes(2))
+  })
+
+  it('requires confirmation before cancelling an invitation', async () => {
+    const cancelInvitation = vi.fn(async () => undefined)
+    renderPage(service({ cancelInvitation }), 'invitations')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel invitation to mary@example.test' }))
+    expect(cancelInvitation).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Cancel invitation to mary@example.test?' })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel invitation' }))
+    await waitFor(() => expect(cancelInvitation).toHaveBeenCalledWith('invite:1'))
+  })
+
+  it('requires confirmation before leaving and navigates to My Circles only after success', async () => {
+    const leaveCircle = vi.fn(async () => undefined)
+    renderPage(service({
+      getCircleDetails: vi.fn(async () => memberDetails),
+      leaveCircle,
+    }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave Circle' }))
+    expect(leaveCircle).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Leave Kasule Family?' })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Leave Circle' }))
+    expect(await screen.findByRole('heading', { name: 'My Circles destination' })).toBeInTheDocument()
+    expect(leaveCircle).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps known stale-state errors and never exposes raw backend details', async () => {
+    const cancelInvitation = vi.fn(async () => { throw new Error('That invitation is no longer pending') })
+    const firstRender = renderPage(service({ cancelInvitation }), 'invitations')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel invitation to mary@example.test' }))
+    const staleDialog = screen.getByRole('dialog', { name: 'Cancel invitation to mary@example.test?' })
+    fireEvent.click(within(staleDialog).getByRole('button', { name: 'Cancel invitation' }))
+    expect(await screen.findByText('That invitation is no longer pending.')).toBeInTheDocument()
+    firstRender.unmount()
+
+    const rawRemove = vi.fn(async () => { throw new Error('SQL ORA-00942 serverUserId=88 secret') })
+    renderPage(service({ removeMember: rawRemove }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove John Kasule' }))
+    const rawDialog = screen.getByRole('dialog', { name: 'Remove John Kasule from Kasule Family?' })
+    fireEvent.click(within(rawDialog).getByRole('button', { name: 'Remove member' }))
+    expect(await screen.findByText("We couldn't update the Circle. Please try again.")).toBeInTheDocument()
+    expect(screen.queryByText(/ORA-00942|serverUserId|secret/)).not.toBeInTheDocument()
+  })
+
+  it('renders a safe choose-Circle state when there is no active Circle', async () => {
+    renderPage(service({ getCircleDetails: vi.fn(async () => null) }))
+
+    expect(await screen.findByRole('heading', { name: 'Choose a Circle' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to My Circles' })).toHaveAttribute('href', '/circles')
+  })
+
+  it('shows safe retry copy without surfacing raw load errors', async () => {
+    const getCircleDetails = vi
+      .fn<CircleClient['getCircleDetails']>()
+      .mockRejectedValueOnce(new Error('secret backend details'))
+      .mockResolvedValueOnce(ownerDetails)
+    renderPage(service({ getCircleDetails }))
+
+    expect(await screen.findByText("We couldn't load this Circle. Please try again.")).toBeInTheDocument()
+    expect(screen.queryByText('secret backend details')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('heading', { name: 'Kasule Family' })).toBeInTheDocument()
+  })
+})

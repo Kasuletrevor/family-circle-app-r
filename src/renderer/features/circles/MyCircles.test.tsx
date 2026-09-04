@@ -15,10 +15,15 @@ function service(overrides: Partial<CircleClient> = {}): CircleClient {
   return {
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => circles),
+    getCircleDetails: vi.fn(async () => null),
     getShellSnapshot: vi.fn(async () => ({ activeCircleName: 'Kasule Family', unreadNotifications: 0 })),
     selectCircle: vi.fn(async () => undefined),
     createCircle: vi.fn(async () => ({ circleId: 'circle-new' })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
+    cancelInvitation: vi.fn(async () => undefined),
+    removeMember: vi.fn(async () => undefined),
+    leaveCircle: vi.fn(async () => undefined),
     ...overrides,
   }
 }
@@ -30,6 +35,7 @@ function renderPage(circle: CircleClient) {
         <Routes>
           <Route path="/circles" element={<MyCircles />} />
           <Route path="/" element={<h1>Home destination</h1>} />
+          <Route path="/members" element={<h1>Members destination</h1>} />
         </Routes>
       </AppServicesProvider>
     </MemoryRouter>,
@@ -64,6 +70,16 @@ describe('MyCircles', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open Ramos Family' }))
 
     expect(await screen.findByRole('heading', { name: 'Home destination' })).toBeInTheDocument()
+    expect(selectCircle).toHaveBeenCalledWith('circle-b')
+  })
+
+  it('manages only after protected selection succeeds, then navigates to Members', async () => {
+    const selectCircle = vi.fn(async () => undefined)
+    renderPage(service({ selectCircle }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Ramos Family' }))
+
+    expect(await screen.findByRole('heading', { name: 'Members destination' })).toBeInTheDocument()
     expect(selectCircle).toHaveBeenCalledWith('circle-b')
   })
 

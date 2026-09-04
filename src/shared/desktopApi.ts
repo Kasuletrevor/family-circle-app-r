@@ -128,6 +128,38 @@ export interface InviteMemberResult {
   outcome: 'sent' | 'already-pending' | 'already-member' | 'delivery-failed'
 }
 
+export interface CircleDetailsMember {
+  personId: string
+  name: string
+  email: string | null
+  role: string
+  isViewer: boolean
+  isOwner: boolean
+}
+
+export interface CircleDetailsInvitation {
+  personId: string
+  email: string
+  role: string
+  status: 'pending'
+}
+
+export interface CircleDetails {
+  circle: {
+    id: string
+    name: string
+    role: string
+    memberCount: number
+    pendingInvitationCount: number
+  }
+  members: CircleDetailsMember[]
+  invitations: CircleDetailsInvitation[]
+}
+
+export interface ResendInvitationResult {
+  outcome: 'sent' | 'delivery-failed'
+}
+
 export type CircleOverview =
   | {
       status: 'empty'
@@ -171,8 +203,13 @@ export interface DesktopApi {
   circle: {
     getOverview(): Promise<CircleOverview>
     getMyCircles(): Promise<CircleListItem[]>
+    getCircleDetails(): Promise<CircleDetails | null>
     selectCircle(circleId: string): Promise<{ success: true }>
     createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
     inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+    resendInvitation(input: { personId: string }): Promise<ResendInvitationResult>
+    cancelInvitation(input: { personId: string }): Promise<{ success: true }>
+    removeMember(input: { personId: string }): Promise<{ success: true }>
+    leaveCircle(): Promise<{ success: true }>
   }
 }

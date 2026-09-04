@@ -24,26 +24,32 @@ const rendererRules = [
   { name: 'legacy P2P environment access', pattern: /process\.env\.P2P_/g },
   { name: 'legacy global application state', pattern: /window\.KK/g },
   { name: 'direct legacy Circle API URL', pattern: /https:\/\/familycircle\.o2gventures\.com\/circle-api/g },
+  { name: 'direct legacy Circle group path', pattern: /\/api\/group\//g },
   { name: 'runtime dependency on the brand source repository', pattern: /raw\.githubusercontent\.com\/Elder-ChatGPT\/agent-ai-landing/g },
 ]
 
 const rendererCircleIdentityRules = [
   { name: 'Circle renderer must not carry caller-supplied fromUserId', pattern: /\bfromUserId\b/g },
   { name: 'Circle renderer must not carry shared serverUserId', pattern: /\bserverUserId\b/g },
+  { name: 'Circle renderer must not carry trusted targetServerUserId', pattern: /\btargetServerUserId\b/g },
   { name: 'Circle renderer must not carry shared ownerId', pattern: /\bownerId\b/g },
   { name: 'Circle renderer must not carry raw shared userId', pattern: /\buserId\b/g },
+  { name: 'Circle renderer must not carry invitationId', pattern: /\binvitationId\b/g },
   { name: 'Circle renderer must not carry invitation tokens', pattern: /\binvitationToken\b/g },
-  { name: 'Circle renderer must not carry temporary passwords', pattern: /\btemporaryPassword\b/g },
+  { name: 'Circle renderer must not carry temporary passwords', pattern: /\btemporaryPassword\b|\btempPassword\b/g },
 ]
 
 const publicCircleContractRules = [
   { name: 'public desktop Circle contract must not expose fromUserId', pattern: /\bfromUserId\b/g },
   { name: 'public desktop Circle contract must not expose serverUserId', pattern: /\bserverUserId\b/g },
+  { name: 'public desktop Circle contract must not expose targetServerUserId', pattern: /\btargetServerUserId\b/g },
   { name: 'public desktop Circle contract must not expose ownerId', pattern: /\bownerId\b/g },
   { name: 'public desktop Circle contract must not expose raw shared userId', pattern: /\buserId\b/g },
+  { name: 'public desktop Circle contract must not expose invitationId', pattern: /\binvitationId\b/g },
   { name: 'public desktop Circle contract must not expose Circle API keys', pattern: /\bCIRCLE_API_KEY\b|X-Kin-Keepers-Key/g },
+  { name: 'public desktop Circle contract must not expose legacy group paths', pattern: /\/api\/group\//g },
   { name: 'public desktop Circle contract must not expose invitation tokens', pattern: /\binvitationToken\b/g },
-  { name: 'public desktop Circle contract must not expose temporary passwords', pattern: /\btemporaryPassword\b/g },
+  { name: 'public desktop Circle contract must not expose temporary passwords', pattern: /\btemporaryPassword\b|\btempPassword\b/g },
 ]
 
 const mainQuarantineRules = [

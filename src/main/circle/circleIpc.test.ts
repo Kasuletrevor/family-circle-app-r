@@ -19,12 +19,22 @@ describe('registerCircleIpc', () => {
       notifications: [],
     }
     const circles = [{ id: 'g-1', name: 'Test Family', role: 'Circle owner', memberCount: 3, isActive: true }]
+    const details = {
+      circle: { id: 'g-1', name: 'Test Family', role: 'Circle owner', memberCount: 2, pendingInvitationCount: 1 },
+      members: [],
+      invitations: [],
+    }
     const service = {
       getOverview: vi.fn(async () => overview),
       getMyCircles: vi.fn(async () => circles),
+      getCircleDetails: vi.fn(async () => details),
       selectCircle: vi.fn(async () => ({ success: true as const })),
       createCircle: vi.fn(async () => ({ circleId: 'g-2' })),
       inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+      resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
+      cancelInvitation: vi.fn(async () => ({ success: true as const })),
+      removeMember: vi.fn(async () => ({ success: true as const })),
+      leaveCircle: vi.fn(async () => ({ success: true as const })),
     }
 
     registerCircleIpc(ipc, service)
@@ -32,9 +42,14 @@ describe('registerCircleIpc', () => {
     expect([...handlers.keys()]).toEqual([
       'circle:get-overview',
       'circle:get-my-circles',
+      'circle:get-details',
       'circle:select',
       'circle:create',
       'circle:invite-member',
+      'circle:resend-invitation',
+      'circle:cancel-invitation',
+      'circle:remove-member',
+      'circle:leave',
     ])
 
     await expect(handlers.get('circle:get-overview')?.({ sender: 'ignored' }, 'malicious-user-id')).resolves.toEqual(overview)
@@ -42,6 +57,9 @@ describe('registerCircleIpc', () => {
 
     await expect(handlers.get('circle:get-my-circles')?.({ sender: 'ignored' }, 'malicious-user-id')).resolves.toEqual(circles)
     expect(service.getMyCircles).toHaveBeenCalledWith()
+
+    await expect(handlers.get('circle:get-details')?.({ sender: 'ignored' }, { serverUserId: '999' })).resolves.toEqual(details)
+    expect(service.getCircleDetails).toHaveBeenCalledWith()
 
     await expect(handlers.get('circle:select')?.({ sender: 'ignored' }, 'g-1', 'malicious-user-id')).resolves.toEqual({ success: true })
     expect(service.selectCircle).toHaveBeenCalledWith('g-1')
@@ -66,5 +84,24 @@ describe('registerCircleIpc', () => {
       email: 'relative@example.test',
       role: 'Sibling',
     })
+
+    const malicious = {
+      personId: 'safe-person',
+      fromUserId: 'attacker',
+      serverUserId: 'attacker',
+      userId: 'attacker',
+      invitationId: 'secret',
+      token: 'secret',
+      tempPassword: 'secret',
+    }
+    await handlers.get('circle:resend-invitation')?.({}, malicious)
+    await handlers.get('circle:cancel-invitation')?.({}, malicious)
+    await handlers.get('circle:remove-member')?.({}, malicious)
+    expect(service.resendInvitation).toHaveBeenCalledWith({ personId: 'safe-person' })
+    expect(service.cancelInvitation).toHaveBeenCalledWith({ personId: 'safe-person' })
+    expect(service.removeMember).toHaveBeenCalledWith({ personId: 'safe-person' })
+
+    await handlers.get('circle:leave')?.({}, malicious)
+    expect(service.leaveCircle).toHaveBeenCalledWith()
   })
 })

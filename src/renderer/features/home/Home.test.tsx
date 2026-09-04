@@ -100,10 +100,15 @@ describe('Home', () => {
     renderHome({
       getHomeSnapshot,
       getMyCircles: vi.fn(async () => [snapshot.activeCircle]),
+      getCircleDetails: vi.fn(async () => null),
       getShellSnapshot: vi.fn(async () => ({ activeCircleName: snapshot.activeCircle.name, unreadNotifications: 0 })),
       selectCircle: vi.fn(async () => undefined),
       createCircle: vi.fn(async () => ({ circleId: snapshot.activeCircle.id })),
       inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+      resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
+      cancelInvitation: vi.fn(async () => undefined),
+      removeMember: vi.fn(async () => undefined),
+      leaveCircle: vi.fn(async () => undefined),
     })
 
     expect(await screen.findByText('We could not load your family overview.')).toBeInTheDocument()

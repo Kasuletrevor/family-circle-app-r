@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import type { AuthUser } from '../../shared/desktopApi'
+import { CircleManagement } from '../features/circles/CircleManagement'
 import { MyCircles } from '../features/circles/MyCircles'
 import { Home } from '../features/home/Home'
 import { PlaceholderPage } from './PlaceholderPage'
@@ -9,8 +10,6 @@ import './App.css'
 
 const placeholderRoutes = [
   { path: '/family-tree', title: 'Family Tree' },
-  { path: '/members', title: 'Members' },
-  { path: '/invitations', title: 'Invitations' },
   { path: '/stories', title: 'Stories' },
   { path: '/vault', title: 'Vault' },
   { path: '/memories', title: 'Memories' },
@@ -28,6 +27,8 @@ export function AuthenticatedApp({ user }: { user: AuthUser }) {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/circles" element={<MyCircles />} />
+            <Route path="/members" element={<CircleManagement initialSection="members" />} />
+            <Route path="/invitations" element={<CircleManagement initialSection="invitations" />} />
             {placeholderRoutes.map(({ path, title }) => (
               <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
             ))}

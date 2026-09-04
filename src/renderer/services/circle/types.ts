@@ -1,3 +1,5 @@
+import type { CircleDetails, CircleDetailsInvitation, CircleDetailsMember } from '../../../shared/desktopApi'
+
 export type ServiceState = 'ready' | 'offline'
 
 export type CircleSummary = {
@@ -8,6 +10,10 @@ export type CircleSummary = {
   memberCount: number | null
   isActive: boolean
 }
+
+export type CircleManagementMember = CircleDetailsMember
+export type CircleManagementInvitation = CircleDetailsInvitation
+export type CircleManagementSnapshot = CircleDetails
 
 export type ShellSnapshot = {
   activeCircleName: string | null

@@ -53,7 +53,7 @@ describe('LegacyCircleAuthAdapter read model', () => {
       people: [
         { id: 'user:88', kind: 'user', userId: '88', name: 'Member Example', email: 'member@example.test', role: 'Family member' },
         { id: 'placeholder:p-1', kind: 'placeholder', userId: null, name: 'Grandmother', email: null, role: 'Grandparent' },
-        { id: 'invite:i-1', kind: 'invite', userId: null, name: 'Pending Cousin', email: 'cousin@example.test', role: 'Family member' },
+        { id: 'invite:i-1', kind: 'invite', userId: null, invitationId: null, name: 'Pending Cousin', email: 'cousin@example.test', role: 'Family member' },
       ],
       relations: [{ id: 'r-1', kind: 'sibling', aPersonId: 'user:88', bPersonId: 'placeholder:p-1' }],
       positions: [{ personId: 'user:88', x: 120, y: 240 }],

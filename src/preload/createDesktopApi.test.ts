@@ -23,9 +23,13 @@ describe('createDesktopApi', () => {
         notifications: [],
       }
       if (channel === 'circle:get-my-circles') return []
+      if (channel === 'circle:get-details') return null
       if (channel === 'circle:select') return { success: true }
       if (channel === 'circle:create') return { circleId: 'g-2' }
-      if (channel === 'circle:invite-member') return { outcome: 'sent' }
+      if (channel === 'circle:invite-member' || channel === 'circle:resend-invitation') return { outcome: 'sent' }
+      if (channel === 'circle:cancel-invitation' || channel === 'circle:remove-member' || channel === 'circle:leave') {
+        return { success: true }
+      }
       return { status: 'unauthenticated' }
     })
     const api = createDesktopApi(invoke)
@@ -51,9 +55,14 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.circle)).toEqual([
       'getOverview',
       'getMyCircles',
+      'getCircleDetails',
       'selectCircle',
       'createCircle',
       'inviteMember',
+      'resendInvitation',
+      'cancelInvitation',
+      'removeMember',
+      'leaveCircle',
     ])
 
     const serialized = JSON.stringify(api).toLowerCase()
@@ -77,6 +86,8 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('circle:get-overview')
     await api.circle.getMyCircles()
     expect(invoke).toHaveBeenCalledWith('circle:get-my-circles')
+    await api.circle.getCircleDetails()
+    expect(invoke).toHaveBeenCalledWith('circle:get-details')
     await api.circle.selectCircle('g-1')
     expect(invoke).toHaveBeenCalledWith('circle:select', 'g-1')
     await api.circle.createCircle({ name: 'Kasule Family' })
@@ -91,5 +102,13 @@ describe('createDesktopApi', () => {
       email: 'relative@example.test',
       role: 'Sibling',
     })
+    await api.circle.resendInvitation({ personId: 'invite:1' })
+    expect(invoke).toHaveBeenCalledWith('circle:resend-invitation', { personId: 'invite:1' })
+    await api.circle.cancelInvitation({ personId: 'invite:1' })
+    expect(invoke).toHaveBeenCalledWith('circle:cancel-invitation', { personId: 'invite:1' })
+    await api.circle.removeMember({ personId: 'user:2' })
+    expect(invoke).toHaveBeenCalledWith('circle:remove-member', { personId: 'user:2' })
+    await api.circle.leaveCircle()
+    expect(invoke).toHaveBeenCalledWith('circle:leave')
   })
 })
