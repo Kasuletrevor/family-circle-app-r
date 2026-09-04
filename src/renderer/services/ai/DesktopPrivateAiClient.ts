@@ -10,33 +10,34 @@ export interface PrivateAiDesktopOperations {
 
 function defaultOperations(): PrivateAiDesktopOperations {
   const privateAi = (window.familyCircle as unknown as { privateAi: PrivateAiDesktopOperations }).privateAi
+  if (!privateAi) throw new Error('Private AI desktop bridge is unavailable')
   return privateAi
 }
 
 export class DesktopPrivateAiClient implements PrivateAiClient {
-  private readonly operations: PrivateAiDesktopOperations
+  constructor(private readonly injectedOperations?: PrivateAiDesktopOperations) {}
 
-  constructor(operations?: PrivateAiDesktopOperations) {
-    this.operations = operations ?? defaultOperations()
+  private operations(): PrivateAiDesktopOperations {
+    return this.injectedOperations ?? defaultOperations()
   }
 
-  getStatus(): Promise<PrivateAiStatus> {
-    return this.operations.getStatus()
+  async getStatus(): Promise<PrivateAiStatus> {
+    return this.operations().getStatus()
   }
 
-  startSetup(): Promise<PrivateAiStatus> {
-    return this.operations.startSetup()
+  async startSetup(): Promise<PrivateAiStatus> {
+    return this.operations().startSetup()
   }
 
-  pauseSetup(): Promise<PrivateAiStatus> {
-    return this.operations.pauseSetup()
+  async pauseSetup(): Promise<PrivateAiStatus> {
+    return this.operations().pauseSetup()
   }
 
-  repair(): Promise<PrivateAiStatus> {
-    return this.operations.repair()
+  async repair(): Promise<PrivateAiStatus> {
+    return this.operations().repair()
   }
 
   onProgress(listener: (progress: PrivateAiProgress) => void): () => void {
-    return this.operations.onProgress(listener)
+    return this.operations().onProgress(listener)
   }
 }
