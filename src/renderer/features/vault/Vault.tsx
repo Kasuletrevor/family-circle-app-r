@@ -239,7 +239,7 @@ export function Vault({ client = defaultVaultClient }: { client?: VaultClient })
             <div className="vault-state__mark" aria-hidden="true"><FileText size={26} /></div>
             <h2>No documents in your Vault yet.</h2>
             <p>Add family records, letters or notes. They remain private to your local account on this computer.</p>
-            <button className="vault-button vault-button--secondary" type="button" disabled={uploading} onClick={() => void uploadDocuments()}>
+            <button className="vault-button vault-button--secondary" aria-label="Add documents" type="button" disabled={uploading} onClick={() => void uploadDocuments()}>
               <Upload size={16} aria-hidden="true" /> Upload documents
             </button>
           </div>
