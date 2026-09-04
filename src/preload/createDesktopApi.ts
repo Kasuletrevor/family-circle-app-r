@@ -11,6 +11,9 @@ import type {
   InviteMemberInput,
   InviteMemberResult,
   OnboardingNextAction,
+  PrivateAiPublicProgress,
+  PrivateAiPublicState,
+  PrivateAiPublicStatus,
   RegisterInput,
   ResendInvitationResult,
   ResetPasswordInput,
@@ -55,13 +58,16 @@ type DesktopChannel =
   | 'vault:choose-and-upload'
   | 'vault:open'
   | 'vault:retry-extraction'
+  | 'vault:retry-indexing'
   | 'vault:delete'
+  | 'private-ai:get-status'
+  | 'private-ai:start-setup'
+  | 'private-ai:pause-setup'
+  | 'private-ai:repair'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
-type Subscribe = (
-  channel: 'vault:upload-progress',
-  listener: (payload: unknown) => void,
-) => () => void
+type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress'
+type Subscribe = (channel: DesktopEventChannel, listener: (payload: unknown) => void) => () => void
 
 function recordOf(value: unknown): Record<string, unknown> {
   return value != null && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -108,6 +114,18 @@ function safeUploadStage(value: unknown): VaultUploadStage {
     : 'done'
 }
 
+function safePrivateAiState(value: unknown): PrivateAiPublicState {
+  return value === 'not_installed'
+    || value === 'downloading'
+    || value === 'paused'
+    || value === 'verifying'
+    || value === 'ready'
+    || value === 'repair_required'
+    || value === 'failed'
+    ? value
+    : 'failed'
+}
+
 function safeSummary(value: unknown): VaultDocumentSummary {
   const raw = recordOf(value)
   return {
@@ -149,6 +167,35 @@ function safeProgress(value: unknown): VaultUploadProgress {
     fileName: String(raw.fileName ?? ''),
     stage: safeUploadStage(raw.stage),
     percent: Number(raw.percent) || 0,
+  }
+}
+
+function safePrivateAiStatus(value: unknown): PrivateAiPublicStatus {
+  const raw = recordOf(value)
+  const state = safePrivateAiState(raw.state)
+  return {
+    state,
+    ready: raw.ready === true && state === 'ready',
+    repairRequired: raw.repairRequired === true && state === 'repair_required',
+    totalSizeBytes: Number(raw.totalSizeBytes) || 0,
+    version: String(raw.version ?? ''),
+    message: raw.message == null ? null : String(raw.message),
+  }
+}
+
+function safePrivateAiProgress(value: unknown): PrivateAiPublicProgress {
+  const raw = recordOf(value)
+  return {
+    state: safePrivateAiState(raw.state),
+    percent: Number(raw.percent) || 0,
+    fileIndex: Number(raw.fileIndex) || 0,
+    fileCount: Number(raw.fileCount) || 0,
+    fileName: raw.fileName == null ? null : String(raw.fileName),
+    bytesDownloaded: Number(raw.bytesDownloaded) || 0,
+    totalSizeBytes: Number(raw.totalSizeBytes) || 0,
+    fileBytesDownloaded: Number(raw.fileBytesDownloaded) || 0,
+    fileSizeBytes: Number(raw.fileSizeBytes) || 0,
+    message: raw.message == null ? null : String(raw.message),
   }
 }
 
@@ -254,11 +301,31 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       async retryExtraction(input: { documentId: number }) {
         return safeSummary(await invoke('vault:retry-extraction', { documentId: input.documentId }))
       },
+      retryIndexing(input: { documentId: number }) {
+        return invoke('vault:retry-indexing', { documentId: input.documentId }) as Promise<{ success: true }>
+      },
       deleteDocument(input: { documentId: number }) {
         return invoke('vault:delete', { documentId: input.documentId }) as Promise<{ success: true }>
       },
       onUploadProgress(listener: (progress: VaultUploadProgress) => void) {
         return subscribe('vault:upload-progress', (payload) => listener(safeProgress(payload)))
+      },
+    },
+    privateAi: {
+      async getStatus() {
+        return safePrivateAiStatus(await invoke('private-ai:get-status'))
+      },
+      async startSetup() {
+        return safePrivateAiStatus(await invoke('private-ai:start-setup'))
+      },
+      async pauseSetup() {
+        return safePrivateAiStatus(await invoke('private-ai:pause-setup'))
+      },
+      async repair() {
+        return safePrivateAiStatus(await invoke('private-ai:repair'))
+      },
+      onProgress(listener: (progress: PrivateAiPublicProgress) => void) {
+        return subscribe('private-ai:progress', (payload) => listener(safePrivateAiProgress(payload)))
       },
     },
   }
