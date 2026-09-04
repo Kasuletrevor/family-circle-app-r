@@ -224,6 +224,37 @@ export interface VaultUploadProgress {
   percent: number
 }
 
+export type PrivateAiPublicState =
+  | 'not_installed'
+  | 'downloading'
+  | 'paused'
+  | 'verifying'
+  | 'ready'
+  | 'repair_required'
+  | 'failed'
+
+export interface PrivateAiPublicStatus {
+  state: PrivateAiPublicState
+  ready: boolean
+  repairRequired: boolean
+  totalSizeBytes: number
+  version: string
+  message: string | null
+}
+
+export interface PrivateAiPublicProgress {
+  state: PrivateAiPublicState
+  percent: number
+  fileIndex: number
+  fileCount: number
+  fileName: string | null
+  bytesDownloaded: number
+  totalSizeBytes: number
+  fileBytesDownloaded: number
+  fileSizeBytes: number
+  message: string | null
+}
+
 export interface DesktopApi {
   app: {
     getVersion(): Promise<string>
@@ -262,7 +293,15 @@ export interface DesktopApi {
     chooseAndUploadDocuments(): Promise<VaultUploadBatchResult>
     openDocument(input: { documentId: number }): Promise<{ success: true }>
     retryExtraction(input: { documentId: number }): Promise<VaultDocumentSummary>
+    retryIndexing(input: { documentId: number }): Promise<{ success: true }>
     deleteDocument(input: { documentId: number }): Promise<{ success: true }>
     onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
+  }
+  privateAi: {
+    getStatus(): Promise<PrivateAiPublicStatus>
+    startSetup(): Promise<PrivateAiPublicStatus>
+    pauseSetup(): Promise<PrivateAiPublicStatus>
+    repair(): Promise<PrivateAiPublicStatus>
+    onProgress(listener: (progress: PrivateAiPublicProgress) => void): () => void
   }
 }
