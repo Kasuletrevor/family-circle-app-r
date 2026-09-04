@@ -9,6 +9,7 @@ on:
       - feature/real-circle-home
       - feature/circles-create-invite
       - feature/circle-members-invitations
+      - feature/vault-private-ai
   pull_request:
     branches:
       - main
@@ -28,7 +29,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit
       - name: Verify desktop shell
         run: npm run check
       - name: Audit dependencies

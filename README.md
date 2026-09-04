@@ -4,7 +4,7 @@ A clean Electron + React + TypeScript rebuild of the Kin-Keepers Family Circle d
 
 ## Current slice
 
-This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, and protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, and Invitations**.
+This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, and Invitations**, and the first real **private local Vault** slice.
 
 - Electron desktop shell with `contextIsolation: true`, renderer sandboxing, and Node integration disabled.
 - React + TypeScript renderer with routed desktop navigation.
@@ -25,13 +25,17 @@ This branch includes the secure desktop shell, protected authentication and onbo
 - Owner-only invitation resend/cancel and non-owner member removal controls, with authorization repeated in `CircleService`.
 - Non-owner **Leave Circle** with safe active-Circle fallback after the server confirms the leave.
 - Confirmation dialogs for destructive remove/cancel/leave operations; destructive rows are never optimistically removed.
+- A real **Vault** at `/vault` for private PDF, DOCX, and TXT files stored beneath the app's local user-data directory.
+- Local document validation, 50 MiB safety limit, SHA-256 duplicate detection, private randomized storage, and text extraction without requiring AI.
+- Exact-byte duplicates are rejected per local user; same-name files with different bytes are retained as separate versions instead of replacing earlier content.
+- Extraction failures keep the source document stored and expose a safe retry action; successful extraction becomes `waiting_for_ai` until the separate Private AI slice is installed.
 - Intentional no-Circle state for accounts that have no memberships.
 - Authenticated user identity, active Circle, and unread notification count in the shell without hardcoded profile or badge values.
 - Automated renderer/main-process/public-contract boundary checks and dependency audit in CI.
 
 Stories, Memories, and Upcoming items are not presented as fabricated real data. Those values remain absent until their actual source slices are migrated.
 
-This slice intentionally does **not** add Circle rename/delete, ownership transfer, or relationship/tree mutations. Those remain later protected slices.
+This slice intentionally does **not** add Circle rename/delete, ownership transfer, relationship/tree mutations, or Private AI/RAG. Those remain later protected slices.
 
 ## Desktop architecture
 
@@ -42,7 +46,8 @@ React UI
    ↓
 typed renderer clients
    ├── DesktopAuthClient
-   └── DesktopCircleClient
+   ├── DesktopCircleClient
+   └── DesktopVaultClient
             ↓
 window.familyCircle typed preload API
             ↓
@@ -50,15 +55,20 @@ explicit IPC handlers
             ↓
 main-process services
    ├── AuthService
-   └── CircleService
-            ├── protected session identity
-            ├── local active-Circle preference
-            ├── authorization / DTO sanitization
-            └── safe person-handle → internal identity resolution
-                    ↓
-            LegacyCircleAuthAdapter
-                    ↓
-            Jose's current Circle service
+   ├── CircleService
+   │       ├── protected session identity
+   │       ├── local active-Circle preference
+   │       ├── authorization / DTO sanitization
+   │       └── safe person-handle → internal identity resolution
+   │               ↓
+   │       LegacyCircleAuthAdapter
+   │               ↓
+   │       Jose's current Circle service
+   └── VaultService
+           ├── protected local-user identity
+           ├── VaultRepository
+           ├── VaultFileStore
+           └── DocumentExtractor
 ```
 
 For Circle management specifically:
@@ -85,6 +95,8 @@ Jose's current Circle API
 ```
 
 `DesktopCircleClient` is the single production renderer adapter for Circle reads and mutations. React feature components do not call Circle URLs directly and do not receive the compatibility API key, shared service identity, invitation ID/token, or temporary password.
+
+`DesktopVaultClient` is the single production renderer adapter for Vault operations. React never chooses arbitrary filesystem paths, never receives the stored source path, SHA-256 hash, full extracted text, local user ID, embedding BLOB, or model path, and never talks to a local AI HTTP port directly.
 
 The renderer never receives a password hash, session credential, database handle, Circle API key, raw Circle API URL, raw shared `ownerId`, raw shared `userId`, `serverUserId`, `targetServerUserId`, or trusted invitation ID. Auth state is not stored in renderer `localStorage` or `sessionStorage`, and there is no local JWT.
 
@@ -215,6 +227,37 @@ Simultaneous Home and shell consumers share one in-flight overview request. Circ
 
 `MockCircleClient` remains available only for tests/demo fixtures. It is not the production service default.
 
+## Private local Vault
+
+Vault is owned by the **restored protected local user**, not by a renderer-supplied identity and not by Circle membership. Its initial public operations are:
+
+```text
+vault.listDocuments()
+vault.chooseAndUploadDocuments()
+vault.openDocument({ documentId })
+vault.retryExtraction({ documentId })
+vault.deleteDocument({ documentId })
+vault.onUploadProgress(listener)
+```
+
+The Electron main process owns the native file picker and all source/destination path resolution. The picker accepts PDF, DOCX, and TXT files. Validation includes extension/signature checks and an initial configurable **50 MiB per-document limit**. SHA-256 is computed locally and used only for per-user exact-byte duplicate detection.
+
+Stored files use randomized names beneath private per-user Vault storage. A second upload with identical bytes returns `already-exists` and is not copied again. A same-name file with different bytes is retained independently using a display-name suffix such as `Family History (2).pdf`; the earlier source and metadata are not replaced.
+
+Text extraction is entirely local and does **not** depend on Granite, Nomic, the Circle API, or any cloud service:
+
+- PDF → local PDF parser.
+- DOCX → Mammoth raw-text extraction.
+- TXT → UTF-8 text.
+
+A parser failure keeps the private source file and document row so the user can retry extraction. Successful extraction records word count and a short preview, then moves the document to `waiting_for_ai`. Upload remains available when AI is absent. Indexing/RAG is deliberately deferred to the linked Private AI implementation plan.
+
+Private internals stay in the Electron main process and SQLite. In particular, the public Vault DTO/progress/result surface does **not** expose raw source or stored paths, the SHA-256 hash, full extracted text, `localUserId`, embedding BLOBs, or model paths. IPC reconstructs numeric document IDs and ignores extra renderer-supplied path, hash, or identity-shaped fields. The preload layer sanitizes the public DTO a second time before React receives it.
+
+Open, retry, and delete always re-resolve document ownership from the protected session. A guessed document ID belonging to another local user resolves as not found. Delete is recoverable: the row is marked pending before source removal; filesystem failure restores an active retryable row, while a DB failure after source removal leaves a tombstone that a later Vault list repairs. The UI waits for confirmed deletion and never optimistically hides the document.
+
+`DesktopVaultClient` is the only production renderer path to `window.familyCircle.vault`. The architecture boundary verifier rejects private Vault field names and direct local-AI port dependencies in production Vault renderer code and the public desktop contract.
+
 ## Copy-safe legacy database import
 
 On startup the rebuild uses its own active database under the Electron user-data directory. If that active database does not yet exist and the legacy database exists at:
@@ -339,7 +382,7 @@ npm run build
 npm audit
 ```
 
-The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, and shared-service identity/invitation-secret fields in the public Circle contract or production Circle renderer code.
+The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, shared-service identity/invitation-secret fields in the public Circle contract or production Circle renderer code, private Vault internals in production Vault renderer/public-contract code, direct Vault preload access outside `DesktopVaultClient`, and direct dependencies on local AI HTTP ports from the Vault renderer.
 
 ## Product boundary
 
@@ -347,7 +390,7 @@ Private/local responsibilities stay on the desktop: the copied SQLite database, 
 
 Shared family responsibilities remain server-owned: Circles, memberships, invitations, relationships, shared tree state, notifications, and deliberately shared profile/content data.
 
-This slice includes the minimum protected shared writes for Circle creation, invitation delivery/management, member removal, and leaving a Circle. Still excluded:
+This slice includes the minimum protected shared writes for Circle creation, invitation delivery/management, member removal, and leaving a Circle, plus the private local Vault foundation. Still excluded:
 
 - Circle rename
 - Circle delete
@@ -355,6 +398,7 @@ This slice includes the minimum protected shared writes for Circle creation, inv
 - relationship mutations
 - tree placeholder mutations
 - tree/node-position mutations
+- Private AI indexing/RAG
 - secure `/v2` migration
 
-Those can be added as separate protected slices without widening the renderer trust boundary. Circle settings are the next management slice; Family Tree editing follows after that.
+Those can be added as separate protected slices without widening the renderer trust boundary. Circle settings and Family Tree editing remain later shared-state slices; Private AI builds on the Vault foundation only after this branch is reviewed and merged.

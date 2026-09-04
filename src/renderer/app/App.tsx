@@ -3,6 +3,7 @@ import type { AuthUser } from '../../shared/desktopApi'
 import { CircleManagement } from '../features/circles/CircleManagement'
 import { MyCircles } from '../features/circles/MyCircles'
 import { Home } from '../features/home/Home'
+import { Vault } from '../features/vault/Vault'
 import { PlaceholderPage } from './PlaceholderPage'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -11,7 +12,6 @@ import './App.css'
 const placeholderRoutes = [
   { path: '/family-tree', title: 'Family Tree' },
   { path: '/stories', title: 'Stories' },
-  { path: '/vault', title: 'Vault' },
   { path: '/memories', title: 'Memories' },
   { path: '/ai', title: 'AI Assistant' },
   { path: '/settings', title: 'Settings' },
@@ -29,6 +29,7 @@ export function AuthenticatedApp({ user }: { user: AuthUser }) {
             <Route path="/circles" element={<MyCircles />} />
             <Route path="/members" element={<CircleManagement initialSection="members" />} />
             <Route path="/invitations" element={<CircleManagement initialSection="invitations" />} />
+            <Route path="/vault" element={<Vault />} />
             {placeholderRoutes.map(({ path, title }) => (
               <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
             ))}

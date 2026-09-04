@@ -9,6 +9,7 @@ const sharedDesktopApiPath = join(root, 'src', 'shared', 'desktopApi.ts')
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.html'])
 const legacyAdapterPath = 'src/main/circle/LegacyCircleAuthAdapter.ts'
 const desktopCircleClientPath = 'src/renderer/services/circle/DesktopCircleClient.ts'
+const desktopVaultClientPath = 'src/renderer/services/vault/DesktopVaultClient.ts'
 const mockCircleClientPath = 'src/renderer/services/circle/MockCircleClient.ts'
 
 const rendererRules = [
@@ -50,6 +51,18 @@ const publicCircleContractRules = [
   { name: 'public desktop Circle contract must not expose legacy group paths', pattern: /\/api\/group\//g },
   { name: 'public desktop Circle contract must not expose invitation tokens', pattern: /\binvitationToken\b/g },
   { name: 'public desktop Circle contract must not expose temporary passwords', pattern: /\btemporaryPassword\b|\btempPassword\b/g },
+]
+
+const vaultPrivateBoundaryRules = [
+  { name: 'Vault renderer/public contract must not expose storedRelativePath', pattern: /\bstoredRelativePath\b/g },
+  { name: 'Vault renderer/public contract must not expose sourcePath', pattern: /\bsourcePath\b/g },
+  { name: 'Vault renderer/public contract must not expose absolutePath', pattern: /\babsolutePath\b/g },
+  { name: 'Vault renderer/public contract must not expose extractedText', pattern: /\bextractedText\b/g },
+  { name: 'Vault renderer/public contract must not expose sha256', pattern: /\bsha256\b/g },
+  { name: 'Vault renderer/public contract must not expose localUserId', pattern: /\blocalUserId\b/g },
+  { name: 'Vault renderer/public contract must not expose embeddingBlob', pattern: /\bembeddingBlob\b/g },
+  { name: 'Vault renderer/public contract must not expose modelPath', pattern: /\bmodelPath\b/g },
+  { name: 'Vault renderer must not depend on a local AI HTTP port', pattern: /127\.0\.0\.1:808[01]/g },
 ]
 
 const mainQuarantineRules = [
@@ -120,11 +133,24 @@ for (const filePath of rendererFiles) {
     recordMatches(violations, file, content, rendererCircleIdentityRules)
   }
 
+  if (file.startsWith('src/renderer/features/vault/') || file.startsWith('src/renderer/services/vault/')) {
+    recordMatches(violations, file, content, vaultPrivateBoundaryRules)
+  }
+
   if (file !== desktopCircleClientPath) {
     recordMatches(violations, file, content, [
       {
         name: 'production renderer must access Circle preload only through DesktopCircleClient',
         pattern: /window\.familyCircle\.circle/g,
+      },
+    ])
+  }
+
+  if (file !== desktopVaultClientPath) {
+    recordMatches(violations, file, content, [
+      {
+        name: 'production renderer must access Vault preload only through DesktopVaultClient',
+        pattern: /window\.familyCircle\.vault/g,
       },
     ])
   }
@@ -164,6 +190,7 @@ for (const filePath of mainFiles) {
 
 const sharedDesktopApi = await readFile(sharedDesktopApiPath, 'utf8')
 recordMatches(violations, displayPath(sharedDesktopApiPath), sharedDesktopApi, publicCircleContractRules)
+recordMatches(violations, displayPath(sharedDesktopApiPath), sharedDesktopApi, vaultPrivateBoundaryRules)
 
 if (violations.length > 0) {
   console.error('Architecture boundary verification failed:')

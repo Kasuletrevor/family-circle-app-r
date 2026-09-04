@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDesktopApi } from './createDesktopApi'
 
 describe('createDesktopApi', () => {
-  it('exposes only approved application, auth, onboarding, and protected Circle capabilities', async () => {
+  it('exposes only approved application, auth, onboarding, Circle, and Vault capabilities', async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'app:get-version') return '0.1.0'
       if (channel === 'app:get-platform') return 'win32'
@@ -30,11 +30,55 @@ describe('createDesktopApi', () => {
       if (channel === 'circle:cancel-invitation' || channel === 'circle:remove-member' || channel === 'circle:leave') {
         return { success: true }
       }
+      if (channel === 'vault:list') return [{
+        id: 5,
+        fileName: 'Family History.pdf',
+        fileType: 'pdf',
+        sizeBytes: 1234,
+        extractionStatus: 'ready',
+        indexStatus: 'waiting_for_ai',
+        wordCount: 88,
+        preview: 'Family history preview',
+        issue: null,
+        uploadedAt: 99,
+        localUserId: 7,
+        sha256: 'private-hash',
+        storedRelativePath: 'vault/users/7/documents/private.pdf',
+        sourcePath: 'C:/secret/source.pdf',
+        absolutePath: 'C:/secret/vault/private.pdf',
+        extractedText: 'full private text',
+      }]
+      if (channel === 'vault:choose-and-upload') return {
+        canceled: false,
+        items: [{
+          fileName: 'Family History.pdf',
+          outcome: 'uploaded',
+          documentId: 5,
+          sourcePath: 'C:/secret/source.pdf',
+          sha256: 'private-hash',
+        }],
+      }
+      if (channel === 'vault:retry-extraction') return {
+        id: 5,
+        fileName: 'Family History.pdf',
+        fileType: 'pdf',
+        sizeBytes: 1234,
+        extractionStatus: 'ready',
+        indexStatus: 'waiting_for_ai',
+        wordCount: 88,
+        preview: 'Family history preview',
+        issue: null,
+        uploadedAt: 99,
+        extractedText: 'full private text',
+        storedRelativePath: 'vault/users/7/documents/private.pdf',
+      }
+      if (channel === 'vault:open' || channel === 'vault:delete') return { success: true }
       return { status: 'unauthenticated' }
     })
-    const api = createDesktopApi(invoke)
+    const subscribe = vi.fn(() => () => undefined)
+    const api = createDesktopApi(invoke, subscribe)
 
-    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle'])
+    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault'])
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual([
       'restore',
@@ -63,6 +107,14 @@ describe('createDesktopApi', () => {
       'cancelInvitation',
       'removeMember',
       'leaveCircle',
+    ])
+    expect(Object.keys(api.vault)).toEqual([
+      'listDocuments',
+      'chooseAndUploadDocuments',
+      'openDocument',
+      'retryExtraction',
+      'deleteDocument',
+      'onUploadProgress',
     ])
 
     const serialized = JSON.stringify(api).toLowerCase()
@@ -110,5 +162,73 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('circle:remove-member', { personId: 'user:2' })
     await api.circle.leaveCircle()
     expect(invoke).toHaveBeenCalledWith('circle:leave')
+
+    const documents = await api.vault.listDocuments()
+    expect(invoke).toHaveBeenCalledWith('vault:list')
+    expect(documents).toEqual([{
+      id: 5,
+      fileName: 'Family History.pdf',
+      fileType: 'pdf',
+      sizeBytes: 1234,
+      extractionStatus: 'ready',
+      indexStatus: 'waiting_for_ai',
+      wordCount: 88,
+      preview: 'Family history preview',
+      issue: null,
+      uploadedAt: 99,
+    }])
+
+    const upload = await api.vault.chooseAndUploadDocuments()
+    expect(invoke).toHaveBeenCalledWith('vault:choose-and-upload')
+    expect(upload).toEqual({
+      canceled: false,
+      items: [{ fileName: 'Family History.pdf', outcome: 'uploaded', documentId: 5 }],
+    })
+    expect(JSON.stringify(upload)).not.toMatch(/sourcePath|absolutePath|storedRelativePath|sha256|extractedText|localUserId/)
+
+    await api.vault.openDocument({ documentId: 5 })
+    expect(invoke).toHaveBeenCalledWith('vault:open', { documentId: 5 })
+    const retried = await api.vault.retryExtraction({ documentId: 5 })
+    expect(invoke).toHaveBeenCalledWith('vault:retry-extraction', { documentId: 5 })
+    expect(JSON.stringify(retried)).not.toMatch(/sourcePath|absolutePath|storedRelativePath|sha256|extractedText|localUserId/)
+    await api.vault.deleteDocument({ documentId: 5 })
+    expect(invoke).toHaveBeenCalledWith('vault:delete', { documentId: 5 })
+  })
+
+  it('subscribes to safe Vault progress and returns the exact unsubscribe function', () => {
+    let bridgeListener: ((payload: unknown) => void) | null = null
+    const unsubscribe = vi.fn()
+    const subscribe = vi.fn((_channel: string, listener: (payload: unknown) => void) => {
+      bridgeListener = listener
+      return unsubscribe
+    })
+    const api = createDesktopApi(vi.fn(async () => undefined), subscribe)
+    const listener = vi.fn()
+
+    const returned = api.vault.onUploadProgress(listener)
+    expect(subscribe).toHaveBeenCalledWith('vault:upload-progress', expect.any(Function))
+    expect(returned).toBe(unsubscribe)
+
+    const incoming = {
+      fileIndex: 1,
+      fileCount: 2,
+      fileName: 'Family History.pdf',
+      stage: 'extracting',
+      percent: 70,
+      sourcePath: 'C:/secret/source.pdf',
+      absolutePath: 'C:/secret/vault/file.pdf',
+      sha256: 'secret',
+      extractedText: 'private full text',
+      localUserId: 7,
+    }
+    ;(bridgeListener as ((payload: unknown) => void) | null)?.(incoming)
+
+    expect(listener).toHaveBeenCalledWith({
+      fileIndex: 1,
+      fileCount: 2,
+      fileName: 'Family History.pdf',
+      stage: 'extracting',
+      percent: 70,
+    })
   })
 })
