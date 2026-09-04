@@ -12,6 +12,7 @@ const defaultOperations: VaultDesktopOperations = {
   chooseAndUploadDocuments: () => window.familyCircle.vault.chooseAndUploadDocuments(),
   openDocument: (input) => window.familyCircle.vault.openDocument(input),
   retryExtraction: (input) => window.familyCircle.vault.retryExtraction(input),
+  retryIndexing: (input) => window.familyCircle.vault.retryIndexing(input),
   deleteDocument: (input) => window.familyCircle.vault.deleteDocument(input),
   onUploadProgress: (listener) => window.familyCircle.vault.onUploadProgress(listener),
 }
@@ -55,6 +56,14 @@ export class DesktopVaultClient implements VaultClient {
   async retryExtraction(documentId: number) {
     try {
       return await this.operations.retryExtraction({ documentId })
+    } finally {
+      this.invalidateList()
+    }
+  }
+
+  async retryIndexing(documentId: number) {
+    try {
+      return await this.operations.retryIndexing({ documentId })
     } finally {
       this.invalidateList()
     }
