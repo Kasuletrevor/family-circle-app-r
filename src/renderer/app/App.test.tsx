@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { AuthUser } from '../../shared/desktopApi'
@@ -38,26 +38,27 @@ describe('App shell', () => {
       </MemoryRouter>,
     )
 
+    const primaryNavigation = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
     for (const label of navigationLabels) {
-      expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
+      expect(primaryNavigation.getByRole('link', { name: label })).toBeInTheDocument()
     }
 
-    expect(screen.getByRole('link', { name: 'Family Tree' })).toHaveAttribute('aria-current', 'page')
+    expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
     expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: /search family circle/i })).toBeInTheDocument()
     expect(screen.getByText('Ready (Offline)')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Invitations' }).querySelector('.sidebar-link__badge')).toBeNull()
+    expect(primaryNavigation.getByRole('link', { name: 'Invitations' }).querySelector('.sidebar-link__badge')).toBeNull()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Members' }))
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Members' }))
     expect(await screen.findByRole('heading', { name: 'Kasule Family' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Invitations' }))
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Invitations' }))
     expect(await screen.findByRole('heading', { name: 'Pending invitations' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('link', { name: 'My Circles' }))
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'My Circles' }))
     expect(await screen.findByRole('heading', { name: 'My Circles' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Circle' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Kasule Family' })).toBeInTheDocument()
