@@ -27,6 +27,7 @@ function client(overrides: Partial<VaultClient> = {}): VaultClient {
     chooseAndUploadDocuments: vi.fn(async () => ({ canceled: false, items: [] })),
     openDocument: vi.fn(async () => ({ success: true as const })),
     retryExtraction: vi.fn(async () => baseDocument),
+    retryIndexing: vi.fn(async () => ({ success: true as const })),
     deleteDocument: vi.fn(async () => ({ success: true as const })),
     onUploadProgress: vi.fn(() => () => undefined),
     ...overrides,
@@ -44,9 +45,7 @@ describe('Vault', () => {
   })
 
   it('uploads through the client and then re-reads the authoritative document list', async () => {
-    const listDocuments = vi.fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([baseDocument])
+    const listDocuments = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([baseDocument])
     const chooseAndUploadDocuments = vi.fn(async () => ({
       canceled: false,
       items: [{ fileName: baseDocument.fileName, outcome: 'uploaded' as const, documentId: baseDocument.id }],
@@ -64,7 +63,6 @@ describe('Vault', () => {
 
   it('renders file type, size, word count, and local AI readiness status', async () => {
     render(<Vault client={client({ listDocuments: vi.fn(async () => [baseDocument]) })} />)
-
     await screen.findByText('Family History.pdf')
     expect(screen.getByText('PDF')).toBeInTheDocument()
     expect(screen.getByText('1.5 KB')).toBeInTheDocument()
@@ -91,11 +89,7 @@ describe('Vault', () => {
     await screen.findByText('No documents in your Vault yet.')
     fireEvent.click(screen.getByRole('button', { name: 'Upload documents' }))
     ;(progressListener as ((progress: VaultUploadProgress) => void) | null)?.({
-      fileIndex: 1,
-      fileCount: 2,
-      fileName: 'Family History.pdf',
-      stage: 'extracting',
-      percent: 70,
+      fileIndex: 1, fileCount: 2, fileName: 'Family History.pdf', stage: 'extracting', percent: 70,
     })
 
     expect(await screen.findByText(/Family History\.pdf/)).toBeInTheDocument()
@@ -121,25 +115,19 @@ describe('Vault', () => {
   it('opens a document only through the Vault client', async () => {
     const openDocument = vi.fn(async () => ({ success: true as const }))
     render(<Vault client={client({ listDocuments: vi.fn(async () => [baseDocument]), openDocument })} />)
-
     await screen.findByText('Family History.pdf')
     fireEvent.click(screen.getByRole('button', { name: 'Open Family History.pdf' }))
-
     await waitFor(() => expect(openDocument).toHaveBeenCalledWith(12))
   })
 
   it('confirms before deleting and re-reads only after confirmed success', async () => {
-    const listDocuments = vi.fn()
-      .mockResolvedValueOnce([baseDocument])
-      .mockResolvedValueOnce([])
+    const listDocuments = vi.fn().mockResolvedValueOnce([baseDocument]).mockResolvedValueOnce([])
     const deleteDocument = vi.fn(async () => ({ success: true as const }))
     render(<Vault client={client({ listDocuments, deleteDocument })} />)
-
     await screen.findByText('Family History.pdf')
     fireEvent.click(screen.getByRole('button', { name: 'Delete Family History.pdf' }))
     expect(deleteDocument).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-
     fireEvent.click(screen.getByRole('button', { name: 'Delete document' }))
     await waitFor(() => expect(deleteDocument).toHaveBeenCalledWith(12))
     expect(await screen.findByText('No documents in your Vault yet.')).toBeInTheDocument()
@@ -150,18 +138,15 @@ describe('Vault', () => {
     const deleteDocument = vi.fn(async () => { throw new Error('disk busy') })
     const listDocuments = vi.fn(async () => [baseDocument])
     render(<Vault client={client({ listDocuments, deleteDocument })} />)
-
     await screen.findByText('Family History.pdf')
     fireEvent.click(screen.getByRole('button', { name: 'Delete Family History.pdf' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete document' }))
-
     expect(await screen.findByRole('alert')).toHaveTextContent('Family History.pdf could not be deleted. Please try again.')
     expect(screen.getByText('Family History.pdf')).toBeInTheDocument()
   })
 
   it('never disables Upload just because extracted documents are waiting for Private AI', async () => {
     render(<Vault client={client({ listDocuments: vi.fn(async () => [baseDocument]) })} />)
-
     await screen.findByText('Ready for Private AI')
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
   })
