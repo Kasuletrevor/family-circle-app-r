@@ -10,6 +10,7 @@ on:
       - feature/circles-create-invite
       - feature/circle-members-invitations
       - feature/vault-private-ai
+      - feature/private-ai-rag
   pull_request:
     branches:
       - main
