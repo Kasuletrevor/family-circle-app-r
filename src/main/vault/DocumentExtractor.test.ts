@@ -66,7 +66,7 @@ describe('DocumentExtractor', () => {
 
     await expect(extractor.extract(filePath, 'pdf')).resolves.toMatchObject({
       extractedText: 'A scanned-looking but text PDF.',
-      wordCount: 6,
+      wordCount: 5,
     })
     expect(createPdfParser).toHaveBeenCalledTimes(1)
     expect(getText).toHaveBeenCalledTimes(1)
