@@ -127,6 +127,25 @@ function ensureVaultDocuments(db: DatabaseSync): void {
   `)
 }
 
+function ensureVaultChunks(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vault_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      embedding_blob BLOB NOT NULL,
+      embedding_model TEXT NOT NULL,
+      index_version INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES vault_documents(id) ON DELETE CASCADE,
+      UNIQUE(document_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_vault_chunks_document ON vault_chunks(document_id);
+  `)
+}
+
 export function runMigrations(db: DatabaseSync): void {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -137,6 +156,7 @@ export function runMigrations(db: DatabaseSync): void {
     }
     ensurePasswordResetTokens(db)
     ensureVaultDocuments(db)
+    ensureVaultChunks(db)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
