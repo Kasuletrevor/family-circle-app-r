@@ -15,6 +15,7 @@ export interface VaultIpcService {
   chooseAndUploadDocuments(onProgress?: (event: InternalVaultUploadProgress) => void): Promise<InternalVaultUploadBatchResult>
   openDocument(documentId: number): Promise<{ success: true }>
   retryExtraction(documentId: number): Promise<VaultDocumentInternal>
+  retryIndexing(documentId: number): Promise<{ success: true }>
   deleteDocument(documentId: number): Promise<{ success: true }>
 }
 
@@ -85,5 +86,6 @@ export function registerVaultIpc(ipc: IpcHandleRegistrar, service: VaultIpcServi
   ipc.handle('vault:retry-extraction', async (_event, payload) => {
     return safeSummary(await service.retryExtraction(documentIdOf(payload)))
   })
+  ipc.handle('vault:retry-indexing', (_event, payload) => service.retryIndexing(documentIdOf(payload)))
   ipc.handle('vault:delete', (_event, payload) => service.deleteDocument(documentIdOf(payload)))
 }
