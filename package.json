@@ -19,7 +19,9 @@
     "bcryptjs": "3.0.3",
     "electron": "44.1.1",
     "lucide-react": "1.39.0",
+    "mammoth": "1.12.2",
     "nodemailer": "9.0.6",
+    "pdf-parse": "2.4.5",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router-dom": "7.18.3"
