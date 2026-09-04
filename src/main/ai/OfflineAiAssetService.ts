@@ -71,6 +71,10 @@ export class OfflineAiAssetService {
     this.downloader = dependencies.downloader ?? new OfflineAiDownloader()
   }
 
+  async getVersion(): Promise<string> {
+    return (await this.readManifest()).version
+  }
+
   async getStatus(): Promise<PrivateAiStatus> {
     const manifest = await this.readManifest()
     const totalBytes = this.totalBytes(manifest)
