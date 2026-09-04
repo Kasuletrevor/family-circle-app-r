@@ -320,6 +320,7 @@ export class CircleService {
       email: String(invitation.email),
       role: invitation.role as InvitationFamilyRole,
     })
+    if (result.outcome === 'already-member') throw new Error('That invitation is no longer pending')
     return { outcome: result.outcome === 'delivery-failed' ? 'delivery-failed' : 'sent' }
   }
 
