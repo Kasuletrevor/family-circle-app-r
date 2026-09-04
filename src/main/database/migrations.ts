@@ -97,6 +97,36 @@ function ensurePasswordResetTokens(db: DatabaseSync): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_created ON password_reset_tokens(user_id, created_at)')
 }
 
+function ensureVaultDocuments(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vault_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      local_user_id INTEGER NOT NULL,
+      file_name TEXT NOT NULL,
+      file_type TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      sha256 TEXT NOT NULL,
+      stored_relative_path TEXT NOT NULL,
+      extraction_status TEXT NOT NULL DEFAULT 'pending',
+      index_status TEXT NOT NULL DEFAULT 'not_indexed',
+      word_count INTEGER NOT NULL DEFAULT 0,
+      preview TEXT,
+      extracted_text TEXT,
+      last_error_code TEXT,
+      delete_status TEXT NOT NULL DEFAULT 'active',
+      uploaded_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(local_user_id, sha256)
+    );
+    CREATE INDEX IF NOT EXISTS idx_vault_documents_user_uploaded
+      ON vault_documents(local_user_id, uploaded_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_vault_documents_pending_delete
+      ON vault_documents(local_user_id, delete_status);
+  `)
+}
+
 export function runMigrations(db: DatabaseSync): void {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -106,6 +136,7 @@ export function runMigrations(db: DatabaseSync): void {
       migrateExistingUsersTable(db)
     }
     ensurePasswordResetTokens(db)
+    ensureVaultDocuments(db)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
