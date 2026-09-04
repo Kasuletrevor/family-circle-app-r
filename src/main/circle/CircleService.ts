@@ -204,7 +204,13 @@ export class CircleService {
       return null
     }
 
-    const group = await this.resolveActiveCircle(record, groups)
+    const group = groups.find((candidate) => candidate.id === record.activeCircleId)
+      ?? groups.find((candidate) => candidate.id === record.invitation?.groupId)
+      ?? groups[0]
+    if (record.activeCircleId !== group.id) {
+      await this.users.setActiveCircleId(record.user.id, group.id)
+    }
+
     const tree = await this.circle.getTree(group.id, serverUserId)
     const members = tree.people
       .filter((person) => person.kind === 'user')
@@ -382,7 +388,13 @@ export class CircleService {
       throw new Error('That Circle is no longer available to your account')
     }
 
-    const group = await this.resolveActiveCircle(record, groups)
+    const activeCircleId = String(record.activeCircleId ?? '').trim()
+    const group = groups.find((candidate) => candidate.id === activeCircleId)
+    if (!group) {
+      await this.users.setActiveCircleId(record.user.id, groups[0]?.id ?? null)
+      throw new Error('That Circle is no longer available to your account')
+    }
+
     const tree = await this.circle.getTree(group.id, serverUserId)
     return { record, serverUserId, groups, group, tree }
   }
