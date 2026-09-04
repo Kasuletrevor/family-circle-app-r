@@ -1,6 +1,7 @@
 import type {
   AuthState,
   CircleContext,
+  CircleDetails,
   CircleListItem,
   CircleOverview,
   CreateCircleInput,
@@ -11,6 +12,7 @@ import type {
   InviteMemberResult,
   OnboardingNextAction,
   RegisterInput,
+  ResendInvitationResult,
   ResetPasswordInput,
   SignInInput,
 } from '../shared/desktopApi'
@@ -32,9 +34,14 @@ type DesktopChannel =
   | 'onboarding:complete'
   | 'circle:get-overview'
   | 'circle:get-my-circles'
+  | 'circle:get-details'
   | 'circle:select'
   | 'circle:create'
   | 'circle:invite-member'
+  | 'circle:resend-invitation'
+  | 'circle:cancel-invitation'
+  | 'circle:remove-member'
+  | 'circle:leave'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 
@@ -99,6 +106,9 @@ export function createDesktopApi(invoke: Invoke): DesktopApi {
       getMyCircles() {
         return invoke('circle:get-my-circles') as Promise<CircleListItem[]>
       },
+      getCircleDetails() {
+        return invoke('circle:get-details') as Promise<CircleDetails | null>
+      },
       selectCircle(circleId: string) {
         return invoke('circle:select', circleId) as Promise<{ success: true }>
       },
@@ -107,6 +117,18 @@ export function createDesktopApi(invoke: Invoke): DesktopApi {
       },
       inviteMember(input: InviteMemberInput) {
         return invoke('circle:invite-member', input) as Promise<InviteMemberResult>
+      },
+      resendInvitation(input: { personId: string }) {
+        return invoke('circle:resend-invitation', input) as Promise<ResendInvitationResult>
+      },
+      cancelInvitation(input: { personId: string }) {
+        return invoke('circle:cancel-invitation', input) as Promise<{ success: true }>
+      },
+      removeMember(input: { personId: string }) {
+        return invoke('circle:remove-member', input) as Promise<{ success: true }>
+      },
+      leaveCircle() {
+        return invoke('circle:leave') as Promise<{ success: true }>
       },
     },
   }
