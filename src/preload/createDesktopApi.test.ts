@@ -45,6 +45,11 @@ describe('createDesktopApi', () => {
         preview: 'Family history preview', issue: null, uploadedAt: 99,
         extractedText: 'full private text', storedRelativePath: 'vault/users/7/documents/private.pdf',
       }
+      if (channel === 'vault:ask') return {
+        answer: 'Grounded answer',
+        sources: [{ documentId: 5, fileName: 'Family History.pdf', excerpt: 'Safe excerpt', embedding: [1, 2], modelPath: 'secret' }],
+        localUserId: 7,
+      }
       if (channel === 'vault:open' || channel === 'vault:retry-indexing' || channel === 'vault:delete') return { success: true }
       if (channel.startsWith('private-ai:')) return {
         state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 123,
@@ -60,7 +65,7 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
     expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
-    expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'onUploadProgress'])
+    expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
 
     const serialized = JSON.stringify(api).toLowerCase()
@@ -121,6 +126,10 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('vault:retry-indexing', { documentId: 5 })
     await api.vault.deleteDocument({ documentId: 5 })
     expect(invoke).toHaveBeenCalledWith('vault:delete', { documentId: 5 })
+    const answer = await api.vault.ask({ question: 'Who?', scope: { type: 'documents', documentIds: [5] } })
+    expect(invoke).toHaveBeenCalledWith('vault:ask', { question: 'Who?', scope: { type: 'documents', documentIds: [5] } })
+    expect(answer).toEqual({ answer: 'Grounded answer', sources: [{ documentId: 5, fileName: 'Family History.pdf', excerpt: 'Safe excerpt' }] })
+    expect(JSON.stringify(answer)).not.toMatch(/embedding|modelPath|localUserId|storedRelativePath|extractedText/)
     await api.privateAi.getStatus()
     expect(invoke).toHaveBeenCalledWith('private-ai:get-status')
   })
