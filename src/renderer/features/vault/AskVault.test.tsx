@@ -19,7 +19,7 @@ const indexed: VaultDocumentSummary = {
 
 const waiting: VaultDocumentSummary = { ...indexed, id: 5, fileName: 'Letters.txt', fileType: 'txt', indexStatus: 'waiting_for_ai' }
 
-function client(overrides: Record<string, unknown> = {}): VaultClient {
+function client(overrides: Partial<VaultClient> = {}): VaultClient {
   return {
     listDocuments: vi.fn(async () => [indexed, waiting]),
     chooseAndUploadDocuments: vi.fn(async () => ({ canceled: true, items: [] })),
@@ -27,15 +27,16 @@ function client(overrides: Record<string, unknown> = {}): VaultClient {
     retryExtraction: vi.fn(async () => indexed),
     retryIndexing: vi.fn(async () => ({ success: true as const })),
     deleteDocument: vi.fn(async () => ({ success: true as const })),
+    ask: vi.fn(async () => ({ answer: '', sources: [] })),
     onUploadProgress: vi.fn(() => () => undefined),
     ...overrides,
-  } as VaultClient
+  }
 }
 
 describe('AskVault', () => {
   it('shows a private local composer and guards an empty question', async () => {
     const ask = vi.fn()
-    render(<AskVault client={client({ ask }) as never} />)
+    render(<AskVault client={client({ ask })} />)
 
     expect(screen.getByRole('heading', { name: 'Ask your Vault' })).toBeInTheDocument()
     expect(screen.getByText('Ask questions using only your indexed private documents on this computer.')).toBeInTheDocument()
@@ -49,7 +50,7 @@ describe('AskVault', () => {
       answer: 'Grandmother was born in Jinja.',
       sources: [{ documentId: 4, fileName: 'Family History.pdf', excerpt: 'She was born in Jinja.' }],
     }))
-    render(<AskVault client={client({ ask }) as never} />)
+    render(<AskVault client={client({ ask })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Where was grandmother born?' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
@@ -63,7 +64,7 @@ describe('AskVault', () => {
 
   it('selected mode lists only indexed documents and submits selected numeric ids', async () => {
     const ask = vi.fn(async () => ({ answer: 'Answer', sources: [] }))
-    render(<AskVault client={client({ ask }) as never} />)
+    render(<AskVault client={client({ ask })} />)
 
     await screen.findByText('All indexed documents')
     fireEvent.click(screen.getByRole('radio', { name: 'Choose documents' }))
@@ -79,7 +80,7 @@ describe('AskVault', () => {
 
   it('shows a safe user-facing error without filesystem or model detail', async () => {
     const ask = vi.fn(async () => { throw new Error('C:/secret/model.gguf at 127.0.0.1:8080') })
-    render(<AskVault client={client({ ask }) as never} />)
+    render(<AskVault client={client({ ask })} />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Question?' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
 
