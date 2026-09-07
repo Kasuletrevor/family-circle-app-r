@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
+import { GraniteClient } from './ai/GraniteClient'
 import { NomicClient } from './ai/NomicClient'
 import { OfflineAiAssetService } from './ai/OfflineAiAssetService'
 import { registerPrivateAiIpc } from './ai/privateAiIpc'
@@ -20,6 +21,7 @@ import { VaultChunkRepository } from './vault/VaultChunkRepository'
 import { VaultFileStore } from './vault/VaultFileStore'
 import { VaultIndexService } from './vault/VaultIndexService'
 import { registerVaultIpc } from './vault/vaultIpc'
+import { VaultQueryService } from './vault/VaultQueryService'
 import { VaultRepository } from './vault/VaultRepository'
 import { VaultService } from './vault/VaultService'
 import { createWindowOptions } from './windowOptions'
@@ -32,6 +34,7 @@ interface AppServices {
   authService: AuthService
   circleService: CircleService
   vaultService: VaultService
+  vaultQueryService: VaultQueryService
   privateAiService: OfflineAiAssetService
   vaultIndexService: VaultIndexService
   sessions: SessionStore
@@ -42,7 +45,7 @@ function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
-  registerVaultIpc(ipcMain, services.vaultService)
+  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)
   registerPrivateAiIpc(ipcMain, services.privateAiService, () => {
     void services.sessions.restore().then((current) => {
       if (current) void services.vaultIndexService.indexPendingDocuments(current.id)
@@ -79,12 +82,21 @@ async function createAppServices(): Promise<AppServices> {
   const vaultChunkRepository = new VaultChunkRepository(database)
   const vaultFileStore = new VaultFileStore(userDataPath)
   const vaultExtractor = new DocumentExtractor()
+  const nomicClient = new NomicClient()
   const vaultIndexService = new VaultIndexService({
     documents: vaultRepository,
     chunks: vaultChunkRepository,
     runtime: aiRuntimeManager,
-    nomic: new NomicClient(),
+    nomic: nomicClient,
     assets: privateAiService,
+  })
+  const vaultQueryService = new VaultQueryService({
+    session: sessions,
+    documents: vaultRepository,
+    chunks: vaultChunkRepository,
+    runtime: aiRuntimeManager,
+    nomic: nomicClient,
+    granite: new GraniteClient(),
   })
   const vaultService = new VaultService({
     session: sessions,
@@ -110,6 +122,7 @@ async function createAppServices(): Promise<AppServices> {
     authService: new AuthService(users, sessions, recovery, circle),
     circleService: new CircleService(sessions, users, circle),
     vaultService,
+    vaultQueryService,
     privateAiService,
     vaultIndexService,
     sessions,
