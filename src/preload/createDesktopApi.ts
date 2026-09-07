@@ -18,11 +18,13 @@ import type {
   ResendInvitationResult,
   ResetPasswordInput,
   SignInInput,
+  VaultAnswer,
   VaultDocumentIssue,
   VaultDocumentSummary,
   VaultExtractionStatus,
   VaultFileType,
   VaultIndexStatus,
+  VaultQueryScope,
   VaultUploadBatchResult,
   VaultUploadOutcome,
   VaultUploadProgress,
@@ -60,6 +62,7 @@ type DesktopChannel =
   | 'vault:retry-extraction'
   | 'vault:retry-indexing'
   | 'vault:delete'
+  | 'vault:ask'
   | 'private-ai:get-status'
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
@@ -167,6 +170,30 @@ function safeProgress(value: unknown): VaultUploadProgress {
     fileName: String(raw.fileName ?? ''),
     stage: safeUploadStage(raw.stage),
     percent: Number(raw.percent) || 0,
+  }
+}
+
+function safeAnswer(value: unknown): VaultAnswer {
+  const raw = recordOf(value)
+  const sources = Array.isArray(raw.sources) ? raw.sources : []
+  return {
+    answer: String(raw.answer ?? ''),
+    sources: sources.map((source) => {
+      const row = recordOf(source)
+      return {
+        documentId: Number(row.documentId),
+        fileName: String(row.fileName ?? ''),
+        excerpt: String(row.excerpt ?? '').slice(0, 320),
+      }
+    }).filter((source) => Number.isSafeInteger(source.documentId) && source.documentId > 0),
+  }
+}
+
+function safeQueryScope(scope: VaultQueryScope): VaultQueryScope {
+  if (scope.type === 'all') return { type: 'all' }
+  return {
+    type: 'documents',
+    documentIds: scope.documentIds.filter((id) => Number.isSafeInteger(id) && id > 0),
   }
 }
 
@@ -306,6 +333,12 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       deleteDocument(input: { documentId: number }) {
         return invoke('vault:delete', { documentId: input.documentId }) as Promise<{ success: true }>
+      },
+      async ask(input: { question: string; scope: VaultQueryScope }) {
+        return safeAnswer(await invoke('vault:ask', {
+          question: String(input.question ?? ''),
+          scope: safeQueryScope(input.scope),
+        }))
       },
       onUploadProgress(listener: (progress: VaultUploadProgress) => void) {
         return subscribe('vault:upload-progress', (payload) => listener(safeProgress(payload)))
