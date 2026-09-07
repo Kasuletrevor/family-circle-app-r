@@ -29,6 +29,7 @@ function client(overrides: Partial<VaultClient> = {}): VaultClient {
     retryExtraction: vi.fn(async () => baseDocument),
     retryIndexing: vi.fn(async () => ({ success: true as const })),
     deleteDocument: vi.fn(async () => ({ success: true as const })),
+    ask: vi.fn(async () => ({ answer: '', sources: [] })),
     onUploadProgress: vi.fn(() => () => undefined),
     ...overrides,
   }
