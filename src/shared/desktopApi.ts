@@ -224,6 +224,21 @@ export interface VaultUploadProgress {
   percent: number
 }
 
+export type VaultQueryScope =
+  | { type: 'all' }
+  | { type: 'documents'; documentIds: number[] }
+
+export interface VaultAnswerSource {
+  documentId: number
+  fileName: string
+  excerpt: string
+}
+
+export interface VaultAnswer {
+  answer: string
+  sources: VaultAnswerSource[]
+}
+
 export type PrivateAiPublicState =
   | 'not_installed'
   | 'downloading'
@@ -295,6 +310,7 @@ export interface DesktopApi {
     retryExtraction(input: { documentId: number }): Promise<VaultDocumentSummary>
     retryIndexing(input: { documentId: number }): Promise<{ success: true }>
     deleteDocument(input: { documentId: number }): Promise<{ success: true }>
+    ask(input: { question: string; scope: VaultQueryScope }): Promise<VaultAnswer>
     onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
   }
   privateAi: {
