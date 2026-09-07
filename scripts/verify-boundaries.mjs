@@ -10,6 +10,7 @@ const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.html']
 const legacyAdapterPath = 'src/main/circle/LegacyCircleAuthAdapter.ts'
 const desktopCircleClientPath = 'src/renderer/services/circle/DesktopCircleClient.ts'
 const desktopVaultClientPath = 'src/renderer/services/vault/DesktopVaultClient.ts'
+const desktopPrivateAiClientPath = 'src/renderer/services/ai/DesktopPrivateAiClient.ts'
 const mockCircleClientPath = 'src/renderer/services/circle/MockCircleClient.ts'
 
 const rendererRules = [
@@ -54,15 +55,22 @@ const publicCircleContractRules = [
 ]
 
 const vaultPrivateBoundaryRules = [
-  { name: 'Vault renderer/public contract must not expose storedRelativePath', pattern: /\bstoredRelativePath\b/g },
-  { name: 'Vault renderer/public contract must not expose sourcePath', pattern: /\bsourcePath\b/g },
-  { name: 'Vault renderer/public contract must not expose absolutePath', pattern: /\babsolutePath\b/g },
-  { name: 'Vault renderer/public contract must not expose extractedText', pattern: /\bextractedText\b/g },
-  { name: 'Vault renderer/public contract must not expose sha256', pattern: /\bsha256\b/g },
-  { name: 'Vault renderer/public contract must not expose localUserId', pattern: /\blocalUserId\b/g },
-  { name: 'Vault renderer/public contract must not expose embeddingBlob', pattern: /\bembeddingBlob\b/g },
-  { name: 'Vault renderer/public contract must not expose modelPath', pattern: /\bmodelPath\b/g },
-  { name: 'Vault renderer must not depend on a local AI HTTP port', pattern: /127\.0\.0\.1:808[01]/g },
+  { name: 'Vault/AI renderer/public contract must not expose embeddingBlob', pattern: /\bembeddingBlob\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose Float32Array vectors', pattern: /\bFloat32Array\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose storedRelativePath', pattern: /\bstoredRelativePath\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose sourcePath', pattern: /\bsourcePath\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose absolutePath', pattern: /\babsolutePath\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose extractedText', pattern: /\bextractedText\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose sha256', pattern: /\bsha256\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose localUserId', pattern: /\blocalUserId\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose modelPath', pattern: /\bmodelPath\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose Granite model internals', pattern: /\bgraniteModel\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose Nomic model internals', pattern: /\bnomicModel\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose llama-server executable details', pattern: /llama-server\.exe/g },
+  { name: 'Vault/AI renderer/public contract must not expose Granite local endpoint', pattern: /127\.0\.0\.1:8080/g },
+  { name: 'Vault/AI renderer/public contract must not expose Nomic local endpoint', pattern: /127\.0\.0\.1:8081/g },
+  { name: 'Vault/AI renderer/public contract must not expose Granite PID', pattern: /\bllmPid\b/g },
+  { name: 'Vault/AI renderer/public contract must not expose embedding PID', pattern: /\bembPid\b/g },
 ]
 
 const mainQuarantineRules = [
@@ -133,7 +141,11 @@ for (const filePath of rendererFiles) {
     recordMatches(violations, file, content, rendererCircleIdentityRules)
   }
 
-  if (file.startsWith('src/renderer/features/vault/') || file.startsWith('src/renderer/services/vault/')) {
+  if (
+    file.startsWith('src/renderer/features/vault/')
+    || file.startsWith('src/renderer/services/vault/')
+    || file.startsWith('src/renderer/services/ai/')
+  ) {
     recordMatches(violations, file, content, vaultPrivateBoundaryRules)
   }
 
@@ -151,6 +163,15 @@ for (const filePath of rendererFiles) {
       {
         name: 'production renderer must access Vault preload only through DesktopVaultClient',
         pattern: /window\.familyCircle\.vault/g,
+      },
+    ])
+  }
+
+  if (file !== desktopPrivateAiClientPath) {
+    recordMatches(violations, file, content, [
+      {
+        name: 'production renderer must access Private AI preload only through DesktopPrivateAiClient',
+        pattern: /window\.familyCircle\.privateAi/g,
       },
     ])
   }
