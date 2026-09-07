@@ -1,0 +1,170 @@
+.vault-ai {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(14, 159, 154, 0.2);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(14, 159, 154, 0.07), rgba(255, 255, 255, 0.96) 62%);
+  box-shadow: 0 5px 18px rgba(17, 38, 68, 0.04);
+}
+
+.vault-ai__mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--kk-teal-dark);
+  background: rgba(14, 159, 154, 0.1);
+}
+
+.vault-ai__body {
+  min-width: 0;
+}
+
+.vault-ai__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.vault-ai__heading strong {
+  display: block;
+  color: var(--kk-navy);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.vault-ai__heading p {
+  max-width: 700px;
+  margin: 5px 0 0;
+  color: var(--kk-text-muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.vault-ai__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.vault-ai__actions .vault-button {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+.vault-ai__progress {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(17, 38, 68, 0.08);
+}
+
+.vault-ai__progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: var(--kk-text-muted);
+  font-size: 10.5px;
+}
+
+.vault-ai__progress-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-ai__progress-copy strong {
+  flex: 0 0 auto;
+  color: var(--kk-navy);
+  font-size: 10.5px;
+}
+
+.vault-ai__detail {
+  display: block;
+  margin-top: 10px;
+  color: var(--kk-text-muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.vault-ai__error {
+  margin-top: 11px;
+  padding: 9px 10px;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  border-radius: 9px;
+  color: #8a241a;
+  background: #fff5f3;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.vault-ai--ready {
+  border-color: rgba(32, 164, 100, 0.22);
+  background: linear-gradient(135deg, rgba(32, 164, 100, 0.07), rgba(255, 255, 255, 0.96) 62%);
+}
+
+.vault-ai--ready .vault-ai__mark {
+  color: #16713a;
+  background: rgba(32, 164, 100, 0.1);
+}
+
+.vault-ai--paused,
+.vault-ai--verifying {
+  border-color: rgba(79, 95, 224, 0.18);
+  background: linear-gradient(135deg, rgba(79, 95, 224, 0.055), rgba(255, 255, 255, 0.96) 62%);
+}
+
+.vault-ai--paused .vault-ai__mark,
+.vault-ai--verifying .vault-ai__mark {
+  color: #4352c6;
+  background: rgba(79, 95, 224, 0.09);
+}
+
+.vault-ai--repair_required,
+.vault-ai--failed {
+  border-color: rgba(180, 35, 24, 0.18);
+  background: linear-gradient(135deg, rgba(180, 35, 24, 0.045), rgba(255, 255, 255, 0.97) 62%);
+}
+
+.vault-ai--repair_required .vault-ai__mark,
+.vault-ai--failed .vault-ai__mark {
+  color: #9d2d23;
+  background: rgba(180, 35, 24, 0.08);
+}
+
+@media (max-width: 760px) {
+  .vault-ai {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 11px;
+    padding: 14px;
+  }
+
+  .vault-ai__mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .vault-ai__heading {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .vault-ai__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .vault-ai__actions .vault-button {
+    width: 100%;
+  }
+}
