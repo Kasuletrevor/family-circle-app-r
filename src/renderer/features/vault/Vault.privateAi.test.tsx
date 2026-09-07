@@ -64,6 +64,7 @@ function vaultClient(documents: VaultDocumentSummary[] = [], overrides: Partial<
     retryExtraction: vi.fn(async () => documents[0]!),
     retryIndexing: vi.fn(async () => ({ success: true as const })),
     deleteDocument: vi.fn(async () => ({ success: true as const })),
+    ask: vi.fn(async () => ({ answer: '', sources: [] })),
     onUploadProgress: vi.fn(() => () => undefined),
     ...overrides,
   }
