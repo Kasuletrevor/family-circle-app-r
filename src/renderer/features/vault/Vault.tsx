@@ -7,6 +7,7 @@ import { DesktopVaultClient } from '../../services/vault/DesktopVaultClient'
 import type { VaultClient } from '../../services/vault/VaultClient'
 import { VaultDeleteDialog } from './VaultDeleteDialog'
 import './Vault.css'
+import './Vault.privateAi.css'
 
 const defaultVaultClient = new DesktopVaultClient()
 const defaultPrivateAiClient = new DesktopPrivateAiClient()
@@ -137,7 +138,7 @@ export function Vault({
 
   useEffect(() => {
     let cancelled = false
-    let unsubscribe = () => undefined
+    let unsubscribe: () => void = () => undefined
 
     void privateAiClient.getStatus().then(
       (status) => {
