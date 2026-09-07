@@ -1,6 +1,7 @@
 import type {
   DesktopApi,
   VaultDocumentSummary,
+  VaultQueryScope,
   VaultUploadProgress,
 } from '../../../shared/desktopApi'
 import type { VaultClient } from './VaultClient'
@@ -14,6 +15,7 @@ const defaultOperations: VaultDesktopOperations = {
   retryExtraction: (input) => window.familyCircle.vault.retryExtraction(input),
   retryIndexing: (input) => window.familyCircle.vault.retryIndexing(input),
   deleteDocument: (input) => window.familyCircle.vault.deleteDocument(input),
+  ask: (input) => window.familyCircle.vault.ask(input),
   onUploadProgress: (listener) => window.familyCircle.vault.onUploadProgress(listener),
 }
 
@@ -75,6 +77,10 @@ export class DesktopVaultClient implements VaultClient {
     } finally {
       this.invalidateList()
     }
+  }
+
+  ask(question: string, scope: VaultQueryScope) {
+    return this.operations.ask({ question, scope })
   }
 
   onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void {
