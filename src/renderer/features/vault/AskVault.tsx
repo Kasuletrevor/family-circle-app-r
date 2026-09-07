@@ -91,6 +91,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
             <input
               type="radio"
               name="vault-scope"
+              aria-label="All indexed documents"
               checked={scopeMode === 'all'}
               onChange={() => setScopeMode('all')}
             />
@@ -103,6 +104,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
             <input
               type="radio"
               name="vault-scope"
+              aria-label="Choose documents"
               checked={scopeMode === 'documents'}
               onChange={() => setScopeMode('documents')}
             />
