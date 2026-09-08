@@ -7,7 +7,7 @@ const workflowPath = resolve(root, '.github/workflows/windows-package.yml')
 
 function workflow(): string {
   expect(existsSync(workflowPath)).toBe(true)
-  return readFileSync(workflowPath, 'utf8')
+  return readFileSync(workflowPath, 'utf8').replace(/\r\n/g, '\n')
 }
 
 describe('Windows packaging workflow', () => {
