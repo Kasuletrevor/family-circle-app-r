@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "Kin-Keepers Family Circle Windows desktop application",
+  "author": "Kin-Keepers",
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build",
     "build": "npm run build:electron && npm run build:renderer",
+    "package:win": "npm run build && npx --yes electron-builder@26.15.3 --win nsis --x64",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -39,5 +41,40 @@
     "typescript": "7.0.2",
     "vite": "8.1.0",
     "vitest": "4.1.11"
+  },
+  "build": {
+    "appId": "com.kinkeepers.familycircle",
+    "productName": "Family Circle",
+    "files": [
+      "dist/**/*",
+      "config/offline-ai-manifest.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/family-circle.ico"
+    },
+    "nsis": {
+      "artifactName": "Family-Circle-Setup-${version}.exe",
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Family Circle",
+      "deleteAppDataOnUninstall": false
+    },
+    "compression": "normal"
   }
 }
