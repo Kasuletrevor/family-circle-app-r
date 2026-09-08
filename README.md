@@ -298,6 +298,12 @@ There is no cloud fallback and no Vault-content path through Jose's Circle adapt
 
 Developer/runtime details, hashes, lifecycle rules, and the Windows clean-machine acceptance procedure are documented in [`docs/PRIVATE_AI.md`](docs/PRIVATE_AI.md).
 
+## Windows installer
+
+Windows x64 builds use a one-click per-user NSIS installer named `Family-Circle-Setup-${version}.exe`. **GitHub Releases are the canonical public download source.** Branch and pull-request packaging runs also publish the installer as a GitHub Actions artifact for verification.
+
+The normal installer stays small: Private AI is not bundled and is downloaded only after the user explicitly chooses **Set up Private AI**. `.env` files, model/runtime payloads, Vault data, and user data are excluded from the package. See [`docs/WINDOWS_RELEASE.md`](docs/WINDOWS_RELEASE.md) for the exact build commands, release workflow, unsigned-installer/SmartScreen note, and 12-step clean-machine acceptance test.
+
 ## Copy-safe legacy database import
 
 On startup the rebuild uses its own active database under the Electron user-data directory. If that active database does not yet exist and the legacy database exists at:
