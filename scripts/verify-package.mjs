@@ -32,7 +32,11 @@ function verifyConfig() {
   const target = Array.isArray(build.win?.target) ? build.win.target : []
   const files = Array.isArray(build.files) ? build.files : []
 
-  assert(pkg.scripts?.['package:win']?.includes('electron-builder'), 'package:win must invoke electron-builder')
+  assert(pkg.devDependencies?.['electron-builder'] === '26.15.3', 'electron-builder must be locked as a development dependency')
+  assert(
+    pkg.scripts?.['package:win'] === 'npm run build && electron-builder --win nsis --x64',
+    'package:win must invoke the locked electron-builder dependency',
+  )
   assert(build.appId === 'com.kinkeepers.familycircle', 'Unexpected Electron appId')
   assert(build.productName === 'Family Circle', 'Unexpected Electron productName')
   assert(build.directories?.output === 'release', 'Packaging output must be release/')
@@ -46,7 +50,7 @@ function verifyConfig() {
   assert(build.nsis?.deleteAppDataOnUninstall === false, 'Uninstall must preserve app data')
   assert(files.includes('dist/**/*'), 'Compiled dist/ output is not packaged')
   assert(files.includes('config/offline-ai-manifest.json'), 'Private AI manifest is not packaged')
-  assert(!/\.env|\.gguf|models\/|bin\//i.test(files.join('\n')), 'Packaging allowlist contains forbidden secret/model inputs')
+  assert(!/\.env|\.gguf|\.bin|models\/|bin\//i.test(files.join('\n')), 'Packaging allowlist contains forbidden secret/model inputs')
 
   const iconPath = resolve(root, build.win?.icon ?? '')
   assert(build.win?.icon === 'build/family-circle.ico', 'Unexpected Windows icon path')
@@ -87,7 +91,7 @@ function verifyNoForbiddenLooseResources(releaseDir) {
     const base = basename(lower)
     const inNodeModules = lower === 'node_modules' || lower.includes('/node_modules/')
     const hasForbiddenSecret = base === '.env' || base.startsWith('.env.')
-    const hasForbiddenModelFile = lower.endsWith('.gguf')
+    const hasForbiddenModelFile = lower.endsWith('.gguf') || lower.endsWith('.bin')
     const hasForbiddenPrivateAiDirectory = !inNodeModules && /(^|\/)(models|bin)(\/|$)/i.test(normalized)
 
     if (hasForbiddenSecret || hasForbiddenModelFile || hasForbiddenPrivateAiDirectory) {
