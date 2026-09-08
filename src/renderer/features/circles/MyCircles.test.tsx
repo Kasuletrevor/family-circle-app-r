@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppServicesProvider } from '../../app/services'
@@ -150,6 +150,6 @@ describe('MyCircles', () => {
       email: 'relative@example.test',
       role: 'Parent',
     })
-    expect(getMyCircles).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(getMyCircles).toHaveBeenCalledTimes(2))
   })
 })
