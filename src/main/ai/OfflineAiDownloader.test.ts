@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { OfflineAiDownloader } from './OfflineAiDownloader'
 import type { OfflineAiManifest, OfflineAiManifestFile, PrivateAiProgress } from './privateAiModels'
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex').toUpperCase()
+}
+
+function testRoot(): string {
+  return resolve('private', 'offline-ai')
 }
 
 function modelFile(contents: string, overrides: Partial<OfflineAiManifestFile> = {}): OfflineAiManifestFile {
@@ -107,7 +111,7 @@ function makeDownloader(httpResponse: ReturnType<typeof response>) {
 describe('OfflineAiDownloader', () => {
   it('resumes .part via Range bytes=<existing>-', async () => {
     const file = modelFile('abcdef')
-    const root = '/private/offline-ai'
+    const root = testRoot()
     const partPath = join(root, '.staging', 'test-1', 'models/model.gguf.part')
     const finalPath = join(root, 'models/model.gguf')
     const { downloader, fs, http } = makeDownloader(response(206, ['def']))
@@ -122,7 +126,7 @@ describe('OfflineAiDownloader', () => {
 
   it('restarts when server ignores resume', async () => {
     const file = modelFile('abcdef')
-    const root = '/private/offline-ai'
+    const root = testRoot()
     const partPath = join(root, '.staging', 'test-1', 'models/model.gguf.part')
     const finalPath = join(root, 'models/model.gguf')
     const { downloader, fs } = makeDownloader(response(200, ['abcdef']))
@@ -136,7 +140,7 @@ describe('OfflineAiDownloader', () => {
 
   it('emits aggregate/per-file progress', async () => {
     const file = modelFile('abcdef')
-    const root = '/private/offline-ai'
+    const root = testRoot()
     const { downloader } = makeDownloader(response(200, ['abc', 'def']))
     const progress: PrivateAiProgress[] = []
 
@@ -159,7 +163,7 @@ describe('OfflineAiDownloader', () => {
 
   it('pause keeps valid partial bytes', async () => {
     const file = modelFile('abcdef')
-    const root = '/private/offline-ai'
+    const root = testRoot()
     const partPath = join(root, '.staging', 'test-1', 'models/model.gguf.part')
     const { downloader, fs } = makeDownloader(response(200, ['abc', 'def']))
 
@@ -176,19 +180,19 @@ describe('OfflineAiDownloader', () => {
     const file = modelFile('abcdef')
     const { downloader } = makeDownloader(response(200, ['abcde']))
 
-    await expect(downloader.downloadAll(manifest(file), '/private/offline-ai')).rejects.toMatchObject({ code: 'size-mismatch' })
+    await expect(downloader.downloadAll(manifest(file), testRoot())).rejects.toMatchObject({ code: 'size-mismatch' })
   })
 
   it('rejects SHA mismatch', async () => {
     const file = modelFile('abcdef', { sha256: sha256('different') })
     const { downloader } = makeDownloader(response(200, ['abcdef']))
 
-    await expect(downloader.downloadAll(manifest(file), '/private/offline-ai')).rejects.toMatchObject({ code: 'sha-mismatch' })
+    await expect(downloader.downloadAll(manifest(file), testRoot())).rejects.toMatchObject({ code: 'sha-mismatch' })
   })
 
   it('promotes only verified files', async () => {
     const file = modelFile('abcdef', { sha256: sha256('different') })
-    const root = '/private/offline-ai'
+    const root = testRoot()
     const finalPath = join(root, 'models/model.gguf')
     const { downloader, fs } = makeDownloader(response(200, ['abcdef']))
 
@@ -206,7 +210,7 @@ describe('OfflineAiDownloader', () => {
       targetPath: 'bin/runtime',
       extract: true,
     })
-    const root = '/private/offline-ai'
+    const root = testRoot()
     const { downloader, fs, archive, extractionOperations } = makeDownloader(response(200, [zipBytes]))
 
     await downloader.downloadAll(manifest(runtime), root)

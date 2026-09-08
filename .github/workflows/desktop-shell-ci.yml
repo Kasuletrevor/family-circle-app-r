@@ -11,6 +11,7 @@ on:
       - feature/circle-members-invitations
       - feature/vault-private-ai
       - feature/private-ai-rag
+      - feature/windows-packaging-release
   pull_request:
     branches:
       - main
