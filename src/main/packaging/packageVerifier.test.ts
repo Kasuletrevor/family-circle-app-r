@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -52,5 +52,26 @@ describe('Windows package verifier', () => {
     result = runVerifier('--release-dir', releaseDir)
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('Expected exactly one Windows installer')
+  })
+
+  it('rejects a lone installer whose version does not match package.json', () => {
+    const releaseDir = tempReleaseDir()
+    writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-9.9.9.exe'), 'wrong version')
+
+    const result = runVerifier('--release-dir', releaseDir)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Family-Circle-Setup-0.1.0.exe')
+  })
+
+  it('rejects forbidden loose secret or model resources', () => {
+    const releaseDir = tempReleaseDir()
+    writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+    const forbiddenDir = resolve(releaseDir, 'win-unpacked', 'resources', 'models')
+    mkdirSync(forbiddenDir, { recursive: true })
+    writeFileSync(resolve(forbiddenDir, 'private-model.gguf'), 'must never ship')
+
+    const result = runVerifier('--release-dir', releaseDir)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Forbidden packaged resource')
   })
 })
