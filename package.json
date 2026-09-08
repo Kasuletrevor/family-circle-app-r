@@ -11,6 +11,7 @@
     "build:renderer": "vite build",
     "build": "npm run build:electron && npm run build:renderer",
     "package:win": "npm run build && npx --yes electron-builder@26.15.3 --win nsis --x64",
+    "verify:package": "node scripts/verify-package.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
