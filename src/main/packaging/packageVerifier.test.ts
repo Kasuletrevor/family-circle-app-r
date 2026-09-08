@@ -74,4 +74,16 @@ describe('Windows package verifier', () => {
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('Forbidden packaged resource')
   })
+
+  it('rejects loose binary model payloads outside model directories', () => {
+    const releaseDir = tempReleaseDir()
+    writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+    const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources')
+    mkdirSync(resourcesDir, { recursive: true })
+    writeFileSync(resolve(resourcesDir, 'private-ai.bin'), 'must never ship')
+
+    const result = runVerifier('--release-dir', releaseDir)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Forbidden packaged resource')
+  })
 })
