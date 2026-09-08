@@ -35,4 +35,12 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('gh release')
     expect(source).not.toMatch(/SERVER_IP|SSH_|scp-action|ssh-action/i)
   })
+
+  it('keeps packaging read-only and grants write permission only to the tag release job', () => {
+    const source = workflow()
+    expect(source).toContain('permissions:\n  contents: read')
+    expect(source).toMatch(/release:\n\s+if: startsWith\(github\.ref, 'refs\/tags\/v'\)/)
+    expect(source).toMatch(/release:[\s\S]*?permissions:\n\s+contents: write/)
+    expect(source).toContain('actions/download-artifact@')
+  })
 })
