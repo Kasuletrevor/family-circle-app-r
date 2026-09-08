@@ -1,0 +1,38 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+const root = resolve(__dirname, '../../..')
+const workflowPath = resolve(root, '.github/workflows/windows-package.yml')
+
+function workflow(): string {
+  expect(existsSync(workflowPath)).toBe(true)
+  return readFileSync(workflowPath, 'utf8')
+}
+
+describe('Windows packaging workflow', () => {
+  it('builds and verifies the installer on a real Windows runner', () => {
+    const source = workflow()
+    expect(source).toContain('runs-on: windows-latest')
+    expect(source).toContain('npm ci --no-audit')
+    expect(source).toContain('npm run check')
+    expect(source).toContain('npm run package:win')
+    expect(source).toContain('npm run verify:package')
+    expect(source).toContain('Family-Circle-Setup-*.exe')
+  })
+
+  it('publishes every successful installer as an Actions artifact', () => {
+    const source = workflow()
+    expect(source).toContain('actions/upload-artifact@')
+    expect(source).toContain('name: family-circle-windows-installer')
+    expect(source).toContain('release/Family-Circle-Setup-*.exe')
+  })
+
+  it('publishes version tags to a GitHub Release without server secrets', () => {
+    const source = workflow()
+    expect(source).toContain("startsWith(github.ref, 'refs/tags/v')")
+    expect(source).toContain('contents: write')
+    expect(source).toContain('gh release')
+    expect(source).not.toMatch(/SERVER_IP|SSH_|scp-action|ssh-action/i)
+  })
+})
