@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 interface PackageJson {
   scripts?: Record<string, string>
+  devDependencies?: Record<string, string>
   build?: {
     appId?: string
     productName?: string
@@ -24,7 +25,8 @@ const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as P
 
 describe('Windows packaging contract', () => {
   it('configures the small Family Circle x64 NSIS installer', () => {
-    expect(pkg.scripts?.['package:win']).toContain('electron-builder')
+    expect(pkg.devDependencies?.['electron-builder']).toBe('26.15.3')
+    expect(pkg.scripts?.['package:win']).toBe('npm run build && electron-builder --win nsis --x64')
     expect(pkg.build?.appId).toBe('com.kinkeepers.familycircle')
     expect(pkg.build?.productName).toBe('Family Circle')
     expect(pkg.build?.directories?.output).toBe('release')
