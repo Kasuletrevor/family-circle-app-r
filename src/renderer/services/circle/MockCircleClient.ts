@@ -1,9 +1,11 @@
 import type {
+  AddTreeRelationInput,
   CreateCircleInput,
   CreateCircleResult,
   InviteMemberInput,
   InviteMemberResult,
   ResendInvitationResult,
+  SaveTreePositionInput,
 } from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
 import type { CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
@@ -129,6 +131,18 @@ export class MockCircleClient implements CircleClient {
 
   async inviteMember(_input: InviteMemberInput): Promise<InviteMemberResult> {
     return { outcome: 'sent' }
+  }
+
+  async addTreeRelation(_input: AddTreeRelationInput): Promise<{ success: true }> {
+    return { success: true }
+  }
+
+  async deleteTreeRelation(_relationId: string): Promise<{ success: true }> {
+    return { success: true }
+  }
+
+  async saveTreePosition(_input: SaveTreePositionInput): Promise<{ success: true }> {
+    return { success: true }
   }
 
   async resendInvitation(_personId: string): Promise<ResendInvitationResult> {
