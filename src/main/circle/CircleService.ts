@@ -80,6 +80,7 @@ function emptyOverview(
     circles: [],
     activeCircleId: null,
     viewerPersonId: null,
+    viewerIsOwner: false,
     tree: null,
     notifications,
   }
@@ -159,6 +160,7 @@ export class CircleService {
       circles: groups.map(safeGroup),
       activeCircleId: activeCircle.id,
       viewerPersonId,
+      viewerIsOwner: tree.group.ownerId === serverUserId,
       tree: safeTree(tree),
       notifications,
     }
