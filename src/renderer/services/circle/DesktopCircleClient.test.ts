@@ -8,6 +8,7 @@ const readyOverview: CircleOverview = {
   status: 'ready',
   activeCircleId: 'g-1',
   viewerPersonId: 'user:88',
+  viewerIsOwner: false,
   circles: [
     { id: 'g-1', name: 'Test Family', role: 'Family member' },
     { id: 'g-2', name: 'Other Family', role: 'Circle owner' },
@@ -125,6 +126,7 @@ describe('DesktopCircleClient', () => {
       circles: [],
       activeCircleId: null,
       viewerPersonId: null,
+      viewerIsOwner: false,
       tree: null,
       notifications: [],
     }
