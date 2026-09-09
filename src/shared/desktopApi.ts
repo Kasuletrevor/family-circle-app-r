@@ -327,6 +327,9 @@ export interface DesktopApi {
     selectCircle(circleId: string): Promise<{ success: true }>
     createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
     inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+    addTreeRelation(input: AddTreeRelationInput): Promise<{ success: true }>
+    deleteTreeRelation(input: { relationId: string }): Promise<{ success: true }>
+    saveTreePosition(input: SaveTreePositionInput): Promise<{ success: true }>
     resendInvitation(input: { personId: string }): Promise<ResendInvitationResult>
     cancelInvitation(input: { personId: string }): Promise<{ success: true }>
     removeMember(input: { personId: string }): Promise<{ success: true }>
