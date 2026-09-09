@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 interface PackageJson {
   scripts?: Record<string, string>
+  dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   build?: {
     appId?: string
@@ -35,6 +36,10 @@ describe('Windows packaging contract', () => {
     expect(pkg.build?.nsis?.oneClick).toBe(true)
     expect(pkg.build?.nsis?.perMachine).toBe(false)
     expect(pkg.build?.nsis?.deleteAppDataOnUninstall).toBe(false)
+  })
+
+  it('pins the patched nodemailer runtime dependency required by the high-severity audit gate', () => {
+    expect(pkg.dependencies?.nodemailer).toBe('9.1.1')
   })
 
   it('packages the compiled app and manifest but no secret/model inputs', () => {
