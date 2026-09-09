@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthUser } from '../../shared/desktopApi'
 import { CircleService } from './CircleService'
+import type { CircleTreeInternal } from './circleModels'
 
 const memberUser: AuthUser = {
   id: 7,
@@ -23,7 +24,7 @@ const defaultGroups = [
   { id: 'g-2', name: 'Other Family', ownerId: '88', role: 'Circle owner' },
 ]
 
-function treeFor(groupId: string, name: string, ownerId: string, memberCount: number, viewerId = '88') {
+function treeFor(groupId: string, name: string, ownerId: string, memberCount: number, viewerId = '88'): CircleTreeInternal {
   const people = Array.from({ length: memberCount }, (_, index) => ({
     id: `user:${index === 0 ? viewerId : index + 100}`,
     kind: 'user' as const,
@@ -49,7 +50,7 @@ function setup(options: {
   activeCircleId?: string | null
   invitationGroupId?: string | null
   groups?: Array<{ id: string; name: string; ownerId: string; role: string }>
-  trees?: Record<string, ReturnType<typeof treeFor>>
+  trees?: Record<string, CircleTreeInternal>
   ensureSharedUserResult?: string
   createCircleError?: Error | null
 } = {}) {
@@ -111,6 +112,9 @@ function setup(options: {
           role: 'Circle owner',
         })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    addTreeRelation: vi.fn(async () => ({ success: true as const })),
+    deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+    saveTreePosition: vi.fn(async () => ({ success: true as const })),
     cancelInvitation: vi.fn(async () => ({ success: true as const })),
     removeMember: vi.fn(async () => ({ success: true as const })),
     leaveCircle: vi.fn(async () => ({ success: true as const })),
@@ -291,5 +295,118 @@ describe('CircleService', () => {
       email: 'relative@example.test',
       role: 'Sibling',
     })
+  })
+
+  it('allows only the active Circle owner to add relationships and derives transport identity in main', async () => {
+    const member = setup({ activeCircleId: 'g-1' })
+    await expect(member.service.addTreeRelation({
+      kind: 'sibling',
+      aPersonId: 'user:101',
+      bPersonId: 'user:102',
+    })).rejects.toThrow('Only the Circle owner can manage relationships')
+    expect(member.circle.addTreeRelation).not.toHaveBeenCalled()
+
+    const owner = setup({ activeCircleId: 'g-2' })
+    await expect(owner.service.addTreeRelation({
+      kind: 'sibling',
+      aPersonId: 'user:101',
+      bPersonId: 'user:102',
+    })).resolves.toEqual({ success: true })
+    expect(owner.circle.addTreeRelation).toHaveBeenCalledWith({
+      serverUserId: '88',
+      circleId: 'g-2',
+      kind: 'sibling',
+      aPersonId: 'user:101',
+      bPersonId: 'user:102',
+    })
+  })
+
+  it('rejects foreign relationship endpoints and ancestry cycles before transport', async () => {
+    const owner = setup({ activeCircleId: 'g-2' })
+    await expect(owner.service.addTreeRelation({
+      kind: 'sibling',
+      aPersonId: 'user:101',
+      bPersonId: 'user:foreign',
+    })).rejects.toThrow('Choose confirmed Circle members')
+    expect(owner.circle.addTreeRelation).not.toHaveBeenCalled()
+
+    const cyclicTree = treeFor('g-2', 'Other Family', '88', 3)
+    cyclicTree.relations = [
+      { id: 'r-1', kind: 'mother', aPersonId: 'user:88', bPersonId: 'user:101' },
+      { id: 'r-2', kind: 'father', aPersonId: 'user:101', bPersonId: 'user:102' },
+    ]
+    const cyclic = setup({ activeCircleId: 'g-2', trees: { 'g-2': cyclicTree } })
+    await expect(cyclic.service.addTreeRelation({
+      kind: 'guardian',
+      aPersonId: 'user:102',
+      bPersonId: 'user:88',
+    })).rejects.toThrow('That relationship would create an ancestry loop')
+    expect(cyclic.circle.addTreeRelation).not.toHaveBeenCalled()
+  })
+
+  it('deletes only an authoritative relationship from the active owned Circle', async () => {
+    const owner = setup({ activeCircleId: 'g-2' })
+
+    await expect(owner.service.deleteTreeRelation({ relationId: 'missing-r' }))
+      .rejects.toThrow('That relationship is no longer in this Circle')
+    expect(owner.circle.deleteTreeRelation).not.toHaveBeenCalled()
+
+    await expect(owner.service.deleteTreeRelation({ relationId: 'g-2-r-1' }))
+      .resolves.toEqual({ success: true })
+    expect(owner.circle.deleteTreeRelation).toHaveBeenCalledWith({
+      serverUserId: '88',
+      circleId: 'g-2',
+      relationId: 'g-2-r-1',
+    })
+  })
+
+  it('allows members to move only their own confirmed card and owners to move any confirmed member', async () => {
+    const member = setup({ activeCircleId: 'g-1' })
+    await expect(member.service.saveTreePosition({ personId: 'user:88', x: 50, y: 75 }))
+      .resolves.toEqual({ success: true })
+    expect(member.circle.saveTreePosition).toHaveBeenCalledWith({
+      serverUserId: '88',
+      circleId: 'g-1',
+      personId: 'user:88',
+      x: 50,
+      y: 75,
+    })
+
+    member.circle.saveTreePosition.mockClear()
+    await expect(member.service.saveTreePosition({ personId: 'user:101', x: 50, y: 75 }))
+      .rejects.toThrow('You can only move your own family tree card')
+    expect(member.circle.saveTreePosition).not.toHaveBeenCalled()
+
+    const owner = setup({ activeCircleId: 'g-2' })
+    await expect(owner.service.saveTreePosition({ personId: 'user:101', x: 50, y: 75 }))
+      .resolves.toEqual({ success: true })
+    expect(owner.circle.saveTreePosition).toHaveBeenCalledWith({
+      serverUserId: '88',
+      circleId: 'g-2',
+      personId: 'user:101',
+      x: 50,
+      y: 75,
+    })
+  })
+
+  it('rejects placeholder movement and invalid coordinates before transport', async () => {
+    const ownerTree = treeFor('g-2', 'Other Family', '88', 3)
+    ownerTree.people.push({
+      id: 'placeholder:p1',
+      kind: 'placeholder',
+      userId: null,
+      name: 'Legacy Relative',
+      email: null,
+      role: '',
+    })
+    const owner = setup({ activeCircleId: 'g-2', trees: { 'g-2': ownerTree } })
+
+    await expect(owner.service.saveTreePosition({ personId: 'placeholder:p1', x: 10, y: 20 }))
+      .rejects.toThrow()
+    expect(owner.circle.saveTreePosition).not.toHaveBeenCalled()
+
+    await expect(owner.service.saveTreePosition({ personId: 'user:101', x: 100001, y: 0 }))
+      .rejects.toThrow('Choose a valid tree position')
+    expect(owner.circle.saveTreePosition).not.toHaveBeenCalled()
   })
 })
