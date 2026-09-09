@@ -134,6 +134,7 @@ describe('CircleService', () => {
       circles: [],
       activeCircleId: null,
       viewerPersonId: null,
+      viewerIsOwner: false,
       tree: null,
       notifications: [],
     })
@@ -148,13 +149,14 @@ describe('CircleService', () => {
       circles: [],
       activeCircleId: null,
       viewerPersonId: null,
+      viewerIsOwner: false,
     })
     expect(circle.getTree).not.toHaveBeenCalled()
     expect(circle.getNotifications).toHaveBeenCalledWith('88')
     expect(users.setActiveCircleId).toHaveBeenCalledWith(7, null)
   })
 
-  it('uses the local active Circle preference and strips shared service identities from the public overview', async () => {
+  it('uses the local active Circle preference, derives owner capability, and strips shared identities', async () => {
     const { service, circle } = setup({ activeCircleId: 'g-2' })
     const overview = await service.getOverview()
 
@@ -165,6 +167,7 @@ describe('CircleService', () => {
       status: 'ready',
       activeCircleId: 'g-2',
       viewerPersonId: 'user:88',
+      viewerIsOwner: true,
       circles: [
         { id: 'g-1', name: 'Test Family', role: 'Family member' },
         { id: 'g-2', name: 'Other Family', role: 'Circle owner' },
@@ -183,6 +186,15 @@ describe('CircleService', () => {
     })
     expect(JSON.stringify(overview)).not.toContain('ownerId')
     expect(JSON.stringify(overview)).not.toContain('userId')
+  })
+
+  it('derives a false owner capability for a non-owner active Circle', async () => {
+    const { service } = setup({ activeCircleId: 'g-1' })
+    await expect(service.getOverview()).resolves.toMatchObject({
+      status: 'ready',
+      activeCircleId: 'g-1',
+      viewerIsOwner: false,
+    })
   })
 
   it('repairs a stale active Circle preference using the invited Circle fallback', async () => {
