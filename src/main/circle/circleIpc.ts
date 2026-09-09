@@ -1,13 +1,16 @@
 import type {
+  AddTreeRelationInput,
   CircleDetails,
   CircleListItem,
   CircleOverview,
   CreateCircleInput,
   CreateCircleResult,
+  FamilyRelationshipKind,
   InvitationFamilyRole,
   InviteMemberInput,
   InviteMemberResult,
   ResendInvitationResult,
+  SaveTreePositionInput,
 } from '../../shared/desktopApi'
 import type { IpcHandleRegistrar } from '../auth/authIpc'
 
@@ -18,6 +21,9 @@ export interface CircleIpcService {
   selectCircle(circleId: string): Promise<{ success: true }>
   createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
   inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+  addTreeRelation(input: AddTreeRelationInput): Promise<{ success: true }>
+  deleteTreeRelation(input: { relationId: string }): Promise<{ success: true }>
+  saveTreePosition(input: SaveTreePositionInput): Promise<{ success: true }>
   resendInvitation(input: { personId: string }): Promise<ResendInvitationResult>
   cancelInvitation(input: { personId: string }): Promise<{ success: true }>
   removeMember(input: { personId: string }): Promise<{ success: true }>
@@ -48,6 +54,26 @@ export function registerCircleIpc(ipc: IpcHandleRegistrar, service: CircleIpcSer
       circleId: String(raw.circleId ?? ''),
       email: String(raw.email ?? ''),
       role: String(raw.role ?? '') as InvitationFamilyRole,
+    })
+  })
+  ipc.handle('circle:add-tree-relation', (_event, payload) => {
+    const raw = recordOf(payload)
+    return service.addTreeRelation({
+      kind: String(raw.kind ?? '') as FamilyRelationshipKind,
+      aPersonId: String(raw.aPersonId ?? ''),
+      bPersonId: String(raw.bPersonId ?? ''),
+    })
+  })
+  ipc.handle('circle:delete-tree-relation', (_event, payload) => {
+    const raw = recordOf(payload)
+    return service.deleteTreeRelation({ relationId: String(raw.relationId ?? '') })
+  })
+  ipc.handle('circle:save-tree-position', (_event, payload) => {
+    const raw = recordOf(payload)
+    return service.saveTreePosition({
+      personId: String(raw.personId ?? ''),
+      x: Number(raw.x),
+      y: Number(raw.y),
     })
   })
   ipc.handle('circle:resend-invitation', (_event, payload) => service.resendInvitation(personInput(payload)))
