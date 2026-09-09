@@ -65,20 +65,20 @@ describe('Family Tree relationship rules', () => {
     )).toThrow('That relationship already exists')
   })
 
-  it('rejects duplicate directed relationships but keeps inverse directed relationships distinct', () => {
+  it('rejects duplicate directed relationships but keeps inverse non-ancestry directed relationships distinct', () => {
     const relations: CircleTreeRelationRecord[] = [
-      { id: 'r1', kind: 'mother', aPersonId: 'user:1', bPersonId: 'user:2' },
+      { id: 'r1', kind: 'aunt_uncle', aPersonId: 'user:1', bPersonId: 'user:2' },
     ]
     expect(() => validateTreeRelation(
-      { kind: 'mother', aPersonId: 'user:1', bPersonId: 'user:2' },
+      { kind: 'aunt_uncle', aPersonId: 'user:1', bPersonId: 'user:2' },
       userPeople,
       relations,
     )).toThrow('That relationship already exists')
     expect(validateTreeRelation(
-      { kind: 'mother', aPersonId: 'user:2', bPersonId: 'user:1' },
+      { kind: 'aunt_uncle', aPersonId: 'user:2', bPersonId: 'user:1' },
       userPeople,
       relations,
-    )).toEqual({ kind: 'mother', aPersonId: 'user:2', bPersonId: 'user:1' })
+    )).toEqual({ kind: 'aunt_uncle', aPersonId: 'user:2', bPersonId: 'user:1' })
   })
 
   it('rejects an ancestry edge that would close a cycle', () => {
