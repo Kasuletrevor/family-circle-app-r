@@ -301,14 +301,10 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
         return invoke('circle:select', circleId) as Promise<{ success: true }>
       },
       createCircle(input: CreateCircleInput) {
-        return invoke('circle:create', { name: String(input.name ?? '') }) as Promise<CreateCircleResult>
+        return invoke('circle:create', input) as Promise<CreateCircleResult>
       },
       inviteMember(input: InviteMemberInput) {
-        return invoke('circle:invite-member', {
-          circleId: String(input.circleId ?? ''),
-          email: String(input.email ?? ''),
-          role: input.role,
-        }) as Promise<InviteMemberResult>
+        return invoke('circle:invite-member', input) as Promise<InviteMemberResult>
       },
       addTreeRelation(input: AddTreeRelationInput) {
         return invoke('circle:add-tree-relation', {
@@ -330,13 +326,13 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
         }) as Promise<{ success: true }>
       },
       resendInvitation(input: { personId: string }) {
-        return invoke('circle:resend-invitation', { personId: String(input.personId ?? '') }) as Promise<ResendInvitationResult>
+        return invoke('circle:resend-invitation', input) as Promise<ResendInvitationResult>
       },
       cancelInvitation(input: { personId: string }) {
-        return invoke('circle:cancel-invitation', { personId: String(input.personId ?? '') }) as Promise<{ success: true }>
+        return invoke('circle:cancel-invitation', input) as Promise<{ success: true }>
       },
       removeMember(input: { personId: string }) {
-        return invoke('circle:remove-member', { personId: String(input.personId ?? '') }) as Promise<{ success: true }>
+        return invoke('circle:remove-member', input) as Promise<{ success: true }>
       },
       leaveCircle() {
         return invoke('circle:leave') as Promise<{ success: true }>
