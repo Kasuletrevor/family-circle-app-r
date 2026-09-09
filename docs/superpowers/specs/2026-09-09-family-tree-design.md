@@ -6,7 +6,7 @@ Family Tree becomes the next core Family Circle product feature. It turns the ex
 
 The feature must extend the rebuild's existing Circle architecture rather than introduce a second local source of truth. Circle membership, family relationships, and persisted tree positions remain shared Circle data behind the existing Circle service. The desktop SQLite database remains for local authentication/session state and private Vault data; no Family Tree SQLite tables are added.
 
-The first production slice supports confirmed Circle members, relationship creation/deletion, deterministic layout, SVG rendering, person/relation selection, Circle switching, and persisted node positions. Direct non-app family members are explicitly deferred until their complete create/edit/delete lifecycle is designed.
+The first production slice supports confirmed Circle members, relationship creation/deletion, deterministic layout, SVG rendering, person/relation selection, Circle switching, and persisted node positions. Pre-existing legacy placeholder relatives may be displayed read-only, but direct non-app family member creation/edit/delete is explicitly deferred until its complete lifecycle is designed.
 
 ## Goals
 
@@ -23,7 +23,7 @@ The first production slice supports confirmed Circle members, relationship creat
 
 The following are intentionally out of scope:
 
-- Direct/non-app family member CRUD.
+- Direct/non-app family member creation, editing, or deletion.
 - Profile photos and remote avatar URLs.
 - Birth/death dates, marriage/divorce dates, biological/adoptive metadata.
 - GEDCOM import/export.
@@ -83,10 +83,12 @@ After every relationship mutation, the UI refetches the authoritative tree rathe
 
 ## Relationship model
 
-### Publicly creatable relationship kinds
+### Strict mutation type
+
+The shared public contract adds the exact type:
 
 ```ts
-type FamilyRelationshipKind =
+export type FamilyRelationshipKind =
   | 'mother'
   | 'father'
   | 'guardian'
@@ -96,6 +98,8 @@ type FamilyRelationshipKind =
   | 'aunt_uncle'
   | 'cousin'
 ```
+
+`CircleTreeRelationRecord.kind` remains `string` on the read side so historical/legacy server relationship kinds can still be displayed safely. Mutation inputs use `FamilyRelationshipKind` and reject all other values.
 
 The legacy server also understands `friend`. Existing `friend` relationships may be displayed safely, but the Family Tree creation UI does not offer `friend` because it is not genealogical structure.
 
@@ -134,9 +138,9 @@ Before the adapter is called, `CircleService` must enforce:
 2. The signed-in local user still has a valid shared `serverUserId`.
 3. The active Circle still belongs to that shared user.
 4. The viewer is the active Circle owner for relationship mutations.
-5. Both endpoints are confirmed user nodes in the authoritative active-Circle tree for this slice.
+5. Both relationship endpoints are confirmed `kind: 'user'` nodes in the authoritative active-Circle tree for this slice.
 6. Both endpoint IDs are non-empty and distinct.
-7. The relationship kind is in the allowed creation set.
+7. The relationship kind is in `FamilyRelationshipKind`.
 8. Undirected relationships are canonicalized.
 9. An identical relationship does not already exist.
 10. A directed ancestry relation must not introduce an ancestry cycle.
@@ -160,7 +164,7 @@ The renderer/layout engine must still tolerate malformed historical server data 
 
 ## Circle port extensions
 
-The internal `CirclePort` gains tree mutations equivalent to:
+The internal `CirclePort` gains these exact methods:
 
 ```ts
 addTreeRelation(input: {
@@ -190,9 +194,7 @@ The legacy adapter maps these to the existing shared Circle server endpoints. Tr
 
 ## CircleService public mutation API
 
-Renderer-facing service methods should not accept identity or Circle ownership inputs.
-
-Conceptually:
+Renderer-facing service methods use these exact signatures and do not accept identity or Circle ownership inputs:
 
 ```ts
 addTreeRelation(input: {
@@ -214,16 +216,38 @@ saveTreePosition(input: {
 
 Each method resolves the active Circle and authoritative tree from the protected session before validating and calling the port.
 
-## Position permissions
+## Safe viewer capability
+
+The renderer must not infer owner permissions from free-form Circle role text.
+
+Extend `CircleOverview` with a safe derived capability:
+
+```ts
+viewerIsOwner: boolean
+```
+
+- Empty overview states return `viewerIsOwner: false`.
+- Ready overview states set it from `tree.group.ownerId === serverUserId` inside `CircleService` before `ownerId` is stripped from the public tree.
+
+The UI uses `viewerIsOwner` to show relationship mutation controls and move-any-node behavior. No owner ID crosses the public desktop contract.
+
+## Position permissions and bounds
 
 Manual node positioning follows the reference server's permission model:
 
-- Circle owner may move any confirmed member node.
-- Ordinary Circle member may move only their own confirmed member node.
+- Circle owner may move any confirmed `kind: 'user'` member node.
+- Ordinary Circle member may move only their own confirmed `kind: 'user'` node.
+- Legacy placeholder nodes are read-only in v1 and cannot be dragged or repositioned through the desktop UI.
 
 Main validates the requested person against the active tree and determines the viewer's own person node using the protected shared identity.
 
-Position values must be finite numbers and bounded to a safe large canvas range before being sent to the adapter. Persist only on pointer-up/end-drag, never on every pointer move.
+Define:
+
+```ts
+export const TREE_COORDINATE_LIMIT = 100_000
+```
+
+Both `x` and `y` must be finite numbers in the inclusive range `[-100000, 100000]`. Persist only on pointer-up/end-drag, never on every pointer move.
 
 If a save fails, the renderer restores the prior effective position and shows a safe retryable message.
 
@@ -236,7 +260,7 @@ Extend `window.familyCircle.circle` through the established layers:
 - `src/preload/createDesktopApi.ts`
 - `src/renderer/services/circle/DesktopCircleClient.ts`
 
-The public contract includes only safe relationship/person IDs, the relationship kind, and finite coordinates. It must not expose:
+The public contract includes only safe relationship/person IDs, `FamilyRelationshipKind`, finite coordinates, safe tree data, and `viewerIsOwner`. It must not expose:
 
 - `serverUserId`
 - `localUserId`
@@ -250,19 +274,32 @@ The approved-surface preload test must be updated so future accidental Circle AP
 
 ## Read model and pending invitations
 
-The tree canvas displays confirmed Circle users only in v1.
+Visible tree nodes in v1 are:
 
-Pending invitations may be present in the server response for the owner, but they must not render as relationship-capable nodes. The Family Tree page may display a simple count such as `2 invitations pending` and direct the owner to Invitations.
+1. Confirmed Circle users (`kind: 'user'`) — fully selectable; relationship-capable; movable according to position permissions.
+2. Pre-existing legacy placeholder relatives (`kind: 'placeholder'`) — visible and selectable read-only so historical family data is not silently hidden; not relationship-capable through v1 controls; not draggable.
 
-Placeholder/direct family members returned by legacy data may render read-only if already present in existing shared data, but v1 does not provide create/edit/delete controls for them. This prevents the app from creating unmaintainable placeholder records before a complete lifecycle exists.
+Pending invitations (`kind: 'invite'`) do not render in the tree canvas and cannot participate in relationships. The Family Tree page may display a count such as `2 invitations pending` and direct the owner to Invitations.
+
+No v1 UI creates, edits, deletes, relates, or repositions placeholder nodes. A complete direct-relative lifecycle is a separate follow-up slice.
 
 ## Layout engine
 
 Create a pure TypeScript layout module with no React dependencies.
 
+Use these exact exported functions:
+
+```ts
+normalizeFamilyGraph(tree: CircleTreeRecord): FamilyGraph
+assignFamilyGenerations(graph: FamilyGraph): Map<string, number>
+layoutFamilyTree(graph: FamilyGraph, positions: CircleTreePositionRecord[]): FamilyTreeLayout
+buildRelationshipPaths(layout: FamilyTreeLayout): FamilyTreePath[]
+```
+
 Responsibilities:
 
-- normalize visible nodes and relations,
+- normalize visible user/placeholder nodes and relations,
+- exclude invitation nodes,
 - assign graph generations defensively,
 - keep spouses/partners adjacent when practical,
 - keep siblings on the same generation where inferable,
@@ -272,16 +309,7 @@ Responsibilities:
 - generate relationship path descriptors for SVG rendering,
 - terminate safely when historical data contains cycles or contradictory edges.
 
-Suggested pure functions:
-
-```ts
-buildFamilyGraph(tree: CircleTreeRecord): FamilyGraph
-assignGenerations(graph: FamilyGraph): Map<string, number>
-layoutFamilyTree(graph: FamilyGraph, positions: CircleTreePositionRecord[]): FamilyTreeLayout
-buildRelationshipPaths(layout: FamilyTreeLayout): FamilyTreePath[]
-```
-
-Exact names may be refined in the implementation plan, but responsibilities remain separate and testable.
+Persisted coordinates apply only when finite and inside `TREE_COORDINATE_LIMIT`; invalid historical coordinates are ignored and replaced by automatic layout coordinates.
 
 ## Visual rendering
 
@@ -297,10 +325,10 @@ The SVG canvas supports:
 - zoom controls,
 - wheel zoom,
 - fit-to-tree,
-- node dragging,
+- permitted user-node dragging,
 - keyboard-accessible controls outside the SVG.
 
-Use initials rather than fabricated profile photos. The viewer's node gets a clear `You` indicator.
+Use initials rather than fabricated profile photos. The viewer's node gets a clear `You` indicator. Legacy placeholder nodes get a subtle `Family record`/read-only treatment that is distinguishable without relying only on color.
 
 The canvas owns rendering/interactions only. Layout stays in the pure layout module, and data loading/mutations stay in the page/integration component.
 
@@ -331,18 +359,20 @@ The Circle selector uses the existing `CircleOverview.circles` data. Selecting a
 
 ## Person inspector
 
-Selecting a person shows safe available data:
+Selecting a confirmed person shows safe available data:
 
 - name,
 - Circle role,
 - `You` marker where applicable,
 - derived relationships such as `Mother of X`, `Sibling of Y`, or `Child of Z`.
 
+Selecting a legacy placeholder shows its safe existing name/role/email fields where present and a read-only `Family record` indicator. The inspector offers no placeholder mutation controls.
+
 Do not add profile editing to this feature.
 
 ## Relationship creation UI
 
-Only the Circle owner sees `Add relationship`.
+Only `viewerIsOwner === true` shows `Add relationship`.
 
 The form is sentence-like instead of exposing implementation terminology:
 
@@ -353,7 +383,7 @@ Mother of
 Trevor Kasule
 ```
 
-The two people must be different confirmed Circle members.
+The two people must be different confirmed `kind: 'user'` Circle members. Placeholder and invitation nodes are excluded from the selectors.
 
 After success:
 
@@ -366,7 +396,9 @@ Do not leave optimistic relationship state permanently if the refetch disagrees.
 
 ## Relationship deletion UI
 
-Selecting a relationship shows a plain-language description. Only the owner sees `Remove relationship`.
+Selecting a relationship shows a plain-language description. Only `viewerIsOwner === true` sees `Remove relationship`.
+
+For v1, deletion controls appear only when both endpoints are confirmed `kind: 'user'` nodes. Relationships involving legacy placeholder nodes remain read-only so v1 does not partially manage placeholder lifecycle data.
 
 Deletion requires confirmation. Removing a relationship must never remove either person or Circle membership.
 
@@ -384,7 +416,7 @@ Create or join a Circle first.
 [ Go to My Circles ]
 ```
 
-### Circle with confirmed members but no relationships
+### Circle with confirmed members but no mutable relationships
 
 Owner:
 
@@ -442,7 +474,9 @@ Real-time collaborative editing is intentionally deferred.
 5. A person from another Circle cannot be used as a mutation endpoint.
 6. A stale/deleted relationship cannot be deleted by arbitrary ID without authoritative-tree validation.
 7. Raw backend identity fields remain stripped from the renderer tree contract.
-8. Relationship mutation failures expose safe user-facing errors only.
+8. Renderer permission decisions use safe `viewerIsOwner`, never role-string parsing or raw owner identity.
+9. Relationship mutation failures expose safe user-facing errors only.
+10. Placeholder/invitation IDs cannot be used in v1 relationship mutation or position endpoints.
 
 ## Testing strategy
 
@@ -450,7 +484,7 @@ Real-time collaborative editing is intentionally deferred.
 
 Cover:
 
-- allowed and rejected kinds,
+- allowed and rejected mutation kinds,
 - directed endpoint semantics,
 - undirected canonicalization,
 - self-relation rejection,
@@ -465,14 +499,18 @@ Cover:
 - protected-session requirement,
 - no shared user link,
 - no active Circle,
+- `viewerIsOwner` derivation without owner-ID exposure,
 - non-owner mutation rejection,
 - another-Circle person rejection,
+- placeholder/invite mutation rejection,
 - stale relation deletion rejection,
 - owner add/delete success,
 - own-node position permission for ordinary members,
 - other-node position rejection for ordinary members,
-- owner move-any-node success,
-- finite-coordinate validation.
+- owner move-any-confirmed-node success,
+- placeholder position rejection,
+- non-finite coordinate rejection,
+- out-of-range coordinate rejection.
 
 ### Adapter tests
 
@@ -486,18 +524,22 @@ Cover:
 - safe input reconstruction,
 - approved public surface,
 - no identity injection fields,
+- strict `FamilyRelationshipKind` mutation input,
 - DesktopCircleClient as the only renderer access path for the Circle bridge.
 
 ### Layout tests
 
 Cover:
 
+- invitation exclusion,
+- legacy placeholder read-only inclusion,
 - parent generations,
 - grandparent generations,
 - spouse adjacency,
 - siblings,
 - disconnected nodes,
 - persisted-position override,
+- invalid persisted-position fallback,
 - deterministic layout,
 - cyclic/malformed read data termination.
 
@@ -510,7 +552,9 @@ Cover:
 - loading/error/retry,
 - Circle switching,
 - node/relation selection,
-- owner-only add/delete controls,
+- legacy placeholder read-only rendering,
+- invitation exclusion/count,
+- owner-only add/delete controls using `viewerIsOwner`,
 - successful mutation/refetch,
 - mutation error display,
 - drag persistence on pointer-up only,
@@ -519,7 +563,7 @@ Cover:
 
 ### Security regression test
 
-Add a focused Family Tree security suite proving the renderer cannot mutate another Circle by supplying foreign person/relation IDs or identity-like fields.
+Add a focused Family Tree security suite proving the renderer cannot mutate another Circle by supplying foreign person/relation IDs, cannot use placeholder/invite IDs for v1 mutation, and cannot supply identity-like fields to influence the actor or Circle.
 
 ## Verification gates
 
@@ -537,11 +581,11 @@ The final review must record the exact head SHA, CI run IDs, test-file count, te
 
 ## Delivery sequence
 
-The implementation plan should decompose the feature in this order:
+The implementation plan must decompose the feature in this order:
 
 1. Relationship types and pure integrity rule engine.
 2. CirclePort mutation interfaces and legacy adapter mappings.
-3. CircleService active-Circle/owner/integrity enforcement.
+3. CircleService active-Circle/owner/integrity enforcement and `viewerIsOwner` capability.
 4. IPC, preload contract, and DesktopCircleClient mutations.
 5. Pure layout engine.
 6. SVG FamilyTreeCanvas.
