@@ -1,4 +1,5 @@
 import type {
+  AddTreeRelationInput,
   CircleDetails,
   CircleGroupRecord,
   CircleListItem,
@@ -11,6 +12,7 @@ import type {
   InviteMemberInput,
   InviteMemberResult,
   ResendInvitationResult,
+  SaveTreePositionInput,
 } from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
 import type { ActivityItem, CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
@@ -23,6 +25,9 @@ interface CircleDesktopOperations {
   selectCircle(circleId: string): Promise<{ success: true }>
   createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
   inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+  addTreeRelation(input: AddTreeRelationInput): Promise<{ success: true }>
+  deleteTreeRelation(input: { relationId: string }): Promise<{ success: true }>
+  saveTreePosition(input: SaveTreePositionInput): Promise<{ success: true }>
   resendInvitation(input: { personId: string }): Promise<ResendInvitationResult>
   cancelInvitation(input: { personId: string }): Promise<{ success: true }>
   removeMember(input: { personId: string }): Promise<{ success: true }>
@@ -39,6 +44,9 @@ const defaultOperations: CircleDesktopOperations = {
   selectCircle: (circleId) => window.familyCircle.circle.selectCircle(circleId),
   createCircle: (input) => window.familyCircle.circle.createCircle(input),
   inviteMember: (input) => window.familyCircle.circle.inviteMember(input),
+  addTreeRelation: (input) => window.familyCircle.circle.addTreeRelation(input),
+  deleteTreeRelation: (input) => window.familyCircle.circle.deleteTreeRelation(input),
+  saveTreePosition: (input) => window.familyCircle.circle.saveTreePosition(input),
   resendInvitation: (input) => window.familyCircle.circle.resendInvitation(input),
   cancelInvitation: (input) => window.familyCircle.circle.cancelInvitation(input),
   removeMember: (input) => window.familyCircle.circle.removeMember(input),
@@ -231,6 +239,30 @@ export class DesktopCircleClient implements CircleClient {
   async inviteMember(input: InviteMemberInput): Promise<InviteMemberResult> {
     try {
       return await this.operations.inviteMember(input)
+    } finally {
+      this.invalidateCircleReads()
+    }
+  }
+
+  async addTreeRelation(input: AddTreeRelationInput): Promise<{ success: true }> {
+    try {
+      return await this.operations.addTreeRelation(input)
+    } finally {
+      this.invalidateCircleReads()
+    }
+  }
+
+  async deleteTreeRelation(relationId: string): Promise<{ success: true }> {
+    try {
+      return await this.operations.deleteTreeRelation({ relationId })
+    } finally {
+      this.invalidateCircleReads()
+    }
+  }
+
+  async saveTreePosition(input: SaveTreePositionInput): Promise<{ success: true }> {
+    try {
+      return await this.operations.saveTreePosition(input)
     } finally {
       this.invalidateCircleReads()
     }
