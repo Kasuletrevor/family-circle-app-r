@@ -64,7 +64,21 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
-    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
+    expect(Object.keys(api.circle)).toEqual([
+      'getOverview',
+      'getMyCircles',
+      'getCircleDetails',
+      'selectCircle',
+      'createCircle',
+      'inviteMember',
+      'addTreeRelation',
+      'deleteTreeRelation',
+      'saveTreePosition',
+      'resendInvitation',
+      'cancelInvitation',
+      'removeMember',
+      'leaveCircle',
+    ])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
 
