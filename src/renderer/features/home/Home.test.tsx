@@ -38,6 +38,7 @@ describe('Home', () => {
       circles: [],
       activeCircleId: null,
       viewerPersonId: null,
+      viewerIsOwner: false,
       tree: null,
       notifications: [],
     }
@@ -53,6 +54,7 @@ describe('Home', () => {
       status: 'ready',
       activeCircleId: 'g-1',
       viewerPersonId: 'user:88',
+      viewerIsOwner: false,
       circles: [{ id: 'g-1', name: 'Test Family', role: 'Family member' }],
       tree: {
         group: { id: 'g-1', name: 'Test Family' },
