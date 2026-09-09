@@ -9,6 +9,7 @@ import type {
   CircleTreeRecord,
   CreateCircleInput,
   CreateCircleResult,
+  FamilyRelationshipKind,
   InvitationFamilyRole,
   InviteMemberInput,
   InviteMemberResult,
@@ -29,6 +30,7 @@ export type {
   CircleTreeRelationRecord,
   CreateCircleInput,
   CreateCircleResult,
+  FamilyRelationshipKind,
   InvitationFamilyRole,
   InviteMemberInput,
   InviteMemberResult,
@@ -57,6 +59,25 @@ export interface CirclePort {
     email: string
     role: InvitationFamilyRole
   }): Promise<InviteMemberResult>
+  addTreeRelation(input: {
+    serverUserId: string
+    circleId: string
+    kind: FamilyRelationshipKind
+    aPersonId: string
+    bPersonId: string
+  }): Promise<{ success: true }>
+  deleteTreeRelation(input: {
+    serverUserId: string
+    circleId: string
+    relationId: string
+  }): Promise<{ success: true }>
+  saveTreePosition(input: {
+    serverUserId: string
+    circleId: string
+    personId: string
+    x: number
+    y: number
+  }): Promise<{ success: true }>
   cancelInvitation(input: {
     serverUserId: string
     circleId: string
