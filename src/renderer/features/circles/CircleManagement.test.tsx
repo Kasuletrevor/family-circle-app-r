@@ -31,6 +31,7 @@ const memberDetails: CircleManagementSnapshot = {
 
 function service(overrides: Partial<CircleClient> = {}): CircleClient {
   return {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails: vi.fn(async () => ownerDetails),
