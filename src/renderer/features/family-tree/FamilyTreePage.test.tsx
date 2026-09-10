@@ -126,7 +126,6 @@ describe('FamilyTreePage read-only experience', () => {
     const first = renderPage(circleService(async () => ownerEmpty))
     expect(await screen.findByText('Your family members are here.')).toBeInTheDocument()
     expect(screen.getByText('Connect them to build your tree.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /add relationship/i })).not.toBeInTheDocument()
     first.unmount()
 
     const memberEmpty: CircleOverview = {
@@ -191,5 +190,97 @@ describe('FamilyTreePage read-only experience', () => {
     expect(within(inspector).getByText('Grandparent')).toBeInTheDocument()
     expect(within(inspector).getByText('Family record')).toBeInTheDocument()
     expect(within(inspector).queryByRole('button', { name: /edit|remove|delete/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('FamilyTreePage relationship creation', () => {
+  it('hides Add relationship from a non-owner', async () => {
+    renderPage(circleService(async () => secondOverview))
+
+    expect(await screen.findByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
+  })
+
+  it('shows a sentence-like add form for the Circle owner', async () => {
+    renderPage(circleService(async () => readyOverview))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add relationship' }))
+    const form = screen.getByRole('form', { name: 'Add relationship' })
+    expect(within(form).getByRole('combobox', { name: 'First person' })).toBeInTheDocument()
+    expect(within(form).getByRole('combobox', { name: 'Relationship' })).toBeInTheDocument()
+    expect(within(form).getByRole('combobox', { name: 'Second person' })).toBeInTheDocument()
+    expect(within(form).getByRole('button', { name: 'Save relationship' })).toBeInTheDocument()
+  })
+
+  it('excludes placeholder and invite nodes from relationship selectors', async () => {
+    renderPage(circleService(async () => readyOverview))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add relationship' }))
+
+    const firstPerson = screen.getByRole('combobox', { name: 'First person' })
+    const optionText = within(firstPerson).getAllByRole('option').map((option) => option.textContent)
+    expect(optionText).toContain('Alice')
+    expect(optionText).toContain('Bob')
+    expect(optionText).not.toContain('Legacy Relative')
+    expect(optionText).not.toContain('Pending Person')
+  })
+
+  it('prevents choosing the same confirmed person in both selectors', async () => {
+    renderPage(circleService(async () => readyOverview))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add relationship' }))
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'First person' }), { target: { value: 'user:alice' } })
+    const secondPerson = screen.getByRole('combobox', { name: 'Second person' })
+    expect(within(secondPerson).getByRole('option', { name: 'Alice' })).toBeDisabled()
+  })
+
+  it('submits exact semantic direction for a directed relationship', async () => {
+    const addTreeRelation = vi.fn(async () => ({ success: true as const }))
+    const getOverview = vi.fn(async () => readyOverview)
+    renderPage(circleService(getOverview, { addTreeRelation }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add relationship' }))
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'First person' }), { target: { value: 'user:alice' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Relationship' }), { target: { value: 'mother' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Second person' }), { target: { value: 'user:bob' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save relationship' }))
+
+    await waitFor(() => expect(addTreeRelation).toHaveBeenCalledWith({
+      kind: 'mother',
+      aPersonId: 'user:alice',
+      bPersonId: 'user:bob',
+    }))
+  })
+
+  it('refetches authoritative overview after successful creation', async () => {
+    const getOverview = vi.fn(async () => readyOverview)
+    const addTreeRelation = vi.fn(async () => ({ success: true as const }))
+    renderPage(circleService(getOverview, { addTreeRelation }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add relationship' }))
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'First person' }), { target: { value: 'user:alice' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Second person' }), { target: { value: 'user:bob' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save relationship' }))
+
+    await waitFor(() => expect(addTreeRelation).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows a safe error and preserves the form when creation fails', async () => {
+    const addTreeRelation = vi.fn(async () => {
+      throw new Error('https://internal.example.test backend secret')
+    })
+    renderPage(circleService(async () => readyOverview, { addTreeRelation }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add relationship' }))
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'First person' }), { target: { value: 'user:alice' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Relationship' }), { target: { value: 'mother' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Second person' }), { target: { value: 'user:bob' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save relationship' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not add this relationship. Please try again.')
+    expect(screen.queryByText(/internal\.example\.test|backend secret/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'First person' })).toHaveValue('user:alice')
+    expect(screen.getByRole('combobox', { name: 'Relationship' })).toHaveValue('mother')
+    expect(screen.getByRole('combobox', { name: 'Second person' })).toHaveValue('user:bob')
   })
 })
