@@ -14,6 +14,33 @@ export const INVITATION_FAMILY_ROLES = [
 
 export type InvitationFamilyRole = typeof INVITATION_FAMILY_ROLES[number]
 
+export const FAMILY_RELATIONSHIP_KINDS = [
+  'mother',
+  'father',
+  'guardian',
+  'grandparent',
+  'spouse',
+  'sibling',
+  'aunt_uncle',
+  'cousin',
+] as const
+
+export type FamilyRelationshipKind = typeof FAMILY_RELATIONSHIP_KINDS[number]
+
+export interface AddTreeRelationInput {
+  kind: FamilyRelationshipKind
+  aPersonId: string
+  bPersonId: string
+}
+
+export const TREE_COORDINATE_LIMIT = 100_000
+
+export interface SaveTreePositionInput {
+  personId: string
+  x: number
+  y: number
+}
+
 export interface AuthUser {
   id: number
   email: string
@@ -167,6 +194,7 @@ export type CircleOverview =
       circles: CircleGroupRecord[]
       activeCircleId: null
       viewerPersonId: null
+      viewerIsOwner: false
       tree: null
       notifications: CircleNotificationRecord[]
     }
@@ -175,6 +203,7 @@ export type CircleOverview =
       circles: CircleGroupRecord[]
       activeCircleId: string
       viewerPersonId: string | null
+      viewerIsOwner: boolean
       tree: CircleTreeRecord
       notifications: CircleNotificationRecord[]
     }
@@ -298,6 +327,9 @@ export interface DesktopApi {
     selectCircle(circleId: string): Promise<{ success: true }>
     createCircle(input: CreateCircleInput): Promise<CreateCircleResult>
     inviteMember(input: InviteMemberInput): Promise<InviteMemberResult>
+    addTreeRelation(input: AddTreeRelationInput): Promise<{ success: true }>
+    deleteTreeRelation(input: { relationId: string }): Promise<{ success: true }>
+    saveTreePosition(input: SaveTreePositionInput): Promise<{ success: true }>
     resendInvitation(input: { personId: string }): Promise<ResendInvitationResult>
     cancelInvitation(input: { personId: string }): Promise<{ success: true }>
     removeMember(input: { personId: string }): Promise<{ success: true }>

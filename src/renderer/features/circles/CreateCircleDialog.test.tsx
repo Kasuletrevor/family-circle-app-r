@@ -7,6 +7,7 @@ import { CreateCircleDialog } from './CreateCircleDialog'
 
 function service(createCircle: CircleClient['createCircle']): CircleClient {
   return {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails: vi.fn(async () => null),
@@ -14,6 +15,9 @@ function service(createCircle: CircleClient['createCircle']): CircleClient {
     selectCircle: vi.fn(async () => undefined),
     createCircle,
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    addTreeRelation: vi.fn(async () => ({ success: true as const })),
+    deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+    saveTreePosition: vi.fn(async () => ({ success: true as const })),
     resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
     cancelInvitation: vi.fn(async () => undefined),
     removeMember: vi.fn(async () => undefined),

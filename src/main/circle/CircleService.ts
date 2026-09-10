@@ -1,5 +1,6 @@
 import { INVITATION_FAMILY_ROLES } from '../../shared/desktopApi'
 import type {
+  AddTreeRelationInput,
   AuthUser,
   CircleDetails,
   CircleGroupRecord,
@@ -9,15 +10,19 @@ import type {
   CircleTreeRecord,
   CreateCircleInput,
   CreateCircleResult,
+  FamilyRelationshipKind,
   InvitationFamilyRole,
   InviteMemberInput,
   InviteMemberResult,
   ResendInvitationResult,
+  SaveTreePositionInput,
 } from '../../shared/desktopApi'
 import type { UserRecord } from '../auth/UserRepository'
 import type { CircleGroupInternal, CircleTreeInternal } from './circleModels'
+import { validateTreePosition, validateTreeRelation } from './familyTreeRules'
 
 export type {
+  AddTreeRelationInput,
   CircleDetails,
   CircleGroupRecord,
   CircleListItem,
@@ -29,10 +34,12 @@ export type {
   CircleTreeRelationRecord,
   CreateCircleInput,
   CreateCircleResult,
+  FamilyRelationshipKind,
   InvitationFamilyRole,
   InviteMemberInput,
   InviteMemberResult,
   ResendInvitationResult,
+  SaveTreePositionInput,
 } from '../../shared/desktopApi'
 
 export interface CircleSessionSource {
@@ -57,6 +64,25 @@ export interface CirclePort {
     email: string
     role: InvitationFamilyRole
   }): Promise<InviteMemberResult>
+  addTreeRelation(input: {
+    serverUserId: string
+    circleId: string
+    kind: FamilyRelationshipKind
+    aPersonId: string
+    bPersonId: string
+  }): Promise<{ success: true }>
+  deleteTreeRelation(input: {
+    serverUserId: string
+    circleId: string
+    relationId: string
+  }): Promise<{ success: true }>
+  saveTreePosition(input: {
+    serverUserId: string
+    circleId: string
+    personId: string
+    x: number
+    y: number
+  }): Promise<{ success: true }>
   cancelInvitation(input: {
     serverUserId: string
     circleId: string
@@ -80,6 +106,7 @@ function emptyOverview(
     circles: [],
     activeCircleId: null,
     viewerPersonId: null,
+    viewerIsOwner: false,
     tree: null,
     notifications,
   }
@@ -159,6 +186,7 @@ export class CircleService {
       circles: groups.map(safeGroup),
       activeCircleId: activeCircle.id,
       viewerPersonId,
+      viewerIsOwner: tree.group.ownerId === serverUserId,
       tree: safeTree(tree),
       notifications,
     }
@@ -306,6 +334,67 @@ export class CircleService {
       circleId,
       email,
       role: input.role,
+    })
+  }
+
+  async addTreeRelation(input: AddTreeRelationInput): Promise<{ success: true }> {
+    const context = await this.requireActiveCircleContext()
+    this.requireOwner(context, 'Only the Circle owner can manage relationships')
+    const relation = validateTreeRelation(input, context.tree.people, context.tree.relations)
+
+    return this.circle.addTreeRelation({
+      serverUserId: context.serverUserId,
+      circleId: context.group.id,
+      ...relation,
+    })
+  }
+
+  async deleteTreeRelation(input: { relationId: string }): Promise<{ success: true }> {
+    const context = await this.requireActiveCircleContext()
+    this.requireOwner(context, 'Only the Circle owner can manage relationships')
+    const relationId = String(input.relationId ?? '').trim()
+    const relation = context.tree.relations.find((candidate) => candidate.id === relationId)
+    if (!relationId || !relation) {
+      throw new Error('That relationship is no longer in this Circle')
+    }
+
+    const firstPerson = context.tree.people.find((person) => person.id === relation.aPersonId)
+    const secondPerson = context.tree.people.find((person) => person.id === relation.bPersonId)
+    if (firstPerson?.kind !== 'user' || secondPerson?.kind !== 'user') {
+      throw new Error('Choose confirmed Circle members for Family Tree relationships')
+    }
+
+    return this.circle.deleteTreeRelation({
+      serverUserId: context.serverUserId,
+      circleId: context.group.id,
+      relationId,
+    })
+  }
+
+  async saveTreePosition(input: SaveTreePositionInput): Promise<{ success: true }> {
+    const context = await this.requireActiveCircleContext()
+    const position = validateTreePosition(input)
+    const target = context.tree.people.find((person) => person.id === position.personId)
+    if (!target || target.kind !== 'user') {
+      throw new Error('Choose a confirmed Circle member')
+    }
+
+    const viewerIsOwner = context.group.ownerId === context.serverUserId
+    if (!viewerIsOwner) {
+      const viewer = context.tree.people.find(
+        (person) => person.kind === 'user' && person.userId === context.serverUserId,
+      )
+      if (!viewer || viewer.id !== target.id) {
+        throw new Error('You can only move your own family tree card')
+      }
+    }
+
+    return this.circle.saveTreePosition({
+      serverUserId: context.serverUserId,
+      circleId: context.group.id,
+      personId: position.personId,
+      x: position.x,
+      y: position.y,
     })
   }
 

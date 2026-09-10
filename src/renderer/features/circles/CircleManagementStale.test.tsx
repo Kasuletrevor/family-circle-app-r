@@ -32,6 +32,7 @@ it('shows a stable stale-Circle message and reloads repaired active details afte
     throw new Error('That Circle is no longer available to your account')
   })
   const circle = {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails,
@@ -39,6 +40,9 @@ it('shows a stable stale-Circle message and reloads repaired active details afte
     selectCircle: vi.fn(async () => undefined),
     createCircle: vi.fn(async () => ({ circleId: 'g-new' })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    addTreeRelation: vi.fn(async () => ({ success: true as const })),
+    deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+    saveTreePosition: vi.fn(async () => ({ success: true as const })),
     resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
     cancelInvitation: vi.fn(async () => undefined),
     removeMember,

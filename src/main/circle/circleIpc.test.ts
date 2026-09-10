@@ -15,6 +15,7 @@ describe('registerCircleIpc', () => {
       circles: [],
       activeCircleId: null,
       viewerPersonId: null,
+      viewerIsOwner: false as const,
       tree: null,
       notifications: [],
     }
@@ -31,6 +32,9 @@ describe('registerCircleIpc', () => {
       selectCircle: vi.fn(async () => ({ success: true as const })),
       createCircle: vi.fn(async () => ({ circleId: 'g-2' })),
       inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+      addTreeRelation: vi.fn(async () => ({ success: true as const })),
+      deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+      saveTreePosition: vi.fn(async () => ({ success: true as const })),
       resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
       cancelInvitation: vi.fn(async () => ({ success: true as const })),
       removeMember: vi.fn(async () => ({ success: true as const })),
@@ -46,6 +50,9 @@ describe('registerCircleIpc', () => {
       'circle:select',
       'circle:create',
       'circle:invite-member',
+      'circle:add-tree-relation',
+      'circle:delete-tree-relation',
+      'circle:save-tree-position',
       'circle:resend-invitation',
       'circle:cancel-invitation',
       'circle:remove-member',
@@ -83,6 +90,42 @@ describe('registerCircleIpc', () => {
       circleId: 'g-1',
       email: 'relative@example.test',
       role: 'Sibling',
+    })
+
+    await expect(handlers.get('circle:add-tree-relation')?.({}, {
+      kind: 'mother',
+      aPersonId: 'user:1',
+      bPersonId: 'user:2',
+      serverUserId: 'attacker',
+      circleId: 'foreign',
+      ownerId: 'attacker',
+      fromUserId: 'attacker',
+    })).resolves.toEqual({ success: true })
+    expect(service.addTreeRelation).toHaveBeenCalledWith({
+      kind: 'mother',
+      aPersonId: 'user:1',
+      bPersonId: 'user:2',
+    })
+
+    await expect(handlers.get('circle:delete-tree-relation')?.({}, {
+      relationId: 'r-1',
+      serverUserId: 'attacker',
+      circleId: 'foreign',
+    })).resolves.toEqual({ success: true })
+    expect(service.deleteTreeRelation).toHaveBeenCalledWith({ relationId: 'r-1' })
+
+    await expect(handlers.get('circle:save-tree-position')?.({}, {
+      personId: 'user:2',
+      x: 120,
+      y: -50,
+      serverUserId: 'attacker',
+      circleId: 'foreign',
+      ownerId: 'attacker',
+    })).resolves.toEqual({ success: true })
+    expect(service.saveTreePosition).toHaveBeenCalledWith({
+      personId: 'user:2',
+      x: 120,
+      y: -50,
     })
 
     const malicious = {

@@ -8,6 +8,7 @@ const overview: CircleOverview = {
   circles: [],
   activeCircleId: null,
   viewerPersonId: null,
+  viewerIsOwner: false,
   tree: null,
   notifications: [],
 }

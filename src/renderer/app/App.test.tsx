@@ -58,8 +58,10 @@ describe('App shell', () => {
     }
 
     expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
-    expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Interactive family tree')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Circle' })).toHaveValue('kasule-family')
+    expect(screen.getAllByText('Kasule Family').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: /search family circle/i })).toBeInTheDocument()
     expect(screen.getByText('Ready (Offline)')).toBeInTheDocument()
