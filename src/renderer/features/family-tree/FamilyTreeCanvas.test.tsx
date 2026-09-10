@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import type { SaveTreePositionInput } from '../../../shared/desktopApi'
 import { buildRelationshipPaths, type FamilyTreeLayout } from './familyTreeLayout'
-import { FamilyTreeCanvas } from './FamilyTreeCanvas'
+import { FamilyTreeCanvas, type FamilyTreeCanvasProps } from './FamilyTreeCanvas'
 
 const baseLayout: FamilyTreeLayout = {
   nodes: [
@@ -31,10 +31,10 @@ function renderCanvas(options: {
   layout?: FamilyTreeLayout
   viewerPersonId?: string | null
   viewerIsOwner?: boolean
-  onSelectionChange?: ReturnType<typeof vi.fn>
+  onSelectionChange?: FamilyTreeCanvasProps['onSelectionChange']
   onPositionChange?: (input: SaveTreePositionInput) => Promise<void>
 } = {}) {
-  const onSelectionChange = options.onSelectionChange ?? vi.fn()
+  const onSelectionChange = options.onSelectionChange ?? vi.fn<FamilyTreeCanvasProps['onSelectionChange']>()
   const onPositionChange = options.onPositionChange ?? vi.fn(async (_input: SaveTreePositionInput) => undefined)
   const layout = options.layout ?? baseLayout
   render(
