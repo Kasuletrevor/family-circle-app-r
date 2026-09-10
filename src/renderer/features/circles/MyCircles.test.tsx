@@ -13,6 +13,7 @@ const circles: CircleSummary[] = [
 
 function service(overrides: Partial<CircleClient> = {}): CircleClient {
   return {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => circles),
     getCircleDetails: vi.fn(async () => null),
