@@ -32,6 +32,7 @@ it('shows a stable stale-Circle message and reloads repaired active details afte
     throw new Error('That Circle is no longer available to your account')
   })
   const circle = {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails,
