@@ -92,9 +92,8 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
 
   if (state === 'loading') {
     return (
-      <section className="family-tree-page" aria-busy="true">
+      <section className="family-tree-page" aria-busy="true" aria-label="Loading Family Tree">
         <div className="family-tree-page__status">
-          <h1>Family Tree</h1>
           <p>Loading your family tree…</p>
         </div>
       </section>
