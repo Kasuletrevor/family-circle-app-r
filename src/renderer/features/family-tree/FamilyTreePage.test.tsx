@@ -284,3 +284,99 @@ describe('FamilyTreePage relationship creation', () => {
     expect(screen.getByRole('combobox', { name: 'Second person' })).toHaveValue('user:bob')
   })
 })
+
+describe('FamilyTreePage relationship deletion', () => {
+  it('shows a plain-language relationship inspector after selecting an edge', async () => {
+    renderPage(circleService(async () => readyOverview))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Alice and Bob' }))
+    const inspector = screen.getByLabelText('Relationship details')
+    expect(within(inspector).getByRole('heading', { name: 'Relationship' })).toBeInTheDocument()
+    expect(within(inspector).getByText('Alice is the sibling of Bob')).toBeInTheDocument()
+  })
+
+  it('hides relationship deletion from a non-owner', async () => {
+    const memberOverview: CircleOverview = { ...readyOverview, viewerIsOwner: false }
+    renderPage(circleService(async () => memberOverview))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Alice and Bob' }))
+    const inspector = screen.getByLabelText('Relationship details')
+    expect(within(inspector).queryByRole('button', { name: 'Remove relationship' })).not.toBeInTheDocument()
+  })
+
+  it('keeps legacy placeholder-involving relationships read-only even for the owner', async () => {
+    renderPage(circleService(async () => readyOverview))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Legacy Relative and Alice' }))
+    const inspector = screen.getByLabelText('Relationship details')
+    expect(within(inspector).getByText('Legacy Relative is the grandparent of Alice')).toBeInTheDocument()
+    expect(within(inspector).queryByRole('button', { name: 'Remove relationship' })).not.toBeInTheDocument()
+  })
+
+  it('requires confirmation before deleting a relationship', async () => {
+    const deleteTreeRelation = vi.fn(async () => ({ success: true as const }))
+    renderPage(circleService(async () => readyOverview, { deleteTreeRelation }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Alice and Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove relationship' }))
+
+    expect(deleteTreeRelation).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Remove relationship?' })
+    expect(within(dialog).getByText(/Alice is the sibling of Bob/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Both people will remain in this Circle/)).toBeInTheDocument()
+  })
+
+  it('deletes only the relationship and never removes either person', async () => {
+    const deletedOverview: CircleOverview = {
+      ...readyOverview,
+      tree: {
+        ...readyOverview.tree,
+        relations: readyOverview.tree.relations.filter((relation) => relation.id !== 'r-sibling'),
+      },
+    }
+    const getOverview = vi
+      .fn<() => Promise<CircleOverview>>()
+      .mockResolvedValueOnce(readyOverview)
+      .mockResolvedValueOnce(deletedOverview)
+    const deleteTreeRelation = vi.fn(async () => ({ success: true as const }))
+    const removeMember = vi.fn(async () => undefined)
+    renderPage(circleService(getOverview, { deleteTreeRelation, removeMember }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Alice and Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove relationship' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove relationship' }))
+
+    await waitFor(() => expect(deleteTreeRelation).toHaveBeenCalledWith('r-sibling'))
+    await screen.findByRole('button', { name: 'Select Alice' })
+    expect(screen.getByRole('button', { name: 'Select Bob' })).toBeInTheDocument()
+    expect(removeMember).not.toHaveBeenCalled()
+  })
+
+  it('refetches the authoritative overview after deletion', async () => {
+    const getOverview = vi.fn(async () => readyOverview)
+    const deleteTreeRelation = vi.fn(async () => ({ success: true as const }))
+    renderPage(circleService(getOverview, { deleteTreeRelation }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Alice and Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove relationship' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove relationship' }))
+
+    await waitFor(() => expect(deleteTreeRelation).toHaveBeenCalledWith('r-sibling'))
+    await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows a safe retryable error when stale relationship deletion fails', async () => {
+    const deleteTreeRelation = vi.fn(async () => {
+      throw new Error('https://internal.example.test stale relation secret')
+    })
+    renderPage(circleService(async () => readyOverview, { deleteTreeRelation }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select relationship Alice and Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove relationship' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove relationship' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not remove this relationship. Please try again.')
+    expect(screen.queryByText(/internal\.example\.test|stale relation secret/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Remove relationship?' })).toBeInTheDocument()
+  })
+})
