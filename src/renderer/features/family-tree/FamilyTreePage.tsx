@@ -444,11 +444,11 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
       <ConfirmCircleActionDialog
         open={pendingDeleteRelation !== null}
         title="Remove relationship?"
-        body={pendingDeleteRelation
+        message={pendingDeleteRelation
           ? `${relationshipSentence(pendingDeleteRelation, overview.tree.people)}. Both people will remain in this Circle.`
           : ''}
         confirmLabel="Remove relationship"
-        tone="danger"
+        busyLabel="Removing…"
         onCancel={resetRelationshipDeletion}
         onConfirm={handleDeleteRelation}
       />
