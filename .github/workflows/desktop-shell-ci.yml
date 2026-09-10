@@ -61,3 +61,105 @@ jobs:
           done
 
           exit 1
+
+  update-family-tree-readme:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/family-tree'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/family-tree
+      - name: Update Family Tree README truth
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('README.md')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  'This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, and Invitations**, a real **private local Vault**, and optional **local Private AI + Vault RAG**.',
+                  'This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, Invitations, and Family Tree**, a real **private local Vault**, and optional **local Private AI + Vault RAG**.'
+              ),
+              (
+                  '- Confirmation dialogs for destructive remove/cancel/leave operations; destructive rows are never optimistically removed.\n',
+                  '- Confirmation dialogs for destructive remove/cancel/leave operations; destructive rows are never optimistically removed.\n- A real shared **Family Tree** at `/family-tree`, rendered from the active Circle\'s authoritative people, relationships, and persisted positions.\n- Owners can add and remove supported family relationships; authorization and integrity checks are repeated in `CircleService` before transport.\n- Tree nodes support accessible selection, zoom/pan/fit, deterministic layout, and persisted drag positions; non-owner members may move only their own confirmed node.\n'
+              ),
+              (
+                  'This slice intentionally does **not** add Circle rename/delete, ownership transfer, relationship/tree mutations, tree editing, or the future secure `/v2` Circle API migration. Those remain later protected slices.',
+                  'This slice now includes protected Family Tree relationship mutations and node-position editing. Circle rename/delete, ownership transfer, direct placeholder mutation, and the future secure `/v2` Circle API migration remain later protected slices.'
+              ),
+              ('React My Circles / Members / Invitations\n', 'React My Circles / Members / Invitations / Family Tree\n'),
+              (
+                  'circle.inviteMember({ circleId, email, role })\ncircle.resendInvitation({ personId })',
+                  'circle.inviteMember({ circleId, email, role })\ncircle.addTreeRelation({ kind, aPersonId, bPersonId })\ncircle.deleteTreeRelation({ relationId })\ncircle.saveTreePosition({ personId, x, y })\ncircle.resendInvitation({ personId })'
+              ),
+          ]
+
+          changed = False
+          for old, new in replacements:
+              if old in text:
+                  text = text.replace(old, new, 1)
+                  changed = True
+
+          family_tree_section = '''### Family Tree
+
+`/family-tree` uses the active Circle's shared tree as the single source of truth; no parallel local Family Tree database is created. Confirmed members and legacy placeholder relatives may be rendered, while v1 relationship writes accept confirmed Circle members only.
+
+New relationship kinds are restricted to `mother`, `father`, `guardian`, `grandparent`, `spouse`, `sibling`, `aunt_uncle`, and `cousin`. Symmetric relationships are canonicalized, duplicate/self/foreign-person writes are rejected, and ancestry writes are checked for cycles before the compatibility adapter is called. Invitation role labels do not infer or create tree relationships.
+
+Relationship creation/removal is Circle-owner only. Position persistence is also authorized in main: an owner may reposition any confirmed member, while a non-owner member may persist only their own confirmed node. The renderer sends only public person/relation handles and finite bounded coordinates; protected session identity, shared-service user IDs, owner IDs, and Circle authorization remain main-process concerns.
+
+The SVG canvas provides deterministic automatic layout when no stored position exists, then lets stored positions win. It supports node/relationship selection, pan, zoom, fit-to-tree, accessible pressed states, owner relationship editing, confirmed destructive deletion, and authoritative reload after shared mutations. Pending invitations are shown as counts rather than editable ghost nodes.
+
+'''
+          anchor = '### Members and Invitations\n'
+          if '### Family Tree\n' not in text:
+              if anchor not in text:
+                  raise SystemExit('Missing Members and Invitations anchor')
+              text = text.replace(anchor, family_tree_section + anchor, 1)
+              changed = True
+
+          old_boundary = '''This slice includes the minimum protected shared writes for Circle creation, invitation delivery/management, member removal, and leaving a Circle, plus the private local Vault and optional Private AI/RAG. Still excluded:
+
+- Circle rename
+- Circle delete
+- ownership transfer
+- relationship mutations
+- tree placeholder mutations
+- tree/node-position mutations
+- secure `/v2` migration
+
+Those can be added as separate protected slices without widening the renderer trust boundary. Circle settings and Family Tree editing remain later shared-state slices; the private Vault + local RAG path remains independent of Circle authorization and content transport.'''
+          new_boundary = '''This slice includes protected shared writes for Circle creation, invitation delivery/management, member removal, leaving a Circle, Family Tree relationship add/remove, and authorized tree-node positioning, plus the private local Vault and optional Private AI/RAG. Still excluded:
+
+- Circle rename
+- Circle delete
+- ownership transfer
+- direct tree placeholder create/edit/delete
+- secure `/v2` migration
+
+Those can be added as separate protected slices without widening the renderer trust boundary. Family Tree v1 deliberately stops at confirmed-member relationship editing plus rendering of existing legacy placeholders; the private Vault + local RAG path remains independent of Circle authorization and content transport.'''
+          if old_boundary in text:
+              text = text.replace(old_boundary, new_boundary, 1)
+              changed = True
+
+          if changed:
+              path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit README update
+        shell: bash
+        run: |
+          if git diff --quiet -- README.md; then
+            echo 'README already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git commit -m 'docs: document Family Tree feature'
+          git push origin HEAD:feature/family-tree
