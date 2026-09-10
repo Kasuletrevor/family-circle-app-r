@@ -7,6 +7,7 @@ import { InviteMemberDialog } from './InviteMemberDialog'
 
 function service(inviteMember: CircleClient['inviteMember']): CircleClient {
   return {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails: vi.fn(async () => null),
