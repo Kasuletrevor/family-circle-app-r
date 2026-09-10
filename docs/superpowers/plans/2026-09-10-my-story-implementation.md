@@ -194,7 +194,7 @@ export const DOCUMENT_PREFIX = 'search_document: '
 export const QUERY_PREFIX = 'search_query: '
 ```
 
-`VaultIndexService` imports those constants; behavior remains unchanged.
+`VaultIndexService` imports these exact constants; behavior remains unchanged.
 
 ```ts
 StoryChunkRepository.replaceAnswerIndex(localUserId, answerId, chunks, model, version)
@@ -208,7 +208,7 @@ StoryIndexService.indexPendingFields(localUserId)
 
 - [ ] **Step 1: Write RED tests**
 
-Prove unconfirmed content cannot index, Story provenance is included, the same chunk/prefix/model contract is used as Vault, unavailable AI leaves pending, old chunks are never retained after failure, actual embedding failure sets failed, and one pending-field failure does not stop another.
+Prove unconfirmed content cannot index, Story provenance is included, same chunk/prefix/model contract as Vault, unavailable AI leaves pending, embedding failure leaves no stale chunks and sets failed, and one pending-field failure does not stop another.
 
 - [ ] **Step 2: Run RED**
 
@@ -218,7 +218,7 @@ npx vitest run src/main/ai/embeddingContract.test.ts src/main/story/StoryChunkRe
 
 - [ ] **Step 3: Implement**
 
-Reuse existing `chunkDocument()` (1000/150) and `NomicClient.embedDocument()`. Do not await Nomic inside a DB transaction.
+Reuse existing `chunkDocument()` (1000/150) and `NomicClient.embedDocument()`. Never await Nomic inside a DB transaction.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -253,7 +253,7 @@ getHistory(): Promise<StoryVersionSummary[]>
 restoreVersion(input: { versionId: number }): Promise<StoryPublicState>
 ```
 
-Every method begins with protected `session.restore()` and uses that local user ID only. `saveDraft()` inspects current owned answer: confirmed + semantic change -> `repository.invalidateConfirmedAnswer()`; otherwise normal `saveDraft()`. `confirmField()` commits `confirmed/pending` first, then attempts indexing outside the transaction. `restoreVersion()` resolves `(localUserId, versionId)`, delegates the atomic snapshot/restore to `StoryRepository.restoreSnapshot()`, then reindexes restored confirmed fields outside the DB transaction.
+Every method begins with protected `session.restore()` and uses that local user ID only. `saveDraft()` inspects current owned answer: confirmed + semantic change -> `repository.invalidateConfirmedAnswer()`; otherwise normal `saveDraft()`. `confirmField()` commits `confirmed/pending` first, then attempts indexing outside the transaction. `restoreVersion()` resolves `(localUserId, versionId)`, delegates atomic snapshot/restore to `StoryRepository.restoreSnapshot()`, then reindexes restored confirmed fields outside the transaction.
 
 - [ ] **Step 1: Write RED tests**
 
@@ -301,7 +301,6 @@ StoryMediaStore.validateSelected(path, expectedType)
 StoryMediaStore.copyIntoStory(localUserId, sourcePath, extension)
 StoryMediaStore.resolveOwnedPath(localUserId, relativePath)
 StoryMediaStore.deleteOwnedFile(localUserId, relativePath)
-
 StoryMediaService.chooseAndAdd({ fieldKey, mediaType })
 StoryMediaService.list()
 StoryMediaService.open({ mediaId })
@@ -312,7 +311,7 @@ Main owns the picker. Storage root is `<userData>/story/users/<localUserId>/medi
 
 - [ ] **Step 1: Write RED tests**
 
-Test signatures/container markers, extension mismatch, limits, eight-file cap, randomized paths, traversal, picker cancel, copy-before-row insert, failed-copy no active row, cross-user open/delete rejection, and already-missing owned file cleanup.
+Test signatures/container markers, extension mismatch, limits, eight-file cap, randomized paths, traversal, picker cancel, copy-before-row insert, failed-copy no active row, cross-user open/delete rejection, already-missing owned file cleanup.
 
 - [ ] **Step 2: Run RED**
 
@@ -322,7 +321,7 @@ npx vitest run src/main/story/StoryMediaStore.test.ts src/main/story/StoryMediaR
 
 - [ ] **Step 3: Implement using Vault-style ownership defenses**
 
-Do not reuse Vault document IDs/storage root. Normal attachments set `legacy_source_key=NULL`, `storage_status='active'` only after successful copy.
+Do not reuse Vault IDs/storage root. Normal attachments set `legacy_source_key=NULL`, `storage_status='active'` only after successful copy.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -347,19 +346,15 @@ git commit -m "feat: add private Story media"
 - Modify: `src/main/database/database.ts`
 - Modify: `src/main/database/database.test.ts`
 
-**Interfaces:**
+**Interfaces:** `StoryLegacyImporter.importForExistingUsers(): Promise<StoryImportReport>`.
 
-```ts
-StoryLegacyImporter.importForExistingUsers(): Promise<StoryImportReport>
-```
+Import source is the rebuild-owned copied DB only. Answer precedence: valid `my_stories.story_json` -> `story_entries`. Preserve explicit `__confirmed`; only when confirmation metadata is absent entirely, treat legacy non-empty answers as confirmed. Language precedence: `__languages[field]` -> `story_entries.language` -> `__language` -> `en`; unsupported legacy language -> `en`. Unknown fields remain only in legacy source tables.
 
-Import source is the rebuild-owned copied database only. Answer precedence: valid `my_stories.story_json` -> `story_entries` fallback. Confirmation: preserve explicit `__confirmed`; only when confirmation metadata is entirely absent, treat legacy non-empty answers as confirmed. Language: `__languages[field]` -> `story_entries.language` -> `__language` -> `en`; unsupported legacy language falls back to `en`. Unknown fields stay only in untouched legacy tables.
+Legacy media root is derived from `appDataPath`. Each eligible media row has a stable `legacy_source_key`; a reservation transaction creates/reuses one `copying` row with one randomized destination; restart copies to the same destination and marks active. Write `legacy-my-story-v1` only after all eligible reservations are active or classified skipped.
 
-Legacy media root is derived from `appDataPath`. Each eligible row gets stable `legacy_source_key`; reservation transaction creates/reuses one `copying` row with one randomized destination; restart copies to that same destination and marks active. `legacy-my-story-v1` is written only after eligible reservations are active or classified skipped.
+- [ ] **Step 1: Write RED tests with temp DB/files**
 
-- [ ] **Step 1: Write RED tests using temp DB/files**
-
-Cover intact/damaged JSON, fallback entries, confirmation/language preservation, unknown keys, history semantic dedupe/cap, valid media, missing/out-of-root/oversized media, crash after reservation + resume, rerun idempotency, and byte/hash immutability of original legacy DB/media.
+Cover intact/damaged JSON, fallback entries, confirmation/language preservation, unknown keys, history dedupe/cap, valid media, missing/out-of-root/oversized media, crash after reservation + resume, rerun idempotency, and hash/byte immutability of original DB/media.
 
 - [ ] **Step 2: Run RED**
 
@@ -369,7 +364,7 @@ npx vitest run src/main/story/StoryLegacyImporter.test.ts src/main/database/data
 
 - [ ] **Step 3: Integrate after copy + canonical migrations**
 
-`prepareDatabase()` retains copy-first semantics. Run importer against the active `DatabaseSync`; never open the original DB for write. Roots come from `DatabasePathInputs`, never renderer input.
+`prepareDatabase()` keeps copy-first semantics. Run importer against active `DatabaseSync`; never open original DB for write. Roots come from `DatabasePathInputs` only.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -397,55 +392,64 @@ git commit -m "feat: migrate legacy My Story safely"
 - Create: `config/offline-voice-manifest.json`
 - Create: `third_party/whisper.cpp-LICENSE.txt`
 - Modify: `package.json`
-- Modify: `src/main/packaging/packageVerifierContract.test.ts`
+- Modify: `src/main/packaging/packagingContract.test.ts`
 - Modify: `src/main/packaging/packageVerifier.test.ts`
-- Modify: `.github/workflows/windows-package.yml` only to add the manifest/license to path filters if required; do not change its existing trigger policy.
+- Modify: `src/main/packaging/windowsPackageWorkflow.test.ts`
+- Modify: `.github/workflows/windows-package.yml`
 
-**Pinned upstream assets:**
+**Pinned assets:**
 
 ```text
-Runtime:
+Runtime
 URL: https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip
 sizeBytes: 7982101
 SHA256: 7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539
 extract target: runtime/whisper-v1.9.1-win-x64
 required executable: Release/whisper-cli.exe
 
-Model:
+Model
 URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 sizeBytes: 147951465
 SHA256: 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
 target: models/ggml-base.bin
 ```
 
-The checksum/size are the content identity even though Hugging Face's friendly download URL resolves through its current storage layer.
+`OfflineVoiceAssetService` uses the existing tested `OfflineAiDownloader` with a compatible two-file manifest, maps downloader errors to voice-safe messages, and stores marker/assets under `userData/offline-voice`. Voice public states match Private AI public states.
 
-**Interfaces:** Voice states match Private AI public states. `OfflineVoiceAssetService` uses the existing tested `OfflineAiDownloader` with a compatible two-file manifest but maps generic download failures to voice-safe messages and uses separate `userData/offline-voice` marker/root. It verifies `whisper-cli.exe` after extraction and the model hash/size.
+`VoiceTranscriptionService.transcribe({ wavBytes, language })` validates RIFF/WAVE PCM, <=25 MiB, supported language, busy guard, verified installed paths, fixed main-owned arguments, bounded threads, and 120-second timeout. No network port exists.
 
-```ts
-VoiceTranscriptionService.transcribe({ wavBytes, language }): Promise<{ text: string; engine: 'whisper-base' }>
+The Windows workflow `pull_request.paths` must include:
+
+```text
+config/offline-voice-manifest.json
+third_party/whisper.cpp-LICENSE.txt
+src/main/story/**
+src/main/voice/**
+src/renderer/features/story/**
+src/renderer/services/story/**
+src/shared/story.ts
 ```
 
-Validate RIFF/WAVE PCM, <=25 MiB, supported language, busy guard, installed verified paths, bounded threads, 120s timeout. Spawn arguments are fixed by main. Temp WAV always deletes in `finally`.
+Preserve its existing push/tag/base trigger policy exactly.
 
 - [ ] **Step 1: Write RED tests**
 
-Pin both manifest entries above; reject zero/changed hash/size; prove corrupt/missing assets -> repair; `package.json` includes only manifest/license, not runtime/model. Runtime tests cover WAV validation, all language mappings, `fil -> tl`, busy guard, exact safe argv, timeout kill, temp cleanup success/failure/timeout, stderr suppression, and absence of any network/cloud port.
+Pin URL/size/hash values above; reject altered/zero hashes; corrupt/missing assets -> repair; package config includes manifest/license but no runtime/model. Voice tests cover WAV validation, seven languages, `fil -> tl`, busy guard, exact safe argv, timeout kill, temp cleanup success/failure/timeout, stderr suppression, no network fallback. `windowsPackageWorkflow.test.ts` must fail until the Story/voice PR path filters are present.
 
 - [ ] **Step 2: Run RED**
 
 ```bash
-npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts src/main/packaging/packageVerifierContract.test.ts src/main/packaging/packageVerifier.test.ts
+npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts src/main/packaging/packagingContract.test.ts src/main/packaging/packageVerifier.test.ts src/main/packaging/windowsPackageWorkflow.test.ts
 ```
 
 - [ ] **Step 3: Implement**
 
-Do not generalize/refactor `OfflineAiDownloader` unless a failing test demonstrates a required generic seam; it already provides resume, size, SHA, redirects, and ZIP extraction. Voice remains a distinct readiness service.
+Do not refactor `OfflineAiDownloader` unless a failing test proves a generic seam is necessary; its existing resume/size/SHA/redirect/ZIP behavior is sufficient. Voice remains a distinct readiness service.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts src/main/packaging/packageVerifierContract.test.ts src/main/packaging/packageVerifier.test.ts
+npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts src/main/packaging/packagingContract.test.ts src/main/packaging/packageVerifier.test.ts src/main/packaging/windowsPackageWorkflow.test.ts
 npm run verify:package -- --config-only
 ```
 
@@ -471,33 +475,13 @@ git commit -m "feat: add optional offline Story voice pack"
 - Create: `src/renderer/services/story/DesktopStoryClient.ts`
 - Create: `src/renderer/services/story/DesktopStoryClient.test.ts`
 
-**Public surface:**
+**Public Story surface:** `get`, `saveDraft`, `confirmField`, `retryIndexing`, `saveNow`, `getHistory`, `restoreVersion`, `chooseAndAddMedia`, `listMedia`, `openMedia`, `deleteMedia`, `transcribeRecording`, `getVoiceStatus`, `startVoiceSetup`, `pauseVoiceSetup`, `repairVoiceSetup`, `onVoiceSetupProgress`.
 
-```text
-story.get
-story.saveDraft
-story.confirmField
-story.retryIndexing
-story.saveNow
-story.getHistory
-story.restoreVersion
-story.chooseAndAddMedia
-story.listMedia
-story.openMedia
-story.deleteMedia
-story.transcribeRecording
-story.getVoiceStatus
-story.startVoiceSetup
-story.pauseVoiceSetup
-story.repairVoiceSetup
-story.onVoiceSetupProgress
-```
-
-Inputs contain only field key/answer/language, version ID, media ID/type, or WAV bytes. IPC reconstructs fields one-by-one. Public answer/media/version/voice DTOs are explicitly sanitized.
+Inputs contain only field/answer/language, version ID, media ID/type, or WAV bytes. IPC reconstructs each field explicitly and sanitizes every returned DTO.
 
 - [ ] **Step 1: Write RED boundary tests**
 
-Inject `localUserId`, `storedRelativePath`, `modelPath`, `circleId`, `serverUserId`, arbitrary executable flags and assert service spies never receive them. Fake internal service outputs containing paths/embeddings must be stripped. WAV must be an owned byte payload and hard-size checked before dispatch.
+Inject `localUserId`, paths, model/runtime fields, Circle/shared IDs, arbitrary flags. Service spies must receive only approved fields. Fake internal outputs containing paths/embeddings must be stripped. Hard-check WAV byte size before service dispatch.
 
 - [ ] **Step 2: Run RED**
 
@@ -507,7 +491,7 @@ npx vitest run src/main/story/storyIpc.test.ts src/preload/createDesktopApi.stor
 
 - [ ] **Step 3: Implement narrow bridge/client**
 
-Only `DesktopStoryClient` may access `window.familyCircle.story` in production renderer code.
+Only `DesktopStoryClient` accesses `window.familyCircle.story` in production renderer code.
 
 - [ ] **Step 4: Run GREEN plus preload regression**
 
@@ -524,27 +508,25 @@ git commit -m "feat: expose safe My Story desktop API"
 
 ---
 
-### Task 9: Main composition and pending-index setup hooks
+### Task 9: Main composition and pending-index hooks
 
 **Files:**
 - Create: `src/main/story/createStoryServices.ts`
 - Create: `src/main/story/createStoryServices.test.ts`
 - Modify: `src/main/main.ts`
 
-**Interfaces:** `createStoryServices()` composes Story repositories/service/media, `StoryIndexService`, `OfflineVoiceAssetService`, and `VoiceTranscriptionService` from `DatabaseSync`, `SessionStore`, `userDataPath`, picker/opener, shared AI runtime/Nomic/assets. `main.ts` registers `storyIpc`.
+`createStoryServices()` composes Story repositories/lifecycle/media/index, voice assets/transcription from `DatabaseSync`, `SessionStore`, `userDataPath`, picker/opener, and shared AI runtime/Nomic/assets. Register `storyIpc` in main.
 
-Private AI `ready` callback and startup ready check invoke both:
+Private AI ready callback and startup ready check invoke both:
 
 ```ts
 vaultIndexService.indexPendingDocuments(current.id)
 storyIndexService.indexPendingFields(current.id)
 ```
 
-Native media picker filters by requested Story media type; opener is `shell.openPath` after `StoryMediaService` resolves ownership.
-
 - [ ] **Step 1: Write RED composition tests**
 
-Assert Story registration, pending Story retry after AI-ready/startup, one shared Nomic/runtime instance, and no Circle adapter in Story dependencies.
+Assert Story IPC registration, pending Story retry after AI-ready/startup, shared Nomic/runtime, and no Circle adapter in Story dependencies.
 
 - [ ] **Step 2: Run RED**
 
@@ -554,7 +536,7 @@ npx vitest run src/main/story/createStoryServices.test.ts
 
 - [ ] **Step 3: Implement composition**
 
-Keep Story construction out of `main.ts` to preserve readable process bootstrap.
+Keep Story-only construction outside `main.ts`.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -571,7 +553,7 @@ git commit -m "feat: wire My Story services"
 
 ---
 
-### Task 10: My Story Guided and Chapters studio
+### Task 10: Guided and Chapters studio
 
 **Files:**
 - Create: `src/renderer/features/story/MyStory.tsx`
@@ -584,11 +566,11 @@ git commit -m "feat: wire My Story services"
 - Modify: `src/renderer/app/App.test.tsx`
 - Modify: `src/renderer/app/Sidebar.tsx`
 
-**Interfaces/behavior:** `/stories` renders `MyStory`; remove only Stories from placeholder routing. Default Guided view. Renderer merges persisted rows onto fixed schema. Progress is confirmed/16 and chapter confirmed/total. Draft saves debounce at 600 ms; first edit of a confirmed field invokes `saveDraft` immediately once so main invalidates chunks, later edits debounce. Guided has prompt/hint/language/followups/media slots/status/Previous/Confirm/Next; Chapters groups all six sections with identical edit semantics.
+`/stories` renders `MyStory`; remove only Stories placeholder. Preserve synchronized `/family-tree`. Guided is default. Progress = confirmed/16 and chapter confirmed/total. Draft save debounce = 600 ms. First edit of confirmed field calls `saveDraft` immediately once, then later edits debounce. Guided has prompt/hint/language/followups/status/Previous/Confirm/Next; Chapters groups all six sections with identical edit semantics.
 
 - [ ] **Step 1: Write RED UI tests**
 
-Assert real route, 16 fields/six chapters, Guided default, confirmed-only progress, chapter jump, deterministic follow-up chips, 600 ms debounce, immediate confirmed edit, confirm/retry status, exact seven languages, and safe generic errors.
+Assert real route, 16/six schema, Guided default, confirmed-only progress, chapter jumps, deterministic followups, 600 ms debounce, immediate confirmed edit, confirm/retry status, seven languages, safe generic errors.
 
 - [ ] **Step 2: Run RED**
 
@@ -598,7 +580,7 @@ npx vitest run src/renderer/features/story/MyStory.test.tsx src/renderer/app/App
 
 - [ ] **Step 3: Implement**
 
-Required text includes:
+Required text:
 
 ```text
 Draft — review your words before making this memory searchable.
@@ -607,8 +589,6 @@ Saving…
 Saved privately on this computer
 Not saved yet — retry
 ```
-
-Do not render raw main errors.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -625,7 +605,7 @@ git commit -m "feat: add guided My Story studio"
 
 ---
 
-### Task 11: Review, History, attachments, and recorder UX
+### Task 11: Review, History, media, and recorder UX
 
 **Files:**
 - Create: `src/renderer/features/story/ReviewStoryView.tsx`
@@ -637,11 +617,11 @@ git commit -m "feat: add guided My Story studio"
 - Modify: `src/renderer/features/story/MyStory.test.tsx`
 - Modify: `src/renderer/features/story/MyStory.css`
 
-**Interfaces/behavior:** Review shows exact populated text by chapter, renderer-local filter, Edit -> Guided field. History is newest first and restore requires confirmation; main owns pre-restore snapshot. `StoryVoiceRecorder` requests microphone and emits 16 kHz mono PCM WAV `Uint8Array`, always releasing media tracks/audio context. Transcription output is inserted as draft only. Media controls use IDs through `StoryClient` only.
+Review shows exact populated text by chapter, local filter, Edit -> Guided. History newest-first; restore requires confirmation; main owns pre-restore snapshot. `StoryVoiceRecorder` requests microphone and emits 16 kHz mono PCM WAV `Uint8Array`, always releasing tracks/context. Transcript inserts as draft only. Media controls use IDs through StoryClient only.
 
 - [ ] **Step 1: Write RED tests**
 
-Cover four mode states, Review text/filter/Edit, restore confirmation/cancel/focus return, media accessible controls, microphone denial, recording/transcribing/success/error states, transcript remains draft, and recorder cleanup.
+Cover four mode selected states, Review text/filter/Edit, restore confirm/cancel/focus return, media controls, microphone denial, record/transcribing/success/error, transcript remains draft, recorder cleanup.
 
 - [ ] **Step 2: Run RED**
 
@@ -651,7 +631,7 @@ npx vitest run src/renderer/features/story/MyStory.test.tsx src/renderer/feature
 
 - [ ] **Step 3: Implement**
 
-Use existing accessible dialog component/pattern after baseline sync if present. Otherwise use labelled `role="dialog"`, Escape close, Cancel initial focus for restore, and focus return.
+Use the synchronized app's accessible confirmation-dialog pattern. If Family Tree has merged, reuse its proven dialog/focus conventions rather than create a second behavior.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -668,7 +648,7 @@ git commit -m "feat: complete My Story memory studio"
 
 ---
 
-### Task 12: One private archive ranking pipeline for Story + Vault
+### Task 12: One ranking pipeline for Story + Vault
 
 **Files:**
 - Create: `src/main/ai/PrivateArchiveQueryService.ts`
@@ -679,8 +659,6 @@ git commit -m "feat: complete My Story memory studio"
 - Modify: `src/main/vault/VaultChunkRepository.test.ts`
 - Modify: `src/main/story/StoryChunkRepository.ts`
 - Modify: `src/main/story/StoryChunkRepository.test.ts`
-
-**Interfaces:**
 
 ```ts
 type PrivateArchiveScope =
@@ -694,11 +672,11 @@ type PrivateArchiveAnswerSource =
   | { type: 'vault'; documentId: number; fileName: string; excerpt: string }
 ```
 
-`PrivateArchiveQueryService.ask()` restores session, validates selected Vault IDs when relevant, calls `embedQuery()` exactly once, loads only selected owned candidates, scores all with existing `cosineSimilarity`, sorts one list, slices one top-5, starts Granite only if context exists, generates once, and returns safe union citations. `VaultQueryService` becomes a thin Vault-only compatibility delegate during migration so ranking logic exists in one place.
+`PrivateArchiveQueryService.ask()` restores session, validates Vault scope, calls `embedQuery()` exactly once, loads selected owned candidates, scores one combined list with existing `cosineSimilarity`, slices one top-5, starts Granite only if context exists, generates once, returns safe union citations. `VaultQueryService` becomes a Vault-only compatibility delegate so ranking logic is not duplicated.
 
 - [ ] **Step 1: Write RED tests**
 
-Story-only, Vault-only, selected-Vault, all-private; foreign document rejection; exactly one query embedding; no query-time Story/document re-embedding; mixed score ordering; shared top-5 not 5+5; current confirmed Story ownership; safe citations; no-context; generation failure.
+Story-only/Vault-all/selected-Vault/all-private; foreign document rejection; one query embedding; no query-time re-embedding; mixed score order; shared top-5 not 5+5; safe Story/Vault citations; no-context; generation failure.
 
 - [ ] **Step 2: Run RED**
 
@@ -708,7 +686,7 @@ npx vitest run src/main/ai/PrivateArchiveQueryService.test.ts src/main/vault/Vau
 
 - [ ] **Step 3: Implement normalized internal candidate union**
 
-No candidate passed to renderer contains embedding/path/local user data.
+Never expose embedding/path/local-user data.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -725,7 +703,7 @@ git commit -m "feat: search Story and Vault together"
 
 ---
 
-### Task 13: `/ai` My Story / Vault / combined scopes
+### Task 13: `/ai` Story / Vault / combined scopes
 
 **Files:**
 - Modify: `src/shared/desktopApi.ts`
@@ -741,11 +719,11 @@ git commit -m "feat: search Story and Vault together"
 - Modify: `src/renderer/features/vault/AskVault.css`
 - Modify: `src/main/main.ts`
 
-**Interfaces:** Keep the existing `vault.ask` public entry point to minimize preload churn, but change its typed input to `PrivateArchiveScope` and result to `PrivateArchiveAnswer`. Story, Vault, and combined scopes are explicit. In Vault mode, retain all-indexed vs selected document controls. Story citation title is `My Story › <Chapter> › <Memory>`.
+Keep existing `vault.ask` public entry point to minimize preload churn; change typed input to `PrivateArchiveScope` and result to `PrivateArchiveAnswer`. Source choices: My Story, Vault documents, My Story + Vault. Vault mode retains all vs selected documents. Story citation: `My Story › <Chapter> › <Memory>`.
 
 - [ ] **Step 1: Write RED tests**
 
-Assert exact IPC reconstruction of all four scope variants, malicious identity/path field stripping, My Story works with zero Vault documents, combined payload, safe union citations, keyboard submit, and source-aware error/privacy copy.
+Exact IPC reconstruction for all four scopes, malicious identity/path stripping, Story works with zero Vault docs, combined payload, safe citations, keyboard submit, source-aware privacy/error copy.
 
 - [ ] **Step 2: Run RED**
 
@@ -753,9 +731,9 @@ Assert exact IPC reconstruction of all four scope variants, malicious identity/p
 npx vitest run src/main/vault/vaultIpc.ask.test.ts src/preload/createDesktopApi.askVault.test.ts src/renderer/services/vault/DesktopVaultClient.test.ts src/renderer/features/vault/AskVault.test.tsx
 ```
 
-- [ ] **Step 3: Wire `PrivateArchiveQueryService` and update `/ai`**
+- [ ] **Step 3: Wire generalized query service and UI**
 
-Use one runtime manager, one Nomic client, one Granite client. Do not introduce Story model ports/processes.
+One runtime manager, Nomic client, Granite client; no Story model process.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -772,12 +750,11 @@ git commit -m "feat: ask My Story and Vault privately"
 
 ---
 
-### Task 14: Merge-blocking Story security + architecture boundary suite
+### Task 14: Merge-blocking Story security and architecture boundaries
 
 **Files:**
 - Create: `src/main/story/StorySecurity.test.ts`
 - Modify: `scripts/verify-boundaries.mjs`
-- Modify: `src/main/security/BoundaryVerifier.test.ts` if that file exists after baseline sync; otherwise add Story boundary assertions to the synchronized repository's existing verifier-contract test rather than inventing a parallel scanner.
 
 **Required invariants:**
 
@@ -787,7 +764,7 @@ git commit -m "feat: ask My Story and Vault privately"
 4. Renderer identity/path/model/runtime injection stripped.
 5. Absolute legacy/current paths never cross preload.
 6. Draft/unconfirmed answers have no chunks.
-7. First confirmed edit snapshots old state and removes stale chunks immediately.
+7. First confirmed edit snapshots old state/removes stale chunks immediately.
 8. Embedding failure leaves no old searchable chunks.
 9. Restore leaves no newer stale chunks.
 10. Foreign/stale media/version IDs fail before mutation.
@@ -799,12 +776,12 @@ git commit -m "feat: ask My Story and Vault privately"
 16. Voice has no cloud/network fallback.
 17. Temp WAV cleanup on success/failure/timeout.
 18. Attachments are never silently transcribed/OCR'd/indexed.
-19. Public errors contain no paths, process stderr, ports, embeddings, or secrets.
-20. Only `DesktopStoryClient` accesses `window.familyCircle.story` from production renderer code.
+19. Public errors contain no paths, stderr, ports, embeddings, secrets.
+20. Only `DesktopStoryClient` accesses `window.familyCircle.story` in production renderer code.
 
-- [ ] **Step 1: Write complete security tests and Story boundary rules**
+- [ ] **Step 1: Write StorySecurity RED coverage and extend scanner expectations**
 
-At least the new boundary scanner assertions must be RED before implementation if all runtime invariants already pass.
+Add source-scan assertions inside `StorySecurity.test.ts` for `scripts/verify-boundaries.mjs`-equivalent invariants; do not create a second standalone boundary scanner. At least the production boundary command must fail until Story rules are added.
 
 - [ ] **Step 2: Run RED**
 
@@ -815,7 +792,7 @@ npm run verify:boundaries
 
 - [ ] **Step 3: Fix only proven gaps**
 
-Boundary scanner rejects direct Story preload access outside `DesktopStoryClient`, Story imports of Circle transport, and private Story internals in renderer/shared public files.
+Add Story rules to `scripts/verify-boundaries.mjs`: direct Story preload access outside `DesktopStoryClient`, Story imports of Circle transport, private Story internals in renderer/shared public files.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -827,37 +804,36 @@ npm run verify:boundaries
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/story/StorySecurity.test.ts scripts/verify-boundaries.mjs src/main/security 2>/dev/null || true
-git add src/main src/preload src/renderer src/shared
+git add src/main/story/StorySecurity.test.ts scripts/verify-boundaries.mjs src/main src/preload src/renderer src/shared
 git commit -m "test: enforce My Story privacy boundaries"
 ```
 
 ---
 
-### Task 15: Accessibility, docs, complete verification, and review boundary
+### Task 15: Accessibility, documentation, exact-head verification, and review
 
 **Files:**
 - Create: `src/renderer/features/story/MyStory.accessibility.test.tsx`
-- Modify: Story renderer files only for failures proven by that test.
+- Modify: Story renderer files only for proven accessibility failures.
 - Modify: `README.md`
 - Modify: `docs/PRIVATE_AI.md`
 - Modify: `docs/WINDOWS_RELEASE.md`
 
-**Accessibility acceptance:** four view controls expose selected state; draft/confirmed/index state is textual; chapter progress has accessible names; Previous/Next focus is deterministic; Confirm describes searchability; recorder status uses live semantics; media buttons include filename/type; restore dialog is labelled/Escape-closeable/focus-returning; errors use alert/status roles; no core action requires hover.
+**Accessibility acceptance:** four view controls expose selected state; draft/confirmed/index state textual; chapter progress accessible names; deterministic Previous/Next focus; Confirm explains searchability; recorder live status; media accessible names include filename/type; restore labelled/Escape-closeable/focus-returning; errors use alert/status semantics; no core hover-only action.
 
 - [ ] **Step 1: Write accessibility RED tests**
 
-Use Testing Library role/name/state queries across Guided, Chapters, Review, History, confirmation, media, restore dialog, and recorder states.
+Use Testing Library role/name/state queries across Guided, Chapters, Review, History, confirmation, media, restore, recorder.
 
-- [ ] **Step 2: Run focused RED/GREEN loop**
+- [ ] **Step 2: Run focused RED/GREEN**
 
 ```bash
 npx vitest run src/renderer/features/story/MyStory.accessibility.test.tsx src/renderer/features/story/MyStory.test.tsx
 ```
 
-- [ ] **Step 3: Update documentation**
+- [ ] **Step 3: Update docs truthfully**
 
-README: My Story is real, private, four-view, confirmed-only searchable. `PRIVATE_AI.md`: Story indexing/pending retry/shared top-5. `WINDOWS_RELEASE.md`: standard installer contains manifest/license only; optional voice setup downloads verified runtime/model separately. Document seven-language v1 contract and no cloud fallback.
+README: real private My Story studio. `PRIVATE_AI.md`: confirmed Story indexing/pending retry/shared top-5. `WINDOWS_RELEASE.md`: installer includes manifest/license only; verified optional voice pack separate; seven-language v1; no cloud fallback.
 
 - [ ] **Step 4: Run clean complete local gate**
 
@@ -868,11 +844,9 @@ npm run check
 npm audit --audit-level=high
 ```
 
-Expected: all tests/typechecks/boundaries/builds pass and audit has no high-severity blocker.
+- [ ] **Step 5: Review full diff**
 
-- [ ] **Step 5: Perform full diff/security review**
-
-Invoke `superpowers:requesting-code-review`. Review `main...feature/my-story` specifically for ownership predicates, original-source immutability, media traversal, stale chunks, restore invalidation, shared top-5, voice command injection, network fallback, IPC stripping, path/ID/embedding leakage, Family Tree route preservation, and Windows exclusions. Every merge-blocking finding gets RED -> GREEN evidence and a focused commit.
+Invoke `superpowers:requesting-code-review`. Review `main...feature/my-story` for ownership predicates, original-source immutability, media traversal, stale chunks, restore invalidation, shared top-5, voice command injection, network fallback, IPC stripping, path/ID/embedding leakage, Family Tree route preservation, and Windows exclusions. Every merge-blocking finding gets RED -> GREEN evidence.
 
 - [ ] **Step 6: Open/update PR and require exact-head CI**
 
@@ -883,13 +857,11 @@ Linux: npm run check + npm audit --audit-level=high
 Windows: Verify application + NSIS build + package verifier + exactly-one-installer + artifact upload
 ```
 
-Do not use an older commit's green run after review fixes move the head.
+- [ ] **Step 7: Record immutable evidence and stop at merge boundary**
 
-- [ ] **Step 7: Record final immutable evidence**
+Record feature SHA, test file/test totals, StorySecurity count, accessibility count, audit, Linux run/job IDs, Windows run/job IDs, installer artifact ID/digest. Never merge without explicit user instruction.
 
-Record feature SHA, total test files/tests, `StorySecurity` count, accessibility count, audit result, Linux run/job IDs, Windows run/job IDs, and installer artifact ID/digest when exposed. Stop at merge boundary; do not merge without explicit user instruction.
-
-- [ ] **Step 8: Commit documentation/accessibility slice**
+- [ ] **Step 8: Commit docs/accessibility slice**
 
 ```bash
 git add src/renderer/features/story README.md docs/PRIVATE_AI.md docs/WINDOWS_RELEASE.md
