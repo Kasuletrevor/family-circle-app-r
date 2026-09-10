@@ -263,7 +263,7 @@ export function FamilyTreeCanvas({
       <div className="family-tree-canvas__toolbar" aria-label="Family tree view controls">
         <button type="button" aria-label="Zoom out" onClick={() => zoom(1 / ZOOM_FACTOR)}>−</button>
         <button type="button" aria-label="Zoom in" onClick={() => zoom(ZOOM_FACTOR)}>+</button>
-        <button type="button" aria-label="Fit tree" onClick={() => setView(fitTransform(renderedLayout.nodes))}>Fit</button>
+        <button type="button" aria-label="Fit family tree" onClick={() => setView(fitTransform(renderedLayout.nodes))}>Fit</button>
       </div>
 
       {saveError ? <p className="family-tree-canvas__error" role="alert">Could not save this position. Please try again.</p> : null}
@@ -302,6 +302,7 @@ export function FamilyTreeCanvas({
                     role="button"
                     tabIndex={0}
                     aria-label={ariaLabel}
+                    aria-pressed={selected}
                     onClick={() => onSelectionChange({ type: 'relation', relationId: path.relationId })}
                     onKeyDown={(event) => handleAccessibleActivate(event, () => onSelectionChange({ type: 'relation', relationId: path.relationId }))}
                   />
@@ -330,6 +331,7 @@ export function FamilyTreeCanvas({
                   role="button"
                   tabIndex={0}
                   aria-label={`Select ${node.name}`}
+                  aria-pressed={selected}
                   onClick={() => onSelectionChange({ type: 'person', personId: node.id })}
                   onKeyDown={(event) => handleAccessibleActivate(event, () => onSelectionChange({ type: 'person', personId: node.id }))}
                   onPointerDown={(event) => handleNodePointerDown(event, node)}
