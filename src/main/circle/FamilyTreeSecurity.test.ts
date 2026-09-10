@@ -175,6 +175,19 @@ describe('Family Tree security boundaries', () => {
     expect(port.addTreeRelation).not.toHaveBeenCalled()
   })
 
+  it('rejects deletion of a legacy placeholder relationship before transport', async () => {
+    const legacyTree = tree()
+    legacyTree.relations = [
+      { id: 'r-legacy', kind: 'grandparent', aPersonId: 'placeholder:1', bPersonId: 'user:88' },
+    ]
+    const { service, port } = serviceHarness({ tree: legacyTree })
+
+    await expect(service.deleteTreeRelation({ relationId: 'r-legacy' }))
+      .rejects.toThrow('confirmed Circle members')
+
+    expect(port.deleteTreeRelation).not.toHaveBeenCalled()
+  })
+
   it('rejects non-owner relationship writes before transport', async () => {
     const { service, port } = serviceHarness({ owner: false })
 
