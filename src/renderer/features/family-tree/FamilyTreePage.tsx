@@ -4,12 +4,14 @@ import {
   FAMILY_RELATIONSHIP_KINDS,
   type CircleOverview,
   type CircleTreePersonRecord,
+  type CircleTreeRelationRecord,
   type FamilyRelationshipKind,
 } from '../../../shared/desktopApi'
 import { useAppServices } from '../../app/services'
 import type { CircleClient } from '../../services/circle/CircleClient'
+import { ConfirmCircleActionDialog } from '../circles/ConfirmCircleActionDialog'
 import { FamilyTreeCanvas, type FamilyTreeSelection } from './FamilyTreeCanvas'
-import { relationshipsForPerson } from './familyTreeLabels'
+import { relationshipSentence, relationshipsForPerson } from './familyTreeLabels'
 import { buildRelationshipPaths, layoutFamilyTree, normalizeFamilyGraph } from './familyTreeLayout'
 import './FamilyTree.css'
 
@@ -62,6 +64,32 @@ function PersonInspector({
   )
 }
 
+function RelationshipInspector({
+  relation,
+  overview,
+  canDelete,
+  error,
+  onRequestDelete,
+}: {
+  relation: CircleTreeRelationRecord
+  overview: Extract<CircleOverview, { status: 'ready' }>
+  canDelete: boolean
+  error: string | null
+  onRequestDelete: () => void
+}) {
+  return (
+    <aside className="family-tree-page__inspector" aria-label="Relationship details">
+      <span className="family-tree-page__eyebrow">Connection</span>
+      <h2>Relationship</h2>
+      <p>{relationshipSentence(relation, overview.tree.people)}</p>
+      {canDelete ? (
+        <button type="button" onClick={onRequestDelete}>Remove relationship</button>
+      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
+    </aside>
+  )
+}
+
 const readOnlyPositionChange = async () => undefined
 
 export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClient } = {}) {
@@ -76,6 +104,8 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
   const [secondPersonId, setSecondPersonId] = useState('')
   const [relationshipBusy, setRelationshipBusy] = useState(false)
   const [relationshipError, setRelationshipError] = useState<string | null>(null)
+  const [pendingDeleteRelationId, setPendingDeleteRelationId] = useState<string | null>(null)
+  const [relationshipDeleteError, setRelationshipDeleteError] = useState<string | null>(null)
   const requestId = useRef(0)
 
   const load = useCallback(async () => {
@@ -107,10 +137,22 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
     setRelationshipError(null)
   }
 
+  function resetRelationshipDeletion(): void {
+    setPendingDeleteRelationId(null)
+    setRelationshipDeleteError(null)
+  }
+
+  function handleSelectionChange(nextSelection: FamilyTreeSelection): void {
+    setSelection(nextSelection)
+    setRelationshipDeleteError(null)
+    if (nextSelection?.type !== 'relation') setPendingDeleteRelationId(null)
+  }
+
   async function handleCircleChange(circleId: string): Promise<void> {
     if (overview?.activeCircleId === circleId) return
     setSelection(null)
     resetRelationshipForm()
+    resetRelationshipDeletion()
     setState('loading')
     try {
       await circle.selectCircle(circleId)
@@ -145,6 +187,33 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
     } catch {
       setRelationshipBusy(false)
       setRelationshipError('Could not add this relationship. Please try again.')
+    }
+  }
+
+  async function handleDeleteRelation(): Promise<void> {
+    if (!overview || overview.status !== 'ready' || !overview.viewerIsOwner || !pendingDeleteRelationId) return
+
+    const relation = overview.tree.relations.find((candidate) => candidate.id === pendingDeleteRelationId)
+    if (!relation) {
+      setRelationshipDeleteError('Could not remove this relationship. Please try again.')
+      return
+    }
+
+    const firstPerson = overview.tree.people.find((person) => person.id === relation.aPersonId)
+    const secondPerson = overview.tree.people.find((person) => person.id === relation.bPersonId)
+    if (firstPerson?.kind !== 'user' || secondPerson?.kind !== 'user') {
+      resetRelationshipDeletion()
+      return
+    }
+
+    setRelationshipDeleteError(null)
+    try {
+      await circle.deleteTreeRelation(relation.id)
+      resetRelationshipDeletion()
+      setSelection(null)
+      await load()
+    } catch {
+      setRelationshipDeleteError('Could not remove this relationship. Please try again.')
     }
   }
 
@@ -190,6 +259,24 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
   const confirmedPeople = overview.tree.people.filter((person) => person.kind === 'user')
   const selectedPerson = selection?.type === 'person'
     ? overview.tree.people.find((person) => person.id === selection.personId && person.kind !== 'invite') ?? null
+    : null
+  const selectedRelation = selection?.type === 'relation'
+    ? overview.tree.relations.find((relation) => relation.id === selection.relationId) ?? null
+    : null
+  const selectedRelationFirstPerson = selectedRelation
+    ? overview.tree.people.find((person) => person.id === selectedRelation.aPersonId) ?? null
+    : null
+  const selectedRelationSecondPerson = selectedRelation
+    ? overview.tree.people.find((person) => person.id === selectedRelation.bPersonId) ?? null
+    : null
+  const canDeleteSelectedRelation = Boolean(
+    overview.viewerIsOwner
+      && selectedRelation
+      && selectedRelationFirstPerson?.kind === 'user'
+      && selectedRelationSecondPerson?.kind === 'user',
+  )
+  const pendingDeleteRelation = pendingDeleteRelationId
+    ? overview.tree.relations.find((relation) => relation.id === pendingDeleteRelationId) ?? null
     : null
   const relationshipFormValid = firstPersonId !== ''
     && secondPersonId !== ''
@@ -330,7 +417,7 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
           viewerPersonId={null}
           viewerIsOwner={false}
           selection={selection}
-          onSelectionChange={setSelection}
+          onSelectionChange={handleSelectionChange}
           onPositionChange={readOnlyPositionChange}
         />
         {selectedPerson ? (
@@ -340,7 +427,31 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
             overview={overview}
           />
         ) : null}
+        {selectedRelation ? (
+          <RelationshipInspector
+            relation={selectedRelation}
+            overview={overview}
+            canDelete={canDeleteSelectedRelation}
+            error={relationshipDeleteError}
+            onRequestDelete={() => {
+              setPendingDeleteRelationId(selectedRelation.id)
+              setRelationshipDeleteError(null)
+            }}
+          />
+        ) : null}
       </div>
+
+      <ConfirmCircleActionDialog
+        open={pendingDeleteRelation !== null}
+        title="Remove relationship?"
+        body={pendingDeleteRelation
+          ? `${relationshipSentence(pendingDeleteRelation, overview.tree.people)}. Both people will remain in this Circle.`
+          : ''}
+        confirmLabel="Remove relationship"
+        tone="danger"
+        onCancel={resetRelationshipDeletion}
+        onConfirm={handleDeleteRelation}
+      />
     </section>
   )
 }
