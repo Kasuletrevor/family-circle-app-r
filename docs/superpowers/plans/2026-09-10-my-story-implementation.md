@@ -4,40 +4,35 @@
 
 **Goal:** Recreate the full private local My Story memory studio with guided capture, history, media, offline voice transcription, confirmed-memory indexing, legacy migration, and combined My Story + Vault private retrieval.
 
-**Architecture:** My Story is a local-user-owned subsystem behind Electron main/preload boundaries. Canonical answers, semantic versions, private media, Story embeddings, and migration state live in local SQLite/filesystem storage; the renderer sees only safe DTOs through a dedicated Story client. Existing Nomic/Granite runtimes are reused through a new `PrivateArchiveQueryService` that ranks Vault and Story chunks together without coupling Story ownership to Vault document IDs.
+**Architecture:** My Story is owned by the restored local user and stays behind Electron main/preload boundaries. Canonical answers, immutable semantic versions, private media, Story embeddings, migration state, and optional voice assets live locally; the renderer receives only safe DTOs through a dedicated Story client. Existing Nomic/Granite processes are reused through a new `PrivateArchiveQueryService` that ranks Story and Vault chunks together without making Story a Vault document or shared Circle data.
 
-**Tech Stack:** Electron 44, React 19, TypeScript 7, `node:sqlite`, Vitest 4, Testing Library, existing Nomic/Granite llama.cpp runtime, optional verified `whisper.cpp` Windows x64 voice pack, GitHub Actions Windows NSIS packaging.
+**Tech Stack:** Electron 44, React 19, TypeScript 7, `node:sqlite`, Vitest 4, Testing Library, existing Nomic/Granite llama.cpp runtime, `whisper.cpp` v1.9.1 Windows x64 + multilingual Whisper base as an optional verified voice pack, GitHub Actions Windows NSIS packaging.
 
 **Spec:** `docs/superpowers/specs/2026-09-10-my-story-design.md`
 
 ## Global Constraints
 
-- Before Task 1 implementation, update `feature/my-story` from the latest `main`; if PR #8 Family Tree has merged, preserve the real `/family-tree` route and replace only `/stories`.
-- Run `npm ci`, `npm run check`, and `npm audit --audit-level=high` on the synchronized baseline before adding Story code. Do not continue from a baseline with unrelated failures.
-- The current design branch started from `main` at `9f8d7fefa1f2336654c727683e20285daf0319d9`; do not assume that old dependency state is audit-clean.
-- My Story is private local data. No Story service calls `LegacyCircleAuthAdapter` or any Circle URL.
-- The fixed first-release schema has exactly 16 Story fields across six chapters and exactly seven language codes: `en`, `fr`, `es`, `pt`, `zh`, `ja`, `fil`; Whisper maps `fil -> tl`.
-- Draft/unconfirmed answers must never be present in `story_chunks`.
-- Editing a confirmed answer must snapshot the old semantic Story before overwriting it and must delete stale chunks immediately before normal debounced saves continue.
-- Nomic inference is never held inside a SQLite transaction. Indexing failures fail closed with no stale chunks.
-- Story and Vault use the same `nomic-embed-text-v1.5.Q4_K_M`, index version, `search_document:` prefix, 1000-character chunks, 150-character overlap, and `search_query:` query prefix so combined cosine scores are comparable.
-- Combined retrieval uses one query embedding and one shared top-5 across selected Story/Vault sources.
-- Story media limits: photos 25 MiB, audio 100 MiB, maximum eight selected files per add operation.
-- Voice transcription input is 16 kHz mono PCM WAV, maximum 25 MiB, with a 120-second timeout and one-transcription busy guard.
-- Voice v1 ships only as an optional verified Windows x64 pack; runtime/model files are never bundled into the standard NSIS installer and there is no cloud/ElevenLabs fallback.
-- Renderer/public contracts never expose `localUserId`, absolute/stored filesystem paths, embedding blobs, model/runtime paths, local ports, API keys, Circle IDs, or shared-service identities.
-- Every renderer-supplied media/version/field handle is revalidated and re-resolved for the authenticated local user in main.
-- Legacy DB/media migration is copy-safe and idempotent; the original legacy database and original media files are never mutated.
-- Every behavior-changing task follows RED -> GREEN -> focused regression -> commit.
+- Before Task 1 implementation, update `feature/my-story` from latest `main`. If PR #8 Family Tree has merged, preserve the real `/family-tree` route and replace only `/stories`.
+- Prove the synchronized baseline with `npm ci`, `npm run check`, and `npm audit --audit-level=high`. Do not begin Story code from an unrelated failing baseline.
+- My Story is private local data. No Story service imports/calls `LegacyCircleAuthAdapter`, Circle URLs, or cloud AI/STT.
+- V1 has exactly 16 Story fields, six chapters, and languages `en`, `fr`, `es`, `pt`, `zh`, `ja`, `fil`; Whisper maps `fil -> tl`.
+- Draft/unconfirmed answers never exist in `story_chunks`.
+- First edit of confirmed text snapshots the old semantic Story and deletes stale chunks in the same SQLite transaction that writes the unconfirmed replacement.
+- Nomic inference never runs inside a SQLite transaction. Indexing failure leaves no stale chunks.
+- Story/Vault use `nomic-embed-text-v1.5.Q4_K_M`, index version `1`, the same `search_document:` prefix, 1000-character chunks with 150-character overlap, and the existing `search_query:` query prefix.
+- Combined retrieval creates one query embedding and selects one shared top-5 across selected Story/Vault candidates.
+- Story media limits: photo 25 MiB, audio 100 MiB, max eight selected files per add operation.
+- Voice transcription accepts only 16 kHz mono PCM WAV bytes, max 25 MiB, one concurrent job, 120-second timeout.
+- Optional voice pack v1 is Windows x64 only. Standard NSIS contains the voice manifest/license only, never runtime/model files.
+- Public/renderer contracts never expose `localUserId`, absolute or stored paths, embedding blobs, model/runtime paths, ports, secrets, Circle IDs, or shared-service identities.
+- Media/version handles are always re-resolved for the protected-session local user in main.
+- Legacy database/media import is copy-safe and idempotent; original legacy DB/files are never modified.
+- Every behavior change uses RED -> GREEN -> focused commit.
 
----
+## Execution Preflight
 
-## Execution preflight — synchronize and prove a clean baseline
-
-This is a gate, not a feature task.
-
-- [ ] Fetch the latest `main` and update `feature/my-story` without discarding the committed spec/plan.
-- [ ] If Family Tree has merged, inspect `src/renderer/app/App.tsx` and confirm `/family-tree` is still a real route after synchronization.
+- [ ] Fetch latest `main` and update `feature/my-story` while retaining this spec/plan.
+- [ ] Inspect `src/renderer/app/App.tsx`; if Family Tree merged, confirm `/family-tree` remains real.
 - [ ] Run:
 
 ```bash
@@ -46,11 +41,11 @@ npm run check
 npm audit --audit-level=high
 ```
 
-Expected: all existing tests/build/boundaries pass and audit reports zero high-severity blockers. If the synchronized baseline fails, use `superpowers:systematic-debugging` before Task 1.
+Expected: existing verification and audit pass. If not, invoke `superpowers:systematic-debugging` before Task 1.
 
 ---
 
-### Task 1: Fixed Story schema and canonical database tables
+### Task 1: Fixed Story contract and canonical database schema
 
 **Files:**
 - Create: `src/shared/story.ts`
@@ -59,14 +54,13 @@ Expected: all existing tests/build/boundaries pass and audit reports zero high-s
 - Modify: `src/main/database/migrations.test.ts`
 
 **Interfaces:**
-- Produces `STORY_SCHEMA_VERSION = 1`.
-- Produces `STORY_FIELDS`, `STORY_FIELD_KEYS`, `STORY_LANGUAGES`, `StoryFieldKey`, `StoryLanguage`, `StoryIndexStatus`, and `normalizeStoryLanguage(value)`.
-- Creates canonical tables `story_answers`, `story_versions`, `story_media_items`, `story_chunks`, and `story_import_state` exactly as the spec defines.
-- Legacy `my_stories`, `story_entries`, `story_history`, and `story_media` are preserved if present.
+- `STORY_SCHEMA_VERSION = 1`
+- `STORY_FIELDS`, `STORY_FIELD_KEYS`, `STORY_LANGUAGES`
+- `StoryFieldKey`, `StoryLanguage`, `StoryIndexStatus`
+- `requireStoryField(key)` and `normalizeStoryLanguage(value)`
+- Canonical tables: `story_answers`, `story_versions`, `story_media_items`, `story_chunks`, `story_import_state`.
 
-- [ ] **Step 1: Write failing schema contract tests**
-
-In `src/shared/story.test.ts`, assert exact field order/count, exact chapter names, life-stage options, exact language set, and `fil -> tl` mapping. Example:
+- [ ] **Step 1: Write failing contract/migration tests**
 
 ```ts
 expect(STORY_FIELDS).toHaveLength(16)
@@ -76,12 +70,12 @@ expect(STORY_FIELDS.map((field) => field.key)).toEqual([
   'education', 'workLife', 'relationships', 'milestones',
   'traditions', 'values', 'carePreferences', 'futureMessage',
 ])
-expect(STORY_LANGUAGES.map((item) => item.code)).toEqual(['en', 'fr', 'es', 'pt', 'zh', 'ja', 'fil'])
+expect(STORY_LANGUAGES.map((item) => item.code)).toEqual(['en','fr','es','pt','zh','ja','fil'])
 expect(normalizeStoryLanguage('fil-PH')).toMatchObject({ code: 'fil', whisperCode: 'tl' })
 expect(() => normalizeStoryLanguage('lg')).toThrow('Unsupported Story language')
 ```
 
-In `migrations.test.ts`, assert all five canonical tables, their columns, FKs, unique constraints, and preservation of pre-existing legacy Story tables/rows.
+Migration tests assert exact columns/FKs/uniques and prove any pre-existing `my_stories`, `story_entries`, `story_history`, and `story_media` rows survive unchanged.
 
 - [ ] **Step 2: Run RED**
 
@@ -89,21 +83,11 @@ In `migrations.test.ts`, assert all five canonical tables, their columns, FKs, u
 npx vitest run src/shared/story.test.ts src/main/database/migrations.test.ts
 ```
 
-Expected: FAIL because Story schema exports/tables do not exist.
+Expected: FAIL because Story exports/tables are absent.
 
-- [ ] **Step 3: Implement the schema and additive migrations**
+- [ ] **Step 3: Implement schema and migrations**
 
-`src/shared/story.ts` owns renderer-safe schema metadata only. `migrations.ts` adds focused helpers such as:
-
-```ts
-function ensureStoryAnswers(db: DatabaseSync): void { /* CREATE TABLE/INDEX */ }
-function ensureStoryVersions(db: DatabaseSync): void { /* CREATE TABLE/INDEX */ }
-function ensureStoryMediaItems(db: DatabaseSync): void { /* CREATE TABLE/INDEX */ }
-function ensureStoryChunks(db: DatabaseSync): void { /* CREATE TABLE/INDEX */ }
-function ensureStoryImportState(db: DatabaseSync): void { /* CREATE TABLE */ }
-```
-
-Call them inside the existing migration transaction after `users` exists.
+Add `ensureStoryAnswers`, `ensureStoryVersions`, `ensureStoryMediaItems`, `ensureStoryChunks`, and `ensureStoryImportState`; call them inside the existing `runMigrations()` transaction after `users` exists. `src/shared/story.ts` contains only renderer-safe fixed schema metadata/types.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -111,72 +95,74 @@ Call them inside the existing migration transaction after `users` exists.
 npx vitest run src/shared/story.test.ts src/main/database/migrations.test.ts
 ```
 
-Expected: PASS.
-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/shared/story.ts src/shared/story.test.ts src/main/database/migrations.ts src/main/database/migrations.test.ts
+git add src/shared/story* src/main/database/migrations*
 git commit -m "feat: add My Story schema"
 ```
 
 ---
 
-### Task 2: Owned answers and semantic version repositories
+### Task 2: Owned answers, semantic history, and atomic restore primitives
 
 **Files:**
 - Create: `src/main/story/storyModels.ts`
-- Create: `src/main/story/StoryRepository.ts`
-- Create: `src/main/story/StoryRepository.test.ts`
 - Create: `src/main/story/StoryHistoryRepository.ts`
 - Create: `src/main/story/StoryHistoryRepository.test.ts`
+- Create: `src/main/story/StoryRepository.ts`
+- Create: `src/main/story/StoryRepository.test.ts`
 
 **Interfaces:**
-- `StoryRepository.getStory(localUserId): Promise<StoryAnswerInternal[]>`
-- `StoryRepository.getAnswer(localUserId, fieldKey): Promise<StoryAnswerInternal | null>`
-- `StoryRepository.saveDraft(localUserId, input): Promise<StoryAnswerInternal>`
-- `StoryRepository.invalidateConfirmedAnswer(localUserId, input, snapshotOldStory): Promise<StoryAnswerInternal>` where the transaction snapshots before overwrite and deletes chunks.
-- `StoryRepository.markConfirmedPending(localUserId, fieldKey): Promise<StoryAnswerInternal>` deletes old chunks before setting `pending`.
-- `StoryRepository.markIndexStatus(localUserId, fieldKey, status): Promise<void>`.
-- `StoryHistoryRepository.createIfChanged(localUserId, snapshot): Promise<number | null>`.
-- `StoryHistoryRepository.list(localUserId): Promise<StoryVersionInternal[]>` newest first, max 30.
-- `StoryHistoryRepository.getOwned(localUserId, versionId): Promise<StoryVersionInternal | null>`.
-- Semantic signatures exclude indexing/UI state but include answer text, language, and confirmation.
-
-- [ ] **Step 1: Write repository RED tests**
-
-Cover user isolation, field-key validation, draft upsert, first-edit transaction ordering, previous confirmed snapshot preservation, no history for ordinary autosave, semantic dedupe, and 30-version cap.
 
 ```ts
-await repo.saveDraft(1, { fieldKey: 'childhood', answer: 'Draft', language: 'en' })
-expect(await repo.getStory(2)).toEqual([])
+class StoryHistoryRepository {
+  createIfChanged(localUserId: number, snapshot: StorySemanticSnapshot): Promise<number | null>
+  createIfChangedInOpenTransaction(localUserId: number, snapshot: StorySemanticSnapshot): number | null
+  list(localUserId: number): Promise<StoryVersionInternal[]>
+  getOwned(localUserId: number, versionId: number): Promise<StoryVersionInternal | null>
+}
 
+class StoryRepository {
+  getStory(localUserId: number): Promise<StoryAnswerInternal[]>
+  getAnswer(localUserId: number, fieldKey: StoryFieldKey): Promise<StoryAnswerInternal | null>
+  saveDraft(localUserId: number, input: StoryDraftInput): Promise<StoryAnswerInternal>
+  invalidateConfirmedAnswer(localUserId: number, input: StoryDraftInput): Promise<StoryAnswerInternal>
+  markConfirmedPending(localUserId: number, fieldKey: StoryFieldKey): Promise<StoryAnswerInternal>
+  markIndexStatus(localUserId: number, fieldKey: StoryFieldKey, status: StoryIndexStatus): Promise<void>
+  restoreSnapshot(localUserId: number, target: StorySemanticSnapshot): Promise<StoryAnswerInternal[]>
+}
+```
+
+`StoryRepository` receives `StoryHistoryRepository` in its constructor. `invalidateConfirmedAnswer()` opens one `withTransaction()` transaction, builds the current semantic Story, calls `history.createIfChangedInOpenTransaction()` **before** updating the answer, writes the changed unconfirmed answer, deletes that answer's chunks, and sets `not_indexed`. `restoreSnapshot()` similarly snapshots current semantic state in the same transaction before replacing answers/deleting all current Story chunks/marking restored confirmed fields `pending`.
+
+- [ ] **Step 1: Write RED repository tests**
+
+Prove user isolation, fixed-field metadata derivation, ordinary draft upsert without history, confirmed-edit snapshot-before-overwrite, immediate chunk deletion, semantic dedupe, 30-version cap, foreign version ownership, and atomic restore rollback.
+
+```ts
 await repo.invalidateConfirmedAnswer(1, {
   fieldKey: 'childhood', answer: 'Changed', language: 'en',
-}, oldSnapshot)
-expect(db.prepare('SELECT COUNT(*) AS n FROM story_chunks').get()).toEqual({ n: 0 })
+})
 expect((await history.list(1))[0].snapshot.answers.childhood.answer).toBe('Old confirmed text')
+expect(db.prepare('SELECT COUNT(*) AS n FROM story_chunks').get()).toEqual({ n: 0 })
 ```
 
 - [ ] **Step 2: Run RED**
 
 ```bash
-npx vitest run src/main/story/StoryRepository.test.ts src/main/story/StoryHistoryRepository.test.ts
+npx vitest run src/main/story/StoryHistoryRepository.test.ts src/main/story/StoryRepository.test.ts
 ```
-
-Expected: FAIL with missing modules/classes.
 
 - [ ] **Step 3: Implement minimal repositories**
 
-Use prepared SQL and the existing `withTransaction()` helper. All mutation predicates include `local_user_id`. Do not accept arbitrary section/label/question from callers; derive metadata from `STORY_FIELDS` by `fieldKey`.
+All writes include `local_user_id` predicates. Section/label/question come from `requireStoryField()`, never renderer input. `createIfChangedInOpenTransaction()` does not begin/commit its own transaction; standalone `createIfChanged()` wraps it with `withTransaction()`.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-npx vitest run src/main/story/StoryRepository.test.ts src/main/story/StoryHistoryRepository.test.ts
+npx vitest run src/main/story/StoryHistoryRepository.test.ts src/main/story/StoryRepository.test.ts
 ```
-
-Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -187,94 +173,91 @@ git commit -m "feat: add private Story repositories"
 
 ---
 
-### Task 3: Story chunk repository and fail-closed indexing
+### Task 3: Shared embedding contract and fail-closed Story indexing
 
 **Files:**
+- Create: `src/main/ai/embeddingContract.ts`
+- Create: `src/main/ai/embeddingContract.test.ts`
+- Modify: `src/main/vault/VaultIndexService.ts`
+- Modify: `src/main/vault/VaultIndexService.test.ts`
 - Create: `src/main/story/StoryChunkRepository.ts`
 - Create: `src/main/story/StoryChunkRepository.test.ts`
 - Create: `src/main/story/StoryIndexService.ts`
 - Create: `src/main/story/StoryIndexService.test.ts`
-- Modify: `src/main/vault/VaultIndexService.ts`
-- Modify: `src/main/vault/VaultIndexService.test.ts`
 
 **Interfaces:**
-- Export shared constants from a neutral location or retain one authoritative import path: `INDEX_VERSION = 1`, `EMBEDDING_MODEL_ID = 'nomic-embed-text-v1.5.Q4_K_M'`.
-- `StoryChunkRepository.replaceAnswerIndex(localUserId, answerId, chunks, embeddingModel, indexVersion): Promise<void>` validates ownership through `story_answers`.
-- `StoryChunkRepository.deleteForAnswer(localUserId, answerId): Promise<void>`.
-- `StoryChunkRepository.listQueryChunks(localUserId): Promise<StoryQueryChunk[]>` returns only chunks belonging to confirmed current answers.
-- `StoryIndexService.indexField(localUserId, fieldKey): Promise<void>`.
-- `StoryIndexService.indexPendingFields(localUserId): Promise<void>`.
-- Story provenance is prepended before calling existing deterministic `chunkDocument()`.
-
-- [ ] **Step 1: Write indexing RED tests**
-
-Prove unconfirmed answers cannot index; current confirmed text receives provenance; old chunks are atomically replaced; embedding failure leaves no old chunks and status `failed`; unavailable AI leaves `pending`; one field failure does not prevent other pending fields from retrying.
 
 ```ts
-await expect(service.indexField(7, 'childhood')).rejects.toMatchObject({ code: 'not-confirmed' })
-expect(nomic.embedDocument).not.toHaveBeenCalled()
-
-expect(nomic.embedDocument).toHaveBeenCalledWith(expect.stringContaining('[[MY STORY | childhood | Life Story'))
+export const EMBEDDING_MODEL_ID = 'nomic-embed-text-v1.5.Q4_K_M'
+export const EMBEDDING_INDEX_VERSION = 1
+export const DOCUMENT_PREFIX = 'search_document: '
+export const QUERY_PREFIX = 'search_query: '
 ```
+
+`VaultIndexService` imports those constants; behavior remains unchanged.
+
+```ts
+StoryChunkRepository.replaceAnswerIndex(localUserId, answerId, chunks, model, version)
+StoryChunkRepository.deleteForAnswer(localUserId, answerId)
+StoryChunkRepository.listQueryChunks(localUserId)
+StoryIndexService.indexField(localUserId, fieldKey)
+StoryIndexService.indexPendingFields(localUserId)
+```
+
+`replaceAnswerIndex()` verifies answer ownership and performs delete+insert+`index_status='ready'` in one local transaction after embeddings are fully computed.
+
+- [ ] **Step 1: Write RED tests**
+
+Prove unconfirmed content cannot index, Story provenance is included, the same chunk/prefix/model contract is used as Vault, unavailable AI leaves pending, old chunks are never retained after failure, actual embedding failure sets failed, and one pending-field failure does not stop another.
 
 - [ ] **Step 2: Run RED**
 
 ```bash
-npx vitest run src/main/story/StoryChunkRepository.test.ts src/main/story/StoryIndexService.test.ts src/main/vault/VaultIndexService.test.ts
+npx vitest run src/main/ai/embeddingContract.test.ts src/main/story/StoryChunkRepository.test.ts src/main/story/StoryIndexService.test.ts src/main/vault/VaultIndexService.test.ts
 ```
 
-Expected: FAIL because Story indexing modules do not exist.
+- [ ] **Step 3: Implement**
 
-- [ ] **Step 3: Implement Story indexing and centralize shared embedding constants**
-
-Reuse `chunkDocument()` and `NomicClient.embedDocument()`; do not reimplement chunking. Never keep a DB transaction open while awaiting embeddings. `replaceAnswerIndex()` performs delete+insert+ready-status update in one local transaction only after all embeddings are available.
+Reuse existing `chunkDocument()` (1000/150) and `NomicClient.embedDocument()`. Do not await Nomic inside a DB transaction.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-npx vitest run src/main/story/StoryChunkRepository.test.ts src/main/story/StoryIndexService.test.ts src/main/vault/VaultIndexService.test.ts
+npx vitest run src/main/ai/embeddingContract.test.ts src/main/story/StoryChunkRepository.test.ts src/main/story/StoryIndexService.test.ts src/main/vault/VaultIndexService.test.ts
 ```
-
-Expected: PASS, including unchanged Vault indexing behavior.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/story src/main/vault/VaultIndexService.ts src/main/vault/VaultIndexService.test.ts
+git add src/main/ai/embeddingContract* src/main/story src/main/vault/VaultIndexService*
 git commit -m "feat: index confirmed Story memories"
 ```
 
 ---
 
-### Task 4: Story service — drafts, confirmation, history, restore, retry
+### Task 4: Story lifecycle service
 
 **Files:**
 - Create: `src/main/story/StoryService.ts`
 - Create: `src/main/story/StoryService.test.ts`
 
 **Interfaces:**
-- Dependencies: protected `session.restore()`, `StoryRepository`, `StoryHistoryRepository`, `StoryIndexService`.
-- `get(): Promise<StoryPublicState>` derives current local user.
-- `saveDraft({ fieldKey, answer, language }): Promise<StoryPublicState>`.
-- `invalidateAndSaveDraft(...)` is the same public save path; main detects whether stored content was confirmed and chooses immediate invalidation semantics.
-- `confirmField({ fieldKey }): Promise<StoryPublicState>`.
-- `retryIndexing({ fieldKey }): Promise<StoryPublicState>`.
-- `saveNow(): Promise<StoryPublicState>` persists current semantic version only if distinct.
-- `getHistory(): Promise<StoryVersionSummary[]>`.
-- `restoreVersion({ versionId }): Promise<StoryPublicState>` snapshots current state first, replaces canonical answers transactionally, deletes all chunks, marks restored confirmed fields pending, then attempts reindex outside transaction.
-
-- [ ] **Step 1: Write service RED tests**
-
-Cover authentication required, field/language validation, draft save, confirmed-edit snapshot+invalidation, confirm with AI ready/unavailable/failure, retry, save-now semantic dedupe, foreign version rejection, restore failure rollback, and restore with post-commit index failure.
 
 ```ts
-session.restore.mockResolvedValue(null)
-await expect(service.get()).rejects.toMatchObject({ code: 'authentication-required' })
-
-await service.saveDraft({ fieldKey: 'childhood', answer: 'Changed', language: 'en' })
-expect(history.createIfChanged).toHaveBeenCalledBefore(repository.invalidateConfirmedAnswer)
-expect(index.indexField).not.toHaveBeenCalled()
+get(): Promise<StoryPublicState>
+saveDraft(input: { fieldKey: StoryFieldKey; answer: string; language: StoryLanguage }): Promise<StoryPublicState>
+confirmField(input: { fieldKey: StoryFieldKey }): Promise<StoryPublicState>
+retryIndexing(input: { fieldKey: StoryFieldKey }): Promise<StoryPublicState>
+saveNow(): Promise<StoryPublicState>
+getHistory(): Promise<StoryVersionSummary[]>
+restoreVersion(input: { versionId: number }): Promise<StoryPublicState>
 ```
+
+Every method begins with protected `session.restore()` and uses that local user ID only. `saveDraft()` inspects current owned answer: confirmed + semantic change -> `repository.invalidateConfirmedAnswer()`; otherwise normal `saveDraft()`. `confirmField()` commits `confirmed/pending` first, then attempts indexing outside the transaction. `restoreVersion()` resolves `(localUserId, versionId)`, delegates the atomic snapshot/restore to `StoryRepository.restoreSnapshot()`, then reindexes restored confirmed fields outside the DB transaction.
+
+- [ ] **Step 1: Write RED tests**
+
+Cover no session, invalid key/language, draft save, confirmed-edit invalidation, confirm ready/unavailable/failure, retry, save-now dedupe, foreign version rejection, restore DB rollback, and post-restore index failure with restored text retained/no stale chunks.
 
 - [ ] **Step 2: Run RED**
 
@@ -282,19 +265,15 @@ expect(index.indexField).not.toHaveBeenCalled()
 npx vitest run src/main/story/StoryService.test.ts
 ```
 
-Expected: FAIL because `StoryService` is absent.
+- [ ] **Step 3: Implement with stable service error codes**
 
-- [ ] **Step 3: Implement minimal orchestration**
-
-Map internal errors to stable Story service error codes. Confirmation remains successful even when Private AI is unavailable; return `indexStatus: 'pending'`. An actual available-runtime embedding failure returns saved Story state with `indexStatus: 'failed'`, not loss of confirmed data.
+Do not surface SQLite/model stderr/path details. Private AI absence never prevents draft/history/media capture.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
 npx vitest run src/main/story/StoryService.test.ts src/main/story/StoryRepository.test.ts src/main/story/StoryIndexService.test.ts
 ```
-
-Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -305,7 +284,7 @@ git commit -m "feat: add My Story lifecycle service"
 
 ---
 
-### Task 5: Private Story media store and owned media operations
+### Task 5: Private Story media
 
 **Files:**
 - Create: `src/main/story/StoryMediaStore.ts`
@@ -316,15 +295,24 @@ git commit -m "feat: add My Story lifecycle service"
 - Create: `src/main/story/StoryMediaService.test.ts`
 
 **Interfaces:**
-- `StoryMediaStore.validateSelected(path, expectedType): Promise<ValidatedStoryMedia>` validates extension, regular file, signature/container marker, and 25/100 MiB limit.
-- `copyIntoStory(localUserId, sourcePath, extension): Promise<string>` returns relative randomized path under `story/users/<id>/media/`.
-- `resolveOwnedPath(localUserId, storedRelativePath): string` rejects traversal/out-of-root paths.
-- `StoryMediaService.chooseAndAdd({ fieldKey, mediaType }): Promise<StoryMediaSummary[]>` owns the native picker through an injected picker port and caps selection at eight.
-- `list(): Promise<StoryMediaSummary[]>`, `open({ mediaId })`, `delete({ mediaId })` always derive session user and re-resolve ownership.
 
-- [ ] **Step 1: Write media RED tests**
+```ts
+StoryMediaStore.validateSelected(path, expectedType)
+StoryMediaStore.copyIntoStory(localUserId, sourcePath, extension)
+StoryMediaStore.resolveOwnedPath(localUserId, relativePath)
+StoryMediaStore.deleteOwnedFile(localUserId, relativePath)
 
-Cover valid/invalid signatures, extension mismatch, limits, randomized destinations, traversal, user isolation, picker cancel, eight-file cap, copy-before-row insertion, failed copy leaves no active row, safe open/delete, missing owned file cleanup.
+StoryMediaService.chooseAndAdd({ fieldKey, mediaType })
+StoryMediaService.list()
+StoryMediaService.open({ mediaId })
+StoryMediaService.delete({ mediaId })
+```
+
+Main owns the picker. Storage root is `<userData>/story/users/<localUserId>/media/<UUID>.<ext>`; DB keeps only relative paths. Supported photo/audio types and limits exactly match the spec.
+
+- [ ] **Step 1: Write RED tests**
+
+Test signatures/container markers, extension mismatch, limits, eight-file cap, randomized paths, traversal, picker cancel, copy-before-row insert, failed-copy no active row, cross-user open/delete rejection, and already-missing owned file cleanup.
 
 - [ ] **Step 2: Run RED**
 
@@ -332,19 +320,15 @@ Cover valid/invalid signatures, extension mismatch, limits, randomized destinati
 npx vitest run src/main/story/StoryMediaStore.test.ts src/main/story/StoryMediaRepository.test.ts src/main/story/StoryMediaService.test.ts
 ```
 
-Expected: FAIL with missing modules.
+- [ ] **Step 3: Implement using Vault-style ownership defenses**
 
-- [ ] **Step 3: Implement media units**
-
-Follow `VaultFileStore` ownership conventions but keep a separate `story/` root and Story media type rules. Normal new media rows use `legacy_source_key = NULL` and `storage_status = 'active'` only after copy success.
+Do not reuse Vault document IDs/storage root. Normal attachments set `legacy_source_key=NULL`, `storage_status='active'` only after successful copy.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
 npx vitest run src/main/story/StoryMediaStore.test.ts src/main/story/StoryMediaRepository.test.ts src/main/story/StoryMediaService.test.ts
 ```
-
-Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -355,7 +339,7 @@ git commit -m "feat: add private Story media"
 
 ---
 
-### Task 6: Copy-safe idempotent legacy My Story importer
+### Task 6: Copy-safe idempotent legacy importer
 
 **Files:**
 - Create: `src/main/story/StoryLegacyImporter.ts`
@@ -364,18 +348,18 @@ git commit -m "feat: add private Story media"
 - Modify: `src/main/database/database.test.ts`
 
 **Interfaces:**
-- `StoryLegacyImporter.importForExistingUsers(): Promise<StoryImportReport>` runs only against the rebuild-owned database after copy.
-- It detects legacy tables dynamically with `sqlite_master`/`PRAGMA table_info`.
-- Answer precedence: valid `my_stories.story_json`; fallback `story_entries`; import fixed keys only.
-- Confirmation precedence: explicit `__confirmed`; otherwise non-empty legacy answers are confirmed only when explicit confirmation metadata is absent entirely.
-- Language precedence: `__languages[field]` -> matching `story_entries.language` -> `__language` -> `en`, normalized to supported v1 set; unsupported legacy values fall back to `en` rather than being forwarded to Whisper.
-- Legacy history is semantically deduped/capped at 30.
-- Legacy media uses a stable opaque `legacy_source_key` and `copying -> active` reservation retry to the same randomized destination.
-- The known legacy Story media root is derived from `appDataPath`; importer rejects paths outside it.
 
-- [ ] **Step 1: Write migration RED tests with real temporary files/DBs**
+```ts
+StoryLegacyImporter.importForExistingUsers(): Promise<StoryImportReport>
+```
 
-Test intact JSON import, damaged JSON fallback, explicit confirmation preservation, old-story confirmation fallback, languages, unknown keys, history dedupe/cap, valid media copy, out-of-root rejection, missing media diagnostics, crash after reservation then resume, second complete run creates no duplicates, and byte-for-byte immutability of original legacy DB/media.
+Import source is the rebuild-owned copied database only. Answer precedence: valid `my_stories.story_json` -> `story_entries` fallback. Confirmation: preserve explicit `__confirmed`; only when confirmation metadata is entirely absent, treat legacy non-empty answers as confirmed. Language: `__languages[field]` -> `story_entries.language` -> `__language` -> `en`; unsupported legacy language falls back to `en`. Unknown fields stay only in untouched legacy tables.
+
+Legacy media root is derived from `appDataPath`. Each eligible row gets stable `legacy_source_key`; reservation transaction creates/reuses one `copying` row with one randomized destination; restart copies to that same destination and marks active. `legacy-my-story-v1` is written only after eligible reservations are active or classified skipped.
+
+- [ ] **Step 1: Write RED tests using temp DB/files**
+
+Cover intact/damaged JSON, fallback entries, confirmation/language preservation, unknown keys, history semantic dedupe/cap, valid media, missing/out-of-root/oversized media, crash after reservation + resume, rerun idempotency, and byte/hash immutability of original legacy DB/media.
 
 - [ ] **Step 2: Run RED**
 
@@ -383,11 +367,9 @@ Test intact JSON import, damaged JSON fallback, explicit confirmation preservati
 npx vitest run src/main/story/StoryLegacyImporter.test.ts src/main/database/database.test.ts
 ```
 
-Expected: FAIL because importer integration does not exist.
+- [ ] **Step 3: Integrate after copy + canonical migrations**
 
-- [ ] **Step 3: Implement importer and startup hook**
-
-`prepareDatabase()` keeps its current copy-first behavior. After `runMigrations(db)`, construct/run the importer only against the active DB and only with roots derived from the existing `DatabasePathInputs`; never open the original DB for writes. Keep importer internals injectable for crash tests.
+`prepareDatabase()` retains copy-first semantics. Run importer against the active `DatabaseSync`; never open the original DB for write. Roots come from `DatabasePathInputs`, never renderer input.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -395,18 +377,16 @@ Expected: FAIL because importer integration does not exist.
 npx vitest run src/main/story/StoryLegacyImporter.test.ts src/main/database/database.test.ts src/main/database/migrations.test.ts
 ```
 
-Expected: PASS and original-source hashes unchanged.
-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/story/StoryLegacyImporter* src/main/database/database.ts src/main/database/database.test.ts
-git commit -m "feat: migrate legacy My Story data safely"
+git add src/main/story/StoryLegacyImporter* src/main/database/database*
+git commit -m "feat: migrate legacy My Story safely"
 ```
 
 ---
 
-### Task 7: Optional verified Windows voice pack and local Whisper service
+### Task 7: Verified optional Windows voice pack and local transcription
 
 **Files:**
 - Create: `src/main/voice/voiceModels.ts`
@@ -415,53 +395,70 @@ git commit -m "feat: migrate legacy My Story data safely"
 - Create: `src/main/voice/VoiceTranscriptionService.ts`
 - Create: `src/main/voice/VoiceTranscriptionService.test.ts`
 - Create: `config/offline-voice-manifest.json`
+- Create: `third_party/whisper.cpp-LICENSE.txt`
 - Modify: `package.json`
-- Modify: `scripts/verify-package.mjs`
-- Modify: `scripts/verify-package.test.ts` if present; otherwise extend the existing package-verifier test file used by the synchronized branch.
+- Modify: `src/main/packaging/packageVerifierContract.test.ts`
+- Modify: `src/main/packaging/packageVerifier.test.ts`
+- Modify: `.github/workflows/windows-package.yml` only to add the manifest/license to path filters if required; do not change its existing trigger policy.
 
-**Interfaces:**
-- Voice public states mirror Private AI naming: `not_installed | downloading | paused | verifying | ready | repair_required | failed`.
-- `OfflineVoiceAssetService.getStatus/startSetup/pauseSetup/repair/getInstalledPaths` uses resumable verified download primitives and a separate `userData/offline-voice` root.
-- Manifest packages exactly a Windows x64 `whisper.cpp` CLI runtime and Whisper base model with immutable URL, size, and SHA-256 values. Before GREEN, obtain those values from the same approved release/model sources used by the reference product; tests must pin the committed values and reject zero/placeholder hashes.
-- `VoiceTranscriptionService.transcribe({ wavBytes, language }): Promise<{ text: string; engine: 'whisper-base' }>` validates RIFF/WAVE PCM input, <=25 MiB, supported language, busy guard, verified installed paths, bounded thread count, and 120s timeout.
-- No HTTP/network port exists on `VoiceTranscriptionService`.
+**Pinned upstream assets:**
 
-- [ ] **Step 1: Write voice asset/runtime RED tests**
+```text
+Runtime:
+URL: https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip
+sizeBytes: 7982101
+SHA256: 7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539
+extract target: runtime/whisper-v1.9.1-win-x64
+required executable: Release/whisper-cli.exe
 
-Assert manifest validation, corrupt/missing assets -> repair, no model in package file list, command construction uses only verified paths and `-l <validated whisperCode>`, `fil -> tl`, busy rejection, timeout kill, temp-file cleanup on success/error/timeout, stderr suppression, and no network fallback dependency.
+Model:
+URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+sizeBytes: 147951465
+SHA256: 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
+target: models/ggml-base.bin
+```
+
+The checksum/size are the content identity even though Hugging Face's friendly download URL resolves through its current storage layer.
+
+**Interfaces:** Voice states match Private AI public states. `OfflineVoiceAssetService` uses the existing tested `OfflineAiDownloader` with a compatible two-file manifest but maps generic download failures to voice-safe messages and uses separate `userData/offline-voice` marker/root. It verifies `whisper-cli.exe` after extraction and the model hash/size.
+
+```ts
+VoiceTranscriptionService.transcribe({ wavBytes, language }): Promise<{ text: string; engine: 'whisper-base' }>
+```
+
+Validate RIFF/WAVE PCM, <=25 MiB, supported language, busy guard, installed verified paths, bounded threads, 120s timeout. Spawn arguments are fixed by main. Temp WAV always deletes in `finally`.
+
+- [ ] **Step 1: Write RED tests**
+
+Pin both manifest entries above; reject zero/changed hash/size; prove corrupt/missing assets -> repair; `package.json` includes only manifest/license, not runtime/model. Runtime tests cover WAV validation, all language mappings, `fil -> tl`, busy guard, exact safe argv, timeout kill, temp cleanup success/failure/timeout, stderr suppression, and absence of any network/cloud port.
 
 - [ ] **Step 2: Run RED**
 
 ```bash
-npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts
+npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts src/main/packaging/packageVerifierContract.test.ts src/main/packaging/packageVerifier.test.ts
 ```
 
-Expected: FAIL because voice modules/manifest are absent.
+- [ ] **Step 3: Implement**
 
-- [ ] **Step 3: Implement asset and transcription services**
+Do not generalize/refactor `OfflineAiDownloader` unless a failing test demonstrates a required generic seam; it already provides resume, size, SHA, redirects, and ZIP extraction. Voice remains a distinct readiness service.
 
-Share only generic download/hash helpers where that reduces duplication; do not merge voice readiness into `OfflineAiAssetService`. Temp WAVs live under OS temp with unguessable names and are removed in `finally`.
-
-- [ ] **Step 4: Run GREEN and package contract tests**
+- [ ] **Step 4: Run GREEN**
 
 ```bash
-npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts
+npx vitest run src/main/voice/OfflineVoiceAssetService.test.ts src/main/voice/VoiceTranscriptionService.test.ts src/main/packaging/packageVerifierContract.test.ts src/main/packaging/packageVerifier.test.ts
 npm run verify:package -- --config-only
 ```
-
-Expected: PASS; config includes only `config/offline-voice-manifest.json`, never voice binaries/models.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/voice config/offline-voice-manifest.json package.json scripts/verify-package.mjs
-git add scripts/*Package*test* scripts/*package*test* 2>/dev/null || true
+git add src/main/voice config/offline-voice-manifest.json third_party/whisper.cpp-LICENSE.txt package.json src/main/packaging .github/workflows/windows-package.yml
 git commit -m "feat: add optional offline Story voice pack"
 ```
 
 ---
 
-### Task 8: Safe Story IPC, preload contract, and renderer client
+### Task 8: Safe Story IPC, preload, and dedicated renderer client
 
 **Files:**
 - Modify: `src/shared/desktopApi.ts`
@@ -474,35 +471,33 @@ git commit -m "feat: add optional offline Story voice pack"
 - Create: `src/renderer/services/story/DesktopStoryClient.ts`
 - Create: `src/renderer/services/story/DesktopStoryClient.test.ts`
 
-**Interfaces:**
+**Public surface:**
 
-Safe public methods:
-
-```ts
-story.get()
-story.saveDraft({ fieldKey, answer, language })
-story.confirmField({ fieldKey })
-story.retryIndexing({ fieldKey })
-story.saveNow()
-story.getHistory()
-story.restoreVersion({ versionId })
-story.chooseAndAddMedia({ fieldKey, mediaType })
-story.listMedia()
-story.openMedia({ mediaId })
-story.deleteMedia({ mediaId })
-story.transcribeRecording({ wavBytes, language })
-story.getVoiceStatus()
-story.startVoiceSetup()
-story.pauseVoiceSetup()
-story.repairVoiceSetup()
-story.onVoiceSetupProgress(listener)
+```text
+story.get
+story.saveDraft
+story.confirmField
+story.retryIndexing
+story.saveNow
+story.getHistory
+story.restoreVersion
+story.chooseAndAddMedia
+story.listMedia
+story.openMedia
+story.deleteMedia
+story.transcribeRecording
+story.getVoiceStatus
+story.startVoiceSetup
+story.pauseVoiceSetup
+story.repairVoiceSetup
+story.onVoiceSetupProgress
 ```
 
-`storyIpc.ts` reconstructs every input field-by-field and returns sanitized DTOs only. `wavBytes` is an owned byte payload with a hard size check before service dispatch; no path is accepted.
+Inputs contain only field key/answer/language, version ID, media ID/type, or WAV bytes. IPC reconstructs fields one-by-one. Public answer/media/version/voice DTOs are explicitly sanitized.
 
-- [ ] **Step 1: Write bridge RED tests**
+- [ ] **Step 1: Write RED boundary tests**
 
-Inject malicious extra fields (`localUserId`, `storedRelativePath`, `modelPath`, `circleId`, `serverUserId`) and assert service spies receive only approved fields. Assert public DTOs strip any internal path/embedding fields even if a malicious fake service returns them.
+Inject `localUserId`, `storedRelativePath`, `modelPath`, `circleId`, `serverUserId`, arbitrary executable flags and assert service spies never receive them. Fake internal service outputs containing paths/embeddings must be stripped. WAV must be an owned byte payload and hard-size checked before dispatch.
 
 - [ ] **Step 2: Run RED**
 
@@ -510,19 +505,15 @@ Inject malicious extra fields (`localUserId`, `storedRelativePath`, `modelPath`,
 npx vitest run src/main/story/storyIpc.test.ts src/preload/createDesktopApi.story.test.ts src/renderer/services/story/DesktopStoryClient.test.ts
 ```
 
-Expected: FAIL because Story API is absent.
+- [ ] **Step 3: Implement narrow bridge/client**
 
-- [ ] **Step 3: Implement the narrow contract**
+Only `DesktopStoryClient` may access `window.familyCircle.story` in production renderer code.
 
-Follow current Vault/Private AI channel naming and sanitization patterns. Only `DesktopStoryClient` accesses `window.familyCircle.story`; React components depend on `StoryClient`.
-
-- [ ] **Step 4: Run GREEN plus approved-surface regression**
+- [ ] **Step 4: Run GREEN plus preload regression**
 
 ```bash
 npx vitest run src/main/story/storyIpc.test.ts src/preload/createDesktopApi.test.ts src/preload/createDesktopApi.story.test.ts src/renderer/services/story/DesktopStoryClient.test.ts
 ```
-
-Expected: PASS and no unrelated preload capability appears.
 
 - [ ] **Step 5: Commit**
 
@@ -533,53 +524,54 @@ git commit -m "feat: expose safe My Story desktop API"
 
 ---
 
-### Task 9: Main-process service composition and pending-index/setup hooks
+### Task 9: Main composition and pending-index setup hooks
 
 **Files:**
+- Create: `src/main/story/createStoryServices.ts`
+- Create: `src/main/story/createStoryServices.test.ts`
 - Modify: `src/main/main.ts`
-- Create: `src/main/story/storyComposition.test.ts`
 
-**Interfaces:**
-- Compose one `StoryRepository`, `StoryHistoryRepository`, `StoryChunkRepository`, `StoryIndexService`, `StoryMediaStore`, `StoryMediaRepository`, `StoryMediaService`, `StoryService`, `OfflineVoiceAssetService`, and `VoiceTranscriptionService` per app process.
-- Register `storyIpc` alongside auth/circle/vault/private AI.
-- Private AI ready callback retries both `vaultIndexService.indexPendingDocuments(current.id)` and `storyIndexService.indexPendingFields(current.id)`.
-- Startup ready-state check does the same for signed-in user.
-- Main native media picker filters photo/audio based on requested media type; opener uses `shell.openPath()` only after owned-path resolution.
+**Interfaces:** `createStoryServices()` composes Story repositories/service/media, `StoryIndexService`, `OfflineVoiceAssetService`, and `VoiceTranscriptionService` from `DatabaseSync`, `SessionStore`, `userDataPath`, picker/opener, shared AI runtime/Nomic/assets. `main.ts` registers `storyIpc`.
 
-- [ ] **Step 1: Write composition RED test**
+Private AI `ready` callback and startup ready check invoke both:
 
-Extract or inject composition boundaries enough to assert Story IPC registration and both pending-index callbacks occur without importing renderer code. Assert no Story dependency receives `LegacyCircleAuthAdapter`.
+```ts
+vaultIndexService.indexPendingDocuments(current.id)
+storyIndexService.indexPendingFields(current.id)
+```
+
+Native media picker filters by requested Story media type; opener is `shell.openPath` after `StoryMediaService` resolves ownership.
+
+- [ ] **Step 1: Write RED composition tests**
+
+Assert Story registration, pending Story retry after AI-ready/startup, one shared Nomic/runtime instance, and no Circle adapter in Story dependencies.
 
 - [ ] **Step 2: Run RED**
 
 ```bash
-npx vitest run src/main/story/storyComposition.test.ts
+npx vitest run src/main/story/createStoryServices.test.ts
 ```
 
-Expected: FAIL because Story services are not wired.
+- [ ] **Step 3: Implement composition**
 
-- [ ] **Step 3: Wire main services**
-
-Keep `main.ts` readable by moving Story-only object construction into `src/main/story/createStoryServices.ts` if direct composition would make `main.ts` materially larger; if created, add a focused `createStoryServices.test.ts` and keep `AppServices` typed.
+Keep Story construction out of `main.ts` to preserve readable process bootstrap.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-npx vitest run src/main/story/storyComposition.test.ts src/main/ai/privateAiIpc.test.ts src/main/vault/vaultIpc.test.ts
+npx vitest run src/main/story/createStoryServices.test.ts src/main/ai/privateAiIpc.test.ts src/main/vault/vaultIpc.test.ts
 ```
-
-Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/main.ts src/main/story
+git add src/main/story/createStoryServices* src/main/main.ts
 git commit -m "feat: wire My Story services"
 ```
 
 ---
 
-### Task 10: My Story studio — Guided and Chapters views
+### Task 10: My Story Guided and Chapters studio
 
 **Files:**
 - Create: `src/renderer/features/story/MyStory.tsx`
@@ -592,18 +584,11 @@ git commit -m "feat: wire My Story services"
 - Modify: `src/renderer/app/App.test.tsx`
 - Modify: `src/renderer/app/Sidebar.tsx`
 
-**Interfaces:**
-- `/stories` renders `<MyStory />`; remove only the Stories placeholder entry.
-- Preserve `/family-tree` exactly as it exists on synchronized `main`.
-- `MyStory` defaults to Guided and merges persisted answers over `STORY_FIELDS`.
-- Progress = confirmed fields / 16; each chapter exposes confirmed/total.
-- Draft typing uses a debounced save (target 600 ms); first edit of a confirmed field calls `saveDraft` immediately once to invalidate old searchability, then later edits debounce.
-- Guided view provides Previous/Next, deterministic follow-up chips, language selector, save state, confirmation/index status, and `Confirm memory`/`Retry private indexing`.
-- Chapters renders all six grouped sections with identical edit semantics.
+**Interfaces/behavior:** `/stories` renders `MyStory`; remove only Stories from placeholder routing. Default Guided view. Renderer merges persisted rows onto fixed schema. Progress is confirmed/16 and chapter confirmed/total. Draft saves debounce at 600 ms; first edit of a confirmed field invokes `saveDraft` immediately once so main invalidates chunks, later edits debounce. Guided has prompt/hint/language/followups/media slots/status/Previous/Confirm/Next; Chapters groups all six sections with identical edit semantics.
 
-- [ ] **Step 1: Write UI RED tests**
+- [ ] **Step 1: Write RED UI tests**
 
-Test real route, 16 prompts/six chapters, default Guided, confirmed-only progress, chapter navigation, deterministic follow-up chips, debounce behavior, immediate first confirmed edit, confirm action, pending/failed/ready copy, language set, and safe generic service errors.
+Assert real route, 16 fields/six chapters, Guided default, confirmed-only progress, chapter jump, deterministic follow-up chips, 600 ms debounce, immediate confirmed edit, confirm/retry status, exact seven languages, and safe generic errors.
 
 - [ ] **Step 2: Run RED**
 
@@ -611,11 +596,9 @@ Test real route, 16 prompts/six chapters, default Guided, confirmed-only progres
 npx vitest run src/renderer/features/story/MyStory.test.tsx src/renderer/app/App.test.tsx
 ```
 
-Expected: FAIL because `/stories` still renders placeholder.
+- [ ] **Step 3: Implement**
 
-- [ ] **Step 3: Implement Guided/Chapters UI**
-
-Required status text includes:
+Required text includes:
 
 ```text
 Draft — review your words before making this memory searchable.
@@ -625,15 +608,13 @@ Saved privately on this computer
 Not saved yet — retry
 ```
 
-Do not render raw service error messages.
+Do not render raw main errors.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
 npx vitest run src/renderer/features/story/MyStory.test.tsx src/renderer/app/App.test.tsx
 ```
-
-Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -644,7 +625,7 @@ git commit -m "feat: add guided My Story studio"
 
 ---
 
-### Task 11: Review, History, media, and recorder UI
+### Task 11: Review, History, attachments, and recorder UX
 
 **Files:**
 - Create: `src/renderer/features/story/ReviewStoryView.tsx`
@@ -656,18 +637,11 @@ git commit -m "feat: add guided My Story studio"
 - Modify: `src/renderer/features/story/MyStory.test.tsx`
 - Modify: `src/renderer/features/story/MyStory.css`
 
-**Interfaces:**
-- Review shows exact populated user text grouped by chapter; it never uses Granite to rewrite prose.
-- Review search/filter is renderer-local; Edit jumps to Guided at the correct field.
-- History lists newest-first version summaries and requires an explicit confirmation dialog before restore.
-- Before restore, main owns the pre-restore snapshot guarantee; UI does not attempt to synthesize history.
-- `StoryVoiceRecorder` requests microphone, outputs 16 kHz mono PCM WAV `Uint8Array`, and guarantees track/context cleanup.
-- Transcription result is inserted as a draft and not auto-confirmed.
-- Story media controls call safe Story client methods and use media IDs only.
+**Interfaces/behavior:** Review shows exact populated text by chapter, renderer-local filter, Edit -> Guided field. History is newest first and restore requires confirmation; main owns pre-restore snapshot. `StoryVoiceRecorder` requests microphone and emits 16 kHz mono PCM WAV `Uint8Array`, always releasing media tracks/audio context. Transcription output is inserted as draft only. Media controls use IDs through `StoryClient` only.
 
 - [ ] **Step 1: Write RED tests**
 
-Test mode selection state, Review exact text/filter/Edit, History restore confirmation/cancel/focus return, media add/open/delete accessible names, microphone denial, record/stop/transcribing/success/error states, transcript-as-draft, and cleanup on recorder error.
+Cover four mode states, Review text/filter/Edit, restore confirmation/cancel/focus return, media accessible controls, microphone denial, recording/transcribing/success/error states, transcript remains draft, and recorder cleanup.
 
 - [ ] **Step 2: Run RED**
 
@@ -675,19 +649,15 @@ Test mode selection state, Review exact text/filter/Edit, History restore confir
 npx vitest run src/renderer/features/story/MyStory.test.tsx src/renderer/features/story/StoryVoiceRecorder.test.ts
 ```
 
-Expected: FAIL because Review/History/media/voice UI is incomplete.
+- [ ] **Step 3: Implement**
 
-- [ ] **Step 3: Implement the remaining studio**
-
-Use a native accessible dialog pattern already present in the synchronized app if available; otherwise implement a focused modal with `role="dialog"`, labelled title, initial focus on Cancel for destructive restore, Escape close, and focus return.
+Use existing accessible dialog component/pattern after baseline sync if present. Otherwise use labelled `role="dialog"`, Escape close, Cancel initial focus for restore, and focus return.
 
 - [ ] **Step 4: Run GREEN**
 
 ```bash
 npx vitest run src/renderer/features/story/MyStory.test.tsx src/renderer/features/story/StoryVoiceRecorder.test.ts
 ```
-
-Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -698,7 +668,7 @@ git commit -m "feat: complete My Story memory studio"
 
 ---
 
-### Task 12: Generalized private archive retrieval across Story and Vault
+### Task 12: One private archive ranking pipeline for Story + Vault
 
 **Files:**
 - Create: `src/main/ai/PrivateArchiveQueryService.ts`
@@ -712,31 +682,23 @@ git commit -m "feat: complete My Story memory studio"
 
 **Interfaces:**
 
-New safe scope:
-
 ```ts
 type PrivateArchiveScope =
   | { type: 'story' }
   | { type: 'vault-all' }
   | { type: 'vault-documents'; documentIds: number[] }
   | { type: 'all-private' }
-```
 
-Public source union:
-
-```ts
 type PrivateArchiveAnswerSource =
   | { type: 'story'; fieldKey: StoryFieldKey; chapter: string; label: string; excerpt: string }
   | { type: 'vault'; documentId: number; fileName: string; excerpt: string }
 ```
 
-`PrivateArchiveQueryService.ask({ question, scope })` restores session, validates owned Vault document scopes when relevant, obtains exactly one query embedding, loads only selected owned Story/Vault chunks, computes cosine scores together, takes one shared top-5, ensures Granite runtime only when context exists, generates once, and returns safe typed citations.
+`PrivateArchiveQueryService.ask()` restores session, validates selected Vault IDs when relevant, calls `embedQuery()` exactly once, loads only selected owned candidates, scores all with existing `cosineSimilarity`, sorts one list, slices one top-5, starts Granite only if context exists, generates once, and returns safe union citations. `VaultQueryService` becomes a thin Vault-only compatibility delegate during migration so ranking logic exists in one place.
 
-`VaultQueryService` may remain as a compatibility wrapper delegating Vault-only scopes during the transition; do not duplicate ranking implementations.
+- [ ] **Step 1: Write RED tests**
 
-- [ ] **Step 1: Write retrieval RED tests**
-
-Prove Story-only/Vault-only/all-private selection, foreign document rejection, one `embedQuery()` call, no document/Story query-time re-embedding, shared top-5 rather than 5+5, mixed-score ordering, confirmed Story ownership, source citations, no-context answer, and safe generation failure.
+Story-only, Vault-only, selected-Vault, all-private; foreign document rejection; exactly one query embedding; no query-time Story/document re-embedding; mixed score ordering; shared top-5 not 5+5; current confirmed Story ownership; safe citations; no-context; generation failure.
 
 - [ ] **Step 2: Run RED**
 
@@ -744,11 +706,9 @@ Prove Story-only/Vault-only/all-private selection, foreign document rejection, o
 npx vitest run src/main/ai/PrivateArchiveQueryService.test.ts src/main/vault/VaultQueryService.test.ts
 ```
 
-Expected: FAIL because generalized service does not exist.
+- [ ] **Step 3: Implement normalized internal candidate union**
 
-- [ ] **Step 3: Implement one ranking pipeline**
-
-Normalize repository rows into an internal candidate union only inside main. Reuse existing `cosineSimilarity()` and excerpt normalization. No renderer-visible source contains embedding/path/local-user information.
+No candidate passed to renderer contains embedding/path/local user data.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -756,18 +716,16 @@ Normalize repository rows into an internal candidate union only inside main. Reu
 npx vitest run src/main/ai/PrivateArchiveQueryService.test.ts src/main/vault/VaultQueryService.test.ts src/main/story/StoryChunkRepository.test.ts src/main/vault/VaultChunkRepository.test.ts
 ```
 
-Expected: PASS.
-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/ai/PrivateArchiveQueryService* src/main/vault src/main/story/StoryChunkRepository*
+git add src/main/ai/PrivateArchiveQueryService* src/main/vault/VaultQueryService* src/main/vault/VaultChunkRepository* src/main/story/StoryChunkRepository*
 git commit -m "feat: search Story and Vault together"
 ```
 
 ---
 
-### Task 13: Safe private-archive IPC and `/ai` source selector
+### Task 13: `/ai` My Story / Vault / combined scopes
 
 **Files:**
 - Modify: `src/shared/desktopApi.ts`
@@ -783,14 +741,11 @@ git commit -m "feat: search Story and Vault together"
 - Modify: `src/renderer/features/vault/AskVault.css`
 - Modify: `src/main/main.ts`
 
-**Interfaces:**
-- Evolve `vault.ask` to accept `PrivateArchiveScope` and return `PrivateArchiveAnswer`, or rename the public capability to `privateArchive.ask` only if doing so can be completed atomically in this task. Prefer minimum public-surface churn: keep the existing `/ai` client entry point and extend its typed scope.
-- UI source choices: **My Story**, **Vault documents**, **My Story + Vault**. Vault mode retains all-indexed vs selected-document control.
-- Story source labels render `My Story › <Chapter> › <Memory label>`.
+**Interfaces:** Keep the existing `vault.ask` public entry point to minimize preload churn, but change its typed input to `PrivateArchiveScope` and result to `PrivateArchiveAnswer`. Story, Vault, and combined scopes are explicit. In Vault mode, retain all-indexed vs selected document controls. Story citation title is `My Story › <Chapter> › <Memory>`.
 
 - [ ] **Step 1: Write RED tests**
 
-Test exact IPC reconstruction for all four scope variants, malicious IDs/extra identity stripping, My Story availability even with zero Vault documents, combined ask payload, safe Story/Vault citations, keyboard submit, and error copy that says private archive rather than Vault-only when appropriate.
+Assert exact IPC reconstruction of all four scope variants, malicious identity/path field stripping, My Story works with zero Vault documents, combined payload, safe union citations, keyboard submit, and source-aware error/privacy copy.
 
 - [ ] **Step 2: Run RED**
 
@@ -798,11 +753,9 @@ Test exact IPC reconstruction for all four scope variants, malicious IDs/extra i
 npx vitest run src/main/vault/vaultIpc.ask.test.ts src/preload/createDesktopApi.askVault.test.ts src/renderer/services/vault/DesktopVaultClient.test.ts src/renderer/features/vault/AskVault.test.tsx
 ```
 
-Expected: FAIL on new Story/all-private scope expectations.
+- [ ] **Step 3: Wire `PrivateArchiveQueryService` and update `/ai`**
 
-- [ ] **Step 3: Wire generalized query service and update `/ai`**
-
-Keep one `NomicClient`, one `GraniteClient`, and one runtime manager. Do not introduce Story-specific local ports or a second model process.
+Use one runtime manager, one Nomic client, one Granite client. Do not introduce Story model ports/processes.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -810,51 +763,48 @@ Keep one `NomicClient`, one `GraniteClient`, and one runtime manager. Do not int
 npx vitest run src/main/ai/PrivateArchiveQueryService.test.ts src/main/vault/vaultIpc.ask.test.ts src/preload/createDesktopApi.askVault.test.ts src/renderer/services/vault/DesktopVaultClient.test.ts src/renderer/features/vault/AskVault.test.tsx
 ```
 
-Expected: PASS.
-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/shared/desktopApi.ts src/main/main.ts src/main/vault/vaultIpc* src/preload src/renderer/services/vault src/renderer/features/vault/AskVault*
+git add src/shared/desktopApi.ts src/main/main.ts src/main/vault/vaultIpc* src/preload/createDesktopApi* src/renderer/services/vault src/renderer/features/vault/AskVault*
 git commit -m "feat: ask My Story and Vault privately"
 ```
 
 ---
 
-### Task 14: Merge-blocking Story security and architecture boundaries
+### Task 14: Merge-blocking Story security + architecture boundary suite
 
 **Files:**
 - Create: `src/main/story/StorySecurity.test.ts`
 - Modify: `scripts/verify-boundaries.mjs`
-- Modify: the existing boundary-verifier test file if the synchronized branch contains one; otherwise create `scripts/verify-boundaries.test.ts`.
-- Modify focused tests from earlier tasks only when a security gap is discovered.
+- Modify: `src/main/security/BoundaryVerifier.test.ts` if that file exists after baseline sync; otherwise add Story boundary assertions to the synchronized repository's existing verifier-contract test rather than inventing a parallel scanner.
 
-**Interfaces / invariants under test:**
+**Required invariants:**
 
-1. User A cannot read/save/confirm User B answers.
-2. User A cannot list/restore User B versions.
-3. User A cannot open/delete User B media.
-4. Renderer cannot inject local ownership or filesystem/model/runtime paths.
+1. Cross-user answer read/save/confirm denied.
+2. Cross-user version list/restore denied.
+3. Cross-user media open/delete denied.
+4. Renderer identity/path/model/runtime injection stripped.
 5. Absolute legacy/current paths never cross preload.
-6. Draft/unconfirmed answers never exist in `story_chunks`.
+6. Draft/unconfirmed answers have no chunks.
 7. First confirmed edit snapshots old state and removes stale chunks immediately.
-8. Failed embedding leaves no old searchable chunks.
-9. Restore cannot leave newer chunks searchable.
-10. Foreign/stale media and version IDs fail before mutation.
-11. Media traversal and out-of-root resolution fail.
-12. Legacy importer opens media only under known legacy root.
-13. Import is restart-idempotent and original DB/files remain unchanged.
-14. Story code never calls/imports `LegacyCircleAuthAdapter` or direct Circle transport.
-15. Voice cannot accept executable/model/flag/path input.
-16. Voice has no network fallback.
-17. Temp voice files are removed on success/failure/timeout.
-18. Attached audio/photos are never silently transcribed/OCR'd/indexed.
-19. Public errors contain no sensitive internal path/process/port/secret information.
-20. Only dedicated Story renderer client may access `window.familyCircle.story`.
+8. Embedding failure leaves no old searchable chunks.
+9. Restore leaves no newer stale chunks.
+10. Foreign/stale media/version IDs fail before mutation.
+11. Media traversal/out-of-root resolution fails.
+12. Import reads only known legacy Story root.
+13. Import restart is idempotent; originals unchanged.
+14. Story never imports/calls Circle adapter/transport.
+15. Voice accepts no executable/model/flag/path from renderer.
+16. Voice has no cloud/network fallback.
+17. Temp WAV cleanup on success/failure/timeout.
+18. Attachments are never silently transcribed/OCR'd/indexed.
+19. Public errors contain no paths, process stderr, ports, embeddings, or secrets.
+20. Only `DesktopStoryClient` accesses `window.familyCircle.story` from production renderer code.
 
-- [ ] **Step 1: Write the complete security RED suite and boundary rules**
+- [ ] **Step 1: Write complete security tests and Story boundary rules**
 
-Where an invariant already passes, keep it as regression evidence. At least one new boundary assertion should fail until `verify-boundaries.mjs` knows the Story isolation rules.
+At least the new boundary scanner assertions must be RED before implementation if all runtime invariants already pass.
 
 - [ ] **Step 2: Run RED**
 
@@ -863,11 +813,9 @@ npx vitest run src/main/story/StorySecurity.test.ts
 npm run verify:boundaries
 ```
 
-Expected: Story runtime tests expose any remaining gaps; boundary verifier initially fails until new private-Story import/surface constraints are registered.
-
 - [ ] **Step 3: Fix only proven gaps**
 
-Extend boundary scanning to reject direct `window.familyCircle.story` use outside `DesktopStoryClient`, Story imports of Circle adapter/transport, and private Story internal types/paths in renderer/shared public code.
+Boundary scanner rejects direct Story preload access outside `DesktopStoryClient`, Story imports of Circle transport, and private Story internals in renderer/shared public files.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -876,43 +824,30 @@ npx vitest run src/main/story/StorySecurity.test.ts
 npm run verify:boundaries
 ```
 
-Expected: all invariants PASS.
-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/story/StorySecurity.test.ts scripts/verify-boundaries.mjs scripts/verify-boundaries.test.ts 2>/dev/null || true
+git add src/main/story/StorySecurity.test.ts scripts/verify-boundaries.mjs src/main/security 2>/dev/null || true
 git add src/main src/preload src/renderer src/shared
 git commit -m "test: enforce My Story privacy boundaries"
 ```
 
 ---
 
-### Task 15: Accessibility, documentation, exact-head verification, and review
+### Task 15: Accessibility, docs, complete verification, and review boundary
 
 **Files:**
 - Create: `src/renderer/features/story/MyStory.accessibility.test.tsx`
+- Modify: Story renderer files only for failures proven by that test.
 - Modify: `README.md`
 - Modify: `docs/PRIVATE_AI.md`
 - Modify: `docs/WINDOWS_RELEASE.md`
-- Modify: Story/UI files only for failures proven by accessibility tests.
 
-**Interfaces / acceptance:**
-- Four view controls expose selected state (`aria-pressed`, tabs, or equivalent semantically correct pattern).
-- Draft/confirmed/index status is textual.
-- Chapter progress has accessible names.
-- Previous/Next focus behavior is deterministic.
-- Confirm memory communicates searchability effect.
-- Recording/transcription uses live status semantics.
-- Media controls include filename/type in accessible names.
-- Restore dialog is labelled, keyboard-operable, Escape-closeable, and returns focus.
-- README describes real My Story and no longer lists Stories as absent.
-- `PRIVATE_AI.md` describes Story indexing, confirmation gate, shared top-5 retrieval, and pending retry after setup.
-- `WINDOWS_RELEASE.md` states the standard installer includes only the voice manifest, never whisper runtime/model, and documents clean-machine optional voice setup verification.
+**Accessibility acceptance:** four view controls expose selected state; draft/confirmed/index state is textual; chapter progress has accessible names; Previous/Next focus is deterministic; Confirm describes searchability; recorder status uses live semantics; media buttons include filename/type; restore dialog is labelled/Escape-closeable/focus-returning; errors use alert/status roles; no core action requires hover.
 
 - [ ] **Step 1: Write accessibility RED tests**
 
-Use Testing Library role/name/state queries rather than CSS selectors. Exercise Guided, Chapters, Review, History, media controls, confirmation state, restore dialog, and recorder live state.
+Use Testing Library role/name/state queries across Guided, Chapters, Review, History, confirmation, media, restore dialog, and recorder states.
 
 - [ ] **Step 2: Run focused RED/GREEN loop**
 
@@ -920,13 +855,11 @@ Use Testing Library role/name/state queries rather than CSS selectors. Exercise 
 npx vitest run src/renderer/features/story/MyStory.accessibility.test.tsx src/renderer/features/story/MyStory.test.tsx
 ```
 
-Fix only failures demonstrated by those tests, then rerun until PASS.
+- [ ] **Step 3: Update documentation**
 
-- [ ] **Step 3: Update documentation truthfully**
+README: My Story is real, private, four-view, confirmed-only searchable. `PRIVATE_AI.md`: Story indexing/pending retry/shared top-5. `WINDOWS_RELEASE.md`: standard installer contains manifest/license only; optional voice setup downloads verified runtime/model separately. Document seven-language v1 contract and no cloud fallback.
 
-Document storage/security boundaries, legacy migration, optional voice pack, seven-language v1 contract, confirmed-only indexing, and `/ai` Story/Vault/all-private scopes. Do not claim cloud sync, Story sharing, custom prompts, OCR, or bundled voice assets.
-
-- [ ] **Step 4: Run the complete local gate from a clean install**
+- [ ] **Step 4: Run clean complete local gate**
 
 ```bash
 rm -rf node_modules
@@ -935,51 +868,32 @@ npm run check
 npm audit --audit-level=high
 ```
 
-Expected: all type checks/tests/boundaries/builds pass; audit has no high-severity failure.
+Expected: all tests/typechecks/boundaries/builds pass and audit has no high-severity blocker.
 
-- [ ] **Step 5: Review the complete feature diff**
+- [ ] **Step 5: Perform full diff/security review**
 
-Inspect `main...feature/my-story` especially for:
+Invoke `superpowers:requesting-code-review`. Review `main...feature/my-story` specifically for ownership predicates, original-source immutability, media traversal, stale chunks, restore invalidation, shared top-5, voice command injection, network fallback, IPC stripping, path/ID/embedding leakage, Family Tree route preservation, and Windows exclusions. Every merge-blocking finding gets RED -> GREEN evidence and a focused commit.
 
-```text
-Story ownership predicates
-legacy source immutability
-media path traversal
-stale chunk removal
-restore index invalidation
-one-query/shared-top-5 retrieval
-voice command/path injection
-cloud/network fallback
-public IPC field stripping
-absolute path / local ID / embedding leakage
-Family Tree route preservation
-Windows package exclusions
-```
+- [ ] **Step 6: Open/update PR and require exact-head CI**
 
-Use `superpowers:requesting-code-review` for the review workflow. Resolve every merge-blocking finding with RED -> GREEN regression evidence.
-
-- [ ] **Step 6: Open/update the PR and require exact-head CI**
-
-PR body must state the feature head SHA and summarize Story storage, migration, voice, indexing, privacy invariants, and intentionally deferred scope. Require both:
+Require exact feature head:
 
 ```text
 Linux: npm run check + npm audit --audit-level=high
-Windows: full Verify application + NSIS build + package verifier + exactly-one-installer assertion + artifact upload
+Windows: Verify application + NSIS build + package verifier + exactly-one-installer + artifact upload
 ```
 
-Do not cite an older commit's CI after review fixes move the head.
+Do not use an older commit's green run after review fixes move the head.
 
-- [ ] **Step 7: Record final evidence and stop at merge boundary**
+- [ ] **Step 7: Record final immutable evidence**
 
-Record exact feature-head SHA, test file/test totals, Story security-suite total, accessibility total, audit result, Linux workflow/job IDs, Windows workflow/job IDs, and installer artifact ID/digest if exposed by CI.
+Record feature SHA, total test files/tests, `StorySecurity` count, accessibility count, audit result, Linux run/job IDs, Windows run/job IDs, and installer artifact ID/digest when exposed. Stop at merge boundary; do not merge without explicit user instruction.
 
-Do not merge without the user's explicit merge instruction.
-
-- [ ] **Step 8: Commit docs/accessibility changes**
+- [ ] **Step 8: Commit documentation/accessibility slice**
 
 ```bash
-git add src/renderer/features/story/MyStory.accessibility.test.tsx src/renderer/features/story README.md docs/PRIVATE_AI.md docs/WINDOWS_RELEASE.md
+git add src/renderer/features/story README.md docs/PRIVATE_AI.md docs/WINDOWS_RELEASE.md
 git commit -m "docs: finish My Story release slice"
 ```
 
-If Step 5 review fixes create later commits, the later exact head—not this documentation commit—is the final verification target.
+If review fixes create later commits, the later exact head is the final verification target.
