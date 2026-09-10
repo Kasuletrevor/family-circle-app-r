@@ -353,8 +353,15 @@ export class CircleService {
     const context = await this.requireActiveCircleContext()
     this.requireOwner(context, 'Only the Circle owner can manage relationships')
     const relationId = String(input.relationId ?? '').trim()
-    if (!relationId || !context.tree.relations.some((relation) => relation.id === relationId)) {
+    const relation = context.tree.relations.find((candidate) => candidate.id === relationId)
+    if (!relationId || !relation) {
       throw new Error('That relationship is no longer in this Circle')
+    }
+
+    const firstPerson = context.tree.people.find((person) => person.id === relation.aPersonId)
+    const secondPerson = context.tree.people.find((person) => person.id === relation.bPersonId)
+    if (firstPerson?.kind !== 'user' || secondPerson?.kind !== 'user') {
+      throw new Error('Choose confirmed Circle members for Family Tree relationships')
     }
 
     return this.circle.deleteTreeRelation({
