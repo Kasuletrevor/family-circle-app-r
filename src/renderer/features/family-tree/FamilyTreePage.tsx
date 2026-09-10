@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   FAMILY_RELATIONSHIP_KINDS,
@@ -127,6 +127,13 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
     return () => { requestId.current += 1 }
   }, [load])
 
+  const treePresentation = useMemo(() => {
+    if (!overview || overview.status !== 'ready') return null
+    const graph = normalizeFamilyGraph(overview.tree)
+    const layout = layoutFamilyTree(graph, overview.tree.positions)
+    return { graph, layout, paths: buildRelationshipPaths(layout) }
+  }, [overview])
+
   function resetRelationshipForm(): void {
     setShowAddRelation(false)
     setFirstPersonId('')
@@ -242,7 +249,7 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
     )
   }
 
-  if (!overview || overview.status === 'empty') {
+  if (!overview || overview.status === 'empty' || !treePresentation) {
     return (
       <section className="family-tree-page">
         <div className="family-tree-page__status">
@@ -254,9 +261,7 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
     )
   }
 
-  const graph = normalizeFamilyGraph(overview.tree)
-  const layout = layoutFamilyTree(graph, overview.tree.positions)
-  const paths = buildRelationshipPaths(layout)
+  const { graph, layout, paths } = treePresentation
   const memberCount = overview.tree.people.filter((person) => person.kind === 'user').length
   const invitationCount = overview.tree.people.filter((person) => person.kind === 'invite').length
   const confirmedPeople = overview.tree.people.filter((person) => person.kind === 'user')
