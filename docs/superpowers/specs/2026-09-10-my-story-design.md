@@ -7,77 +7,58 @@
 
 ## 1. Purpose
 
-Recreate the reference Kin-Keepers **My Story** experience as a private, local, first-class desktop feature in the Electron + React rebuild.
+Recreate the reference Kin-Keepers **My Story** experience as a private, local, first-class feature in the Electron + React rebuild.
 
-The new `/stories` experience is a personal memory studio for the signed-in local user. It preserves the reference app's guided life-story questions, progress, review, history, photo/audio attachments, offline voice transcription, and private AI retrieval, while applying the rebuild's stronger ownership, IPC, filesystem, and local-AI trust boundaries.
+`/stories` becomes a personal memory studio for the signed-in local user. It preserves the reference guided questions, progress, review, history, photo/audio attachments, offline voice transcription, deterministic follow-up prompts, and private AI retrieval, while applying the rebuild's stricter session, IPC, filesystem, migration, and local-AI boundaries.
 
-My Story is **not shared Circle data**. It does not use `LegacyCircleAuthAdapter`, does not depend on Circle membership, and does not send story content, media, embeddings, or local identities to the Circle service.
+My Story is **not shared Circle data**. Story text, media, versions, embeddings, and local identities never pass through `LegacyCircleAuthAdapter` or the Circle service.
 
-## 2. Goals
+## 2. First-release scope
 
-The first release must provide the complete practical reference experience:
+The first release recreates the complete practical reference flow:
 
-1. All 16 guided prompts across six chapters.
+1. 16 fixed guided memories across six chapters.
 2. Guided, Chapters, Review, and History views.
-3. Private debounced draft autosave.
-4. A per-memory explicit **Confirm memory** privacy/searchability gate.
-5. Deterministic follow-up prompt chips from the reference experience.
-6. Whole-story version history capped at 30 meaningful versions.
-7. Explicit restore confirmation with a pre-restore snapshot.
-8. Photo and audio attachments on individual memories.
-9. Private open/delete behavior for Story media.
-10. Microphone recording and local offline transcription.
+3. Debounced private draft autosave plus **Save now**.
+4. Per-memory **Confirm memory** privacy/searchability gate.
+5. Deterministic follow-up prompt chips.
+6. Whole-story semantic history capped at 30 versions.
+7. Explicit restore confirmation with pre-restore snapshot.
+8. Per-memory photo and audio attachments.
+9. Private media open/delete.
+10. Microphone recording and local Whisper transcription.
 11. Per-answer language metadata and transcription language hints.
-12. Confirmed-memory indexing with the existing local Nomic runtime.
-13. `/ai` source selection for My Story, Vault, or both private sources.
-14. Story-aware citations in private AI answers.
-15. Copy-safe migration of legacy My Story content and media.
-16. Merge-blocking accessibility, ownership, migration, indexing, media, voice, IPC-boundary, and Windows-package tests.
+12. Confirmed-memory Nomic indexing.
+13. `/ai` scopes: My Story, Vault documents, My Story + Vault.
+14. Story-aware private-AI citations.
+15. Copy-safe, idempotent legacy Story/history/media migration.
+16. Merge-blocking security, ownership, migration, indexing, voice, accessibility, IPC, and Windows-package coverage.
 
 ## 3. Non-goals
 
-This release does not add:
+This release does **not** add Story sharing, collaborative editing, comments/reactions, public publishing, cloud transcription, cloud AI fallback, automatic confirmation, hidden transcription/OCR/indexing of attachments, arbitrary custom questions, cross-device sync, or AI rewriting of the user's memories.
 
-- Story sharing with Circle members;
-- collaborative Story editing;
-- comments, reactions, likes, or a social Story feed;
-- public publishing;
-- cloud transcription or cloud AI fallback;
-- automatic confirmation of typed or transcribed text;
-- automatic transcription/indexing of attached audio files;
-- image understanding or OCR of Story photos;
-- arbitrary custom Story questions;
-- AI rewriting or rewriting-in-place of a user's memory;
-- cross-device Story synchronization;
-- Story content in the shared Circle service;
-- Story text or media in the Windows installer.
+## 4. Ownership boundary
 
-## 4. Product boundary
+My Story belongs to the restored **local user** and is independent of Circle membership.
 
-### 4.1 Local/private responsibilities
+Local/private responsibilities:
 
-My Story belongs to the signed-in **local user** and is stored under the desktop application's private local data boundary.
-
-Local/private data includes:
-
-- answers and confirmation state;
-- answer language metadata;
-- Story versions/history;
+- answers, language, confirmation and index status;
+- Story versions;
 - photo/audio attachments;
-- private Story storage paths;
-- Story embeddings/chunks;
+- relative private media paths;
+- Story chunks/embeddings;
 - optional offline voice assets;
-- temporary voice recordings during transcription.
+- temporary transcription audio.
 
-### 4.2 Shared Circle responsibilities
+Shared/server responsibilities remain Circles, membership, invitations, shared Family Tree data, notifications, and other deliberately shared content.
 
-Circles, memberships, invitations, shared Family Tree relationships/positions, and other deliberately shared family content remain server-owned.
+No Story main-process service may call a Circle URL.
 
-No My Story main-process service may call `LegacyCircleAuthAdapter` or any Circle URL.
+## 5. Fixed Story schema
 
-## 5. Reference Story schema
-
-The initial Story schema is fixed and versioned. It recreates the 16 reference prompts.
+The schema is versioned and initially recreates these 16 reference memories:
 
 | Key | Chapter | Label | Prompt | Input |
 |---|---|---|---|---|
@@ -98,58 +79,39 @@ The initial Story schema is fixed and versioned. It recreates the 16 reference p
 | `carePreferences` | Care & Future | Care and daily preferences | What would help someone support and care for you well? | textarea |
 | `futureMessage` | Care & Future | Message for the future | What message would you like future generations to hear in your own words? | textarea |
 
-The `lifeStage` options remain:
+`lifeStage` options remain: Building my archive; Preserving elder memories; Preparing family handover; Documenting health and care.
 
-- Building my archive
-- Preserving elder memories
-- Preparing family handover
-- Documenting health and care
+The schema also owns static hints and deterministic follow-up prompts. Follow-up chips are presentation guidance, not AI output. Examples retained from the reference include “What did that place feel like?”, “Who was there with you?”, and “What sounds, food, or small details do you remember?”.
 
-The schema also carries static hints and deterministic follow-up prompt chips. Follow-up prompts are presentation guidance only; they are not AI-generated and are not stored as Story content unless the user types an answer into the memory field.
+## 6. Canonical local storage
 
-Examples retained from the reference include:
-
-- roots: “What did that place feel like?” and “Which people or traditions connect you to it?”
-- childhood: “Who was there with you?” and “What sounds, food, or small details do you remember?”
-
-## 6. Canonical local data model
-
-Do not reuse the legacy Story table names as canonical tables. The copied legacy database may already contain `my_stories`, `story_entries`, `story_history`, and `story_media`; those remain migration sources.
+Do not reuse legacy Story table names. The copied legacy database may already contain `my_stories`, `story_entries`, `story_history`, and `story_media`; those remain migration sources only.
 
 ### 6.1 `story_answers`
 
-Canonical current answers.
-
 ```text
-id                  INTEGER PRIMARY KEY
-local_user_id       INTEGER NOT NULL FK users(id) ON DELETE CASCADE
-field_key           TEXT NOT NULL
-schema_version      INTEGER NOT NULL
-section             TEXT NOT NULL
-label               TEXT NOT NULL
-question            TEXT NOT NULL
-answer              TEXT NOT NULL DEFAULT ''
-language            TEXT NOT NULL DEFAULT 'en'
-confirmed           INTEGER NOT NULL DEFAULT 0
-index_status        TEXT NOT NULL DEFAULT 'not_indexed'
-created_at          INTEGER NOT NULL
-updated_at          INTEGER NOT NULL
-confirmed_at        INTEGER
+id               INTEGER PRIMARY KEY
+local_user_id    INTEGER NOT NULL FK users(id) ON DELETE CASCADE
+field_key        TEXT NOT NULL
+schema_version   INTEGER NOT NULL
+section          TEXT NOT NULL
+label            TEXT NOT NULL
+question         TEXT NOT NULL
+answer           TEXT NOT NULL DEFAULT ''
+language         TEXT NOT NULL DEFAULT 'en'
+confirmed        INTEGER NOT NULL DEFAULT 0
+index_status     TEXT NOT NULL DEFAULT 'not_indexed'
+created_at       INTEGER NOT NULL
+updated_at       INTEGER NOT NULL
+confirmed_at     INTEGER
 UNIQUE(local_user_id, field_key)
 ```
 
-`index_status` values:
+`index_status` is one of `not_indexed`, `pending`, `ready`, `failed`.
 
-```text
-not_indexed
-pending
-ready
-failed
-```
+Rows are created/upserted only when a field is saved/imported. Merely opening My Story does not create 16 database rows; the renderer client merges persisted rows over the fixed schema.
 
 ### 6.2 `story_versions`
-
-Immutable whole-story snapshots.
 
 ```text
 id                  INTEGER PRIMARY KEY AUTOINCREMENT
@@ -159,355 +121,233 @@ semantic_signature TEXT NOT NULL
 created_at          INTEGER NOT NULL
 ```
 
-Keep at most the newest **30 semantic versions per user**. Draft autosaves do not create history rows.
+Versions are immutable and capped at the newest **30 semantic snapshots per user**. Draft autosave never creates history.
 
 ### 6.3 `story_media_items`
-
-Private attachments associated with a Story field.
 
 ```text
 id                    INTEGER PRIMARY KEY AUTOINCREMENT
 local_user_id         INTEGER NOT NULL FK users(id) ON DELETE CASCADE
 field_key             TEXT NOT NULL
 media_type            TEXT NOT NULL           -- photo | audio
-file_name             TEXT NOT NULL            -- display name only
+file_name             TEXT NOT NULL
 mime_type             TEXT NOT NULL
 size_bytes            INTEGER NOT NULL
 stored_relative_path  TEXT NOT NULL
+storage_status        TEXT NOT NULL DEFAULT 'active' -- copying | active
+legacy_source_key     TEXT
 created_at            INTEGER NOT NULL
+UNIQUE(local_user_id, legacy_source_key)
 ```
 
-Absolute paths are never stored in renderer-facing DTOs.
+`legacy_source_key` is `NULL` for normal new attachments; SQLite permits multiple `NULL` values under this unique constraint. It exists only to make legacy media import crash-safe and idempotent.
 
 ### 6.4 `story_chunks`
 
-Private embeddings for confirmed Story memories.
-
 ```text
-id                  INTEGER PRIMARY KEY AUTOINCREMENT
-story_answer_id     INTEGER NOT NULL FK story_answers(id) ON DELETE CASCADE
-chunk_index         INTEGER NOT NULL
-text                TEXT NOT NULL
-embedding_blob      BLOB NOT NULL
-embedding_model     TEXT NOT NULL
-index_version       INTEGER NOT NULL
-created_at          INTEGER NOT NULL
-updated_at          INTEGER NOT NULL
+id               INTEGER PRIMARY KEY AUTOINCREMENT
+story_answer_id  INTEGER NOT NULL FK story_answers(id) ON DELETE CASCADE
+chunk_index      INTEGER NOT NULL
+text             TEXT NOT NULL
+embedding_blob   BLOB NOT NULL
+embedding_model  TEXT NOT NULL
+index_version    INTEGER NOT NULL
+created_at       INTEGER NOT NULL
+updated_at       INTEGER NOT NULL
 UNIQUE(story_answer_id, chunk_index)
 ```
 
-Ownership is always resolved by joining `story_chunks -> story_answers -> users`. The renderer never sees embeddings or chunk rows.
+Ownership is always resolved through `story_chunks -> story_answers -> users`; the renderer never sees chunk rows or embeddings.
 
 ### 6.5 `story_import_state`
 
-Tracks idempotent migration of legacy Story data.
-
 ```text
-local_user_id       INTEGER NOT NULL
-migration_key       TEXT NOT NULL
-completed_at        INTEGER NOT NULL
+local_user_id  INTEGER NOT NULL
+migration_key  TEXT NOT NULL
+completed_at   INTEGER NOT NULL
 PRIMARY KEY(local_user_id, migration_key)
 ```
 
-The first migration key is `legacy-my-story-v1`.
+Initial migration key: `legacy-my-story-v1`.
 
-## 7. Confirmation as privacy/searchability gate
-
-A Story answer can exist as a private draft without being searchable.
+## 7. Confirmation is the privacy/searchability gate
 
 ```text
 type or transcribe
       ↓
-private local draft
+private draft
       ↓
-user reviews words
+review
       ↓
 Confirm memory
       ↓
-confirmed = true
+confirmed=true
       ↓
 local Nomic indexing
       ↓
-eligible for My Story private retrieval
+eligible for My Story retrieval
 ```
 
-### 7.1 Editing confirmed text
+Draft text is never searchable merely because it is saved.
 
-The instant a confirmed answer changes in the UI, it is considered unconfirmed in renderer state.
+### 7.1 First edit of confirmed text
 
-On the first change from confirmed content, the renderer immediately persists the new draft state through main rather than waiting for the normal debounce. Main performs one transaction that:
+The first modification of a confirmed answer immediately makes it unconfirmed in renderer state and immediately calls main rather than waiting for the normal debounce.
 
-1. writes the changed draft text;
-2. sets `confirmed = 0`;
-3. clears `confirmed_at`;
-4. deletes all existing `story_chunks` for that answer;
-5. sets `index_status = 'not_indexed'`.
+Main performs one transaction in this order:
 
-Subsequent draft edits use the normal debounce.
+1. load the currently owned confirmed answer;
+2. if semantic Story state differs from the newest version, snapshot the **old confirmed Story before overwriting it**;
+3. write the changed draft;
+4. set `confirmed=0` and clear `confirmed_at`;
+5. delete all chunks for that answer;
+6. set `index_status='not_indexed'`.
 
-This fail-closed rule ensures stale confirmed text is not searchable while the user is editing.
+Subsequent edits debounce normally. This prevents stale confirmed text from remaining searchable during editing and guarantees the prior confirmed wording is recoverable.
 
-### 7.2 Confirming a memory
+### 7.2 Confirmation and indexing
 
-Confirmation is split deliberately around the potentially slow embedding operation.
+Nomic inference is never held inside a SQLite transaction.
 
-Main first commits the authoritative state transactionally:
+Main first commits authoritative confirmation state:
 
-1. validate field key, answer, and language;
-2. create a meaningful pre-change Story version when required;
-3. set `confirmed = 1` and `confirmed_at`;
-4. delete old chunks for the answer;
-5. set `index_status = 'pending'`.
+1. validate field key, non-empty answer and language;
+2. set `confirmed=1` and `confirmed_at`;
+3. delete any old chunks;
+4. set `index_status='pending'`.
 
-Only after that transaction commits does the indexing service call Nomic.
+After commit, `StoryIndexService` calls Nomic. Success atomically replaces that field's chunks and sets `ready`. Failure leaves the confirmed answer durable, with **no stale chunks**, and sets `failed`. The UI offers **Retry private indexing**.
 
-Successful indexing atomically replaces that answer's chunks and sets `index_status = 'ready'`.
+There is no cloud fallback.
 
-If embedding fails, the answer remains safely saved and confirmed, no stale chunks remain, and `index_status = 'failed'`. The UI offers **Retry private indexing**.
+## 8. History and restore
 
-No cloud fallback is permitted.
+Meaningful versions are considered:
 
-## 8. Story history and restore semantics
+- before the first edit of a confirmed memory;
+- on explicit **Save now** when semantic Story differs from the newest version;
+- immediately before restoring an older version when current semantic Story differs.
 
-History captures meaningful Story state, not keystrokes.
+The semantic signature ignores active UI view/step, save state, and indexing status.
 
-A semantic version is considered for creation:
+Snapshots contain all 16 answers plus language and confirmation metadata. Media and embeddings are not copied into versions.
 
-- immediately before a confirmed memory is materially changed;
-- when the user explicitly chooses **Save now** and the semantic Story differs from the newest version;
-- immediately before restoring an older version, when current semantic Story content differs.
-
-`semantic_signature` ignores ephemeral UI state such as active view/step and indexing status.
-
-A snapshot contains the 16 answers plus their language and confirmation metadata. It does not duplicate media files or embeddings.
-
-### 8.1 Restore
-
-Restore requires an explicit confirmation dialog.
-
-Main re-resolves the version by `(version_id, local_user_id)`. It never trusts a renderer-supplied user ID.
-
-Restore flow:
+Restore requires explicit confirmation. Main resolves `(versionId, localUserId)` from the protected session and then:
 
 ```text
 validate owned version
-  → snapshot current semantic Story if different
-  → replace canonical answers from snapshot transactionally
-  → delete all current Story chunks
-  → mark confirmed non-empty answers pending
-  → commit restored Story
-  → rebuild index for confirmed answers
+→ snapshot current semantic Story if different
+→ replace canonical answers transactionally
+→ delete all current Story chunks
+→ mark restored confirmed non-empty fields pending
+→ commit
+→ rebuild confirmed Story index
 ```
 
-If the database restore transaction fails, the current Story remains unchanged.
+A database failure leaves the current Story unchanged. A post-commit indexing failure leaves restored text canonical and fails closed with no stale newer chunks.
 
-If reindexing fails afterward, restored text remains canonical but search fails closed for affected fields with `index_status = 'failed'` and no stale newer chunks.
-
-Media is not versioned. Existing media remains associated with its field across text restores.
+Media remains attached to its field across text restores.
 
 ## 9. Story media
 
-### 9.1 Supported media
+Supported photos: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`.  
+Supported audio: `.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm`.
 
-Photos:
+Validate extension/container plus file signature/container markers where practical; extension alone is never trusted.
 
-- `.jpg` / `.jpeg`
-- `.png`
-- `.gif`
-- `.webp`
+Limits:
 
-Audio:
+- photo: **25 MiB** per file;
+- audio: **100 MiB** per file;
+- maximum **8 selected files per add operation**.
 
-- `.mp3`
-- `.wav`
-- `.m4a`
-- `.ogg`
-- `.flac`
-- `.webm`
-
-The application validates both supported extension/container type and file signature/container markers where practical. Extension alone is never trusted.
-
-Limits retain the useful reference behavior:
-
-- photo: **25 MiB** maximum per file;
-- audio: **100 MiB** maximum per file;
-- at most **8 selected files per add operation**.
-
-### 9.2 Private storage
-
-The main process owns file selection and path resolution. Selected files are copied into randomized per-user storage:
+Main owns the file picker and copies selected media into:
 
 ```text
 <userData>/story/users/<localUserId>/media/<UUID>.<ext>
 ```
 
-The database stores only a relative path under application user data.
+The database stores only a relative path. Renderer DTOs expose only `id`, `fieldKey`, `mediaType`, `fileName`, `mimeType`, `sizeBytes`, and timestamps.
 
-Renderer DTOs contain only:
+New attachment flow copies first and inserts the active row only after copy success. Open/delete accept media IDs only and re-resolve ownership in main. Missing owned files are handled as retry-safe cleanup. Raw paths/errors never reach React.
 
-```text
-id
-fieldKey
-mediaType
-fileName
-mimeType
-sizeBytes
-createdAt
-```
+Attaching audio never silently transcribes it. Attaching a photo never triggers OCR/image analysis.
 
-### 9.3 Media operations
+## 10. Copy-safe legacy migration
 
-Public operations use media IDs only. Main re-resolves ownership before open/delete.
+The existing rebuild already copies `%APPDATA%/Family Circle/family.db` into rebuild-owned `userData/family.db` before additive migrations. The original database is never opened for migration writes.
 
-A successful add inserts the DB row only after the private copy succeeds.
+My Story migration runs only on the rebuild-owned copy.
 
-Delete is retry-safe. The owned database record is removed only for the authenticated local user; filesystem cleanup treats already-missing owned files as successful cleanup.
+### 10.1 Answers
 
-Raw filesystem errors and absolute paths are never shown to React.
+For each preserved local user ID:
 
-Attaching audio does **not** automatically transcribe or index it. Attaching a photo does not trigger OCR or image analysis.
+1. Prefer valid `my_stories.story_json` as the most complete source.
+2. Import only known fixed-schema keys.
+3. Preserve explicit legacy `__confirmed` state.
+4. If confirmation metadata predates the legacy record, treat non-empty answers as confirmed so previously searchable memories do not disappear after upgrade.
+5. Preserve per-field `__languages`; otherwise fall back to matching `story_entries.language`, then `__language`, then `en`.
+6. If `my_stories` is absent/damaged, reconstruct known fields from `story_entries` where available.
+7. Unknown keys remain untouched in legacy source tables and are not silently promoted into the v1 schema.
 
-## 10. Legacy migration
+### 10.2 History
 
-The rebuild already performs copy-safe database migration:
+Convert legacy `story_history` snapshots into `story_versions`, retain valid original timestamps, deduplicate semantic duplicates, and keep the newest 30.
 
-```text
-%APPDATA%/Family Circle/family.db
-          ↓ copy only when rebuild DB absent
-<rebuild userData>/family.db
-          ↓
-additive rebuild migrations
-```
+### 10.3 Media
 
-The original legacy database is never opened for migration writes.
+The legacy media root is derived from the known legacy app-data directory, never renderer input. A legacy path is eligible only when it resolves under that root, exists, belongs to a fixed Story field, and passes current type/size validation.
 
-My Story migration runs only against the rebuild-owned copy.
+Each legacy row gets a stable opaque `legacy_source_key` derived from its legacy row identity plus normalized source metadata. Import uses a crash-safe reservation:
 
-### 10.1 Answer migration
+1. transactionally find/create a `story_media_items` row with a randomized destination path, `storage_status='copying'`, and unique `legacy_source_key`;
+2. commit the reservation;
+3. copy the original into the **same reserved destination**;
+4. mark the row `active` after successful copy.
 
-For each existing local user:
+On restart, a `copying` reservation is retried to the same destination rather than allocating another file. Thus a crash cannot create repeated DB items or repeated destination paths.
 
-1. If `my_stories` exists and contains valid `story_json`, treat it as the most complete legacy Story source.
-2. Import all known schema fields into `story_answers`.
-3. Preserve per-field confirmation from legacy `__confirmed` metadata when present.
-4. For legacy Stories that predate confirmation metadata, treat non-empty answers as confirmed to preserve previously searchable memories.
-5. Preserve per-field language from legacy `__languages` when present.
-6. Otherwise fall back to matching legacy `story_entries.language`, then legacy `__language`, then `en`.
-7. If `my_stories` is absent/damaged but `story_entries` exists, reconstruct known fields from `story_entries` as a fallback.
-8. Unknown legacy keys are not silently promoted into the fixed v1 schema; they remain in the untouched legacy source tables.
-
-### 10.2 History migration
-
-Existing `story_history` snapshots are converted into `story_versions`, preserving original creation timestamps where valid. Duplicate semantic snapshots are deduplicated. The newest 30 semantic versions are retained.
-
-### 10.3 Media migration
-
-Copying the SQLite database does not copy external Story media.
-
-The known legacy Story media root is derived from the legacy app data directory, not from renderer input. A legacy `story_media.file_path` is eligible only when:
-
-- it resolves under that known legacy Story media root;
-- the referenced file exists;
-- its field key belongs to the fixed Story schema;
-- its media type and size pass current validation.
-
-Eligible files are **copied**, never moved, into new randomized private storage. The original media remains untouched.
-
-Missing, invalid, oversized, or out-of-root legacy attachments are skipped and recorded as unavailable migration diagnostics; they are never opened from arbitrary locations.
+Original media is copied, never moved or deleted. Missing/invalid/out-of-root legacy items are skipped and recorded as migration diagnostics; arbitrary source paths are never opened.
 
 ### 10.4 Idempotency
 
-`story_import_state` prevents duplicate import after restart/crash. Import steps are transactionally checkpointed per user. Re-running migrations must not duplicate answers, versions, or media.
+Answer/history upserts, semantic dedupe, unique legacy media keys, resumable media reservations, and `story_import_state` together make re-running migration idempotent. Original legacy database tables and files are never mutated.
 
-The importer never mutates legacy source tables or original legacy media files.
+## 11. My Story studio UX
 
-## 11. User experience
-
-`/stories` becomes **My Story** and replaces the placeholder route.
-
-The page has four primary views:
+`/stories` replaces the placeholder with four primary views:
 
 ```text
 Guided | Chapters | Review | History
 ```
 
-### 11.1 Header / hero
+The hero frames My Story as a living private archive, not a questionnaire. Progress counts **confirmed memories** only, e.g. `9 of 16 memories confirmed`. Chapter cards show confirmed/total progress and navigate directly.
 
-The hero frames My Story as a living private family archive, not a questionnaire.
+### Guided
 
-Progress is based on **confirmed memories**, for example:
+One prompt at a time with chapter/position, prompt, hint, answer, language, deterministic follow-ups, confirmation/searchability state, media, record/transcribe, add-photo/audio, Previous, Confirm memory, and Next.
 
-```text
-9 of 16 memories confirmed
-```
-
-Filled drafts do not increase confirmed progress.
-
-Chapter cards show confirmed/total progress and allow navigation.
-
-### 11.2 Guided view
-
-One memory prompt at a time.
-
-The card shows:
-
-- chapter and position (`Life Story · 7 of 16`);
-- prompt;
-- optional hint;
-- answer field;
-- language control;
-- deterministic follow-up prompt chips after text exists;
-- confirmation/searchability state;
-- attached media;
-- voice recording/transcription action;
-- photo/audio attachment actions;
-- Previous / Confirm memory / Next actions.
-
-Confirmation copy must make the privacy consequence understandable, e.g.:
+Required privacy copy distinguishes:
 
 ```text
 Draft — review your words before making this memory searchable.
-```
-
-and after confirmation:
-
-```text
 Confirmed — available to your private local AI.
 ```
 
-### 11.3 Chapters view
+### Chapters
 
-Shows all fields grouped by the six chapters for users who prefer a full-form workflow.
+All fields grouped by the six chapters for full-form editing. Editing a confirmed field uses the same immediate invalidation semantics as Guided.
 
-Editing a confirmed field invokes the same immediate invalidation semantics as Guided view.
+### Review
 
-### 11.4 Review view
+Readable populated memories grouped by chapter, with search/filter, exact user text, confirmation state, attachments, and **Edit** jump-back. Review never fabricates or rewrites narrative prose.
 
-Shows populated memories as a readable life-story review, grouped by chapter, with:
+### History
 
-- search/filter;
-- answer text;
-- confirmation/searchability state;
-- attachments;
-- **Edit** action that jumps to the relevant Guided prompt.
+Newest-first semantic versions with timestamp, populated count, confirmed count, short preview, and **Restore**. Restore explains that the current Story is preserved first when materially different.
 
-The review does not fabricate narrative prose or rewrite user content.
-
-### 11.5 History view
-
-Shows newest-first semantic Story versions with:
-
-- date/time;
-- number of populated memories;
-- number of confirmed memories;
-- safe short preview;
-- **Restore** action.
-
-Restore requires explicit confirmation and explains that current Story text is saved as a recoverable version first when materially different.
-
-### 11.6 Footer/save state
-
-The UI distinguishes:
+### Save state
 
 ```text
 Saving…
@@ -515,103 +355,97 @@ Saved privately on this computer
 Not saved yet — retry
 ```
 
-A **Save now** action forces immediate draft persistence and creates a history version only when semantic Story state differs from the newest version.
+**Save now** forces immediate draft persistence and adds a semantic version only when distinct from the latest version.
 
 ## 12. Offline voice transcription
 
-The reference implementation records mono audio, resamples to 16 kHz PCM WAV, and invokes a local `whisper.cpp` CLI with a Whisper base model and language hint.
-
-The rebuild recreates that capability without bundling the runtime/model in the standard installer.
+The reference recorder produced mono 16 kHz PCM WAV and called a local `whisper.cpp` CLI with Whisper base. Recreate that behavior without bundling voice assets in the standard installer.
 
 ### 12.1 Recorder
 
-A renderer-only `StoryVoiceRecorder` requests microphone permission, captures mono speech, and produces a **16 kHz PCM WAV** byte payload. It exposes no filesystem paths.
+Renderer `StoryVoiceRecorder` requests microphone access, captures mono speech and emits a **16 kHz PCM WAV byte payload**. No filesystem path crosses the renderer boundary. Recording states are `idle`, `recording`, `transcribing`, `success`, `error`; microphone tracks are always released when recording stops or errors.
 
-The recording UI has explicit states:
+### 12.2 Public boundary
 
-```text
-idle
-recording
-transcribing
-success
-error
-```
-
-Stopping a recording releases microphone tracks immediately.
-
-### 12.2 Public transcription boundary
-
-Renderer calls a narrow method conceptually equivalent to:
+Conceptually:
 
 ```ts
 story.transcribeRecording({ wavBytes, language })
 ```
 
-The renderer cannot provide executable paths, model paths, command-line flags, temp paths, or network endpoints.
+Renderer cannot choose executable/model/temp paths, flags, ports, or endpoints.
 
-Main validates:
+Main requires a protected session and validates non-empty WAV, **25 MiB** maximum, supported language, and a single-transcription busy guard.
 
-- protected local session exists;
-- payload is non-empty WAV;
-- maximum transcription payload is **25 MiB**;
-- language hint is from the allowed language model;
-- no second transcription is already running.
+### 12.3 Voice pack
 
-### 12.3 Voice asset pack
+The first distributable voice pack target is **Windows x64**, matching the current packaged product. Linux CI tests the service through injected/mock runners and manifests; it does not pretend a Linux voice binary ships in v1.
 
-The optional voice pack contains:
+The optional pack contains verified `whisper.cpp` Windows x64 runtime + verified Whisper base model with expected size/SHA-256. It installs separately on first use using the existing verified-download security properties: resumable download, checksum verification, repair state, no secrets, and **no voice model/runtime in the NSIS installer**.
 
-- verified `whisper.cpp` runtime for supported desktop platform;
-- verified Whisper base model;
-- manifest size and SHA-256 values.
+Voice readiness remains a distinct product capability from Granite/Nomic readiness even if low-level download/hash primitives are shared.
 
-It is installed separately on first use, using the same security properties as the existing optional Private AI asset setup: resumable verified download, no secrets, no model in the NSIS payload, and repair status when assets fail verification.
+### 12.4 Execution
 
-The implementation may reuse/generalize existing verified-download/hash primitives, but voice setup must remain a distinct product capability/status from Granite/Nomic readiness.
+Main writes WAV bytes to a controlled temp path, invokes only the verified local runtime with bounded threads and a validated language hint, and enforces a **120-second timeout**. Temp audio is deleted in `finally` on success, failure, or timeout.
 
-### 12.4 Transcription execution
+Only transcript text crosses back to React; stderr and runtime/model/temp paths do not.
 
-Main writes the WAV bytes to a main-controlled temporary path, invokes the verified local runtime with a bounded thread count and language hint, and enforces a **120-second timeout**.
+Transcription inserts **draft** text and never auto-confirms.
 
-Temporary audio is deleted in `finally` on success or failure.
+There is no ElevenLabs or other network fallback.
 
-The transcript is returned as plain text only. Process stderr, executable/model paths, and temp paths are never returned to React.
+## 13. Language contract
 
-The transcript is inserted into the current answer as **draft text**. It is never auto-confirmed.
+To faithfully recreate the reference first release, selectable Story/voice languages are exactly:
 
-There is **no ElevenLabs or other network transcription fallback**.
+```text
+en   English
+afr? no
+fr   French
+es   Spanish
+pt   Portuguese
+zh   Simplified Chinese
+ja   Japanese
+fil  Filipino (Tagalog)
+```
 
-## 13. Language metadata
+The literal `afr? no` line above is **not** a supported value; it documents that no additional language is implied. The actual supported codes are exactly `en`, `fr`, `es`, `pt`, `zh`, `ja`, `fil`.
 
-Every answer stores a short validated language code. The default is `en` until the user selects another supported option.
+Whisper language mapping is identity except `fil -> tl`, matching the reference. Unknown codes normalize/fail to the documented default `en` rather than invoking any network service.
 
-The selected answer language is passed as a hint to local transcription where supported. Unsupported language hints fail safely or use a documented local-model automatic mode; they never cause a cloud request.
+Each answer stores one of these validated codes and passes it to local transcription as a hint.
 
-Language metadata affects transcription/retrieval metadata only. It does not change Story ownership or confirmation rules.
+## 14. Private AI integration
 
-## 14. Private AI indexing
+Reuse the existing Nomic + Granite runtime; do not create a second model server and do not pretend Story memories are Vault documents.
 
-My Story reuses the existing local Nomic + Granite runtime. It does not create a second model server.
+Private sources remain independent:
 
-### 14.1 Story chunk format
+```text
+Vault documents → vault_chunks
+My Story       → story_chunks
+                    ↓
+             shared local ranking
+                    ↓
+             Nomic query embedding
+                    ↓
+                 Granite
+```
 
-Confirmed memory text is embedded with provenance-preserving text similar to:
+Confirmed Story memory chunks include provenance such as:
 
 ```text
 [[MY STORY | childhood | Life Story | Childhood and early memories]]
 Chapter: Life Story
 Memory: Childhood and early memories
-Question: What childhood memory or place still feels alive to you?
+Question: ...
 Answer: <confirmed user text>
 ```
 
-Chunking is deterministic and versioned.
+Only confirmed non-empty answers are eligible.
 
-Only confirmed, non-empty `story_answers` are eligible for Story chunks.
-
-### 14.2 Query scopes
-
-The private AI UI gains three user-visible source modes:
+The `/ai` source selector becomes:
 
 ```text
 My Story
@@ -619,23 +453,9 @@ Vault documents
 My Story + Vault
 ```
 
-The underlying query scope is explicit and renderer-safe.
+One Nomic query embedding is created per question. Candidate chunks are loaded only for the authenticated local user from the selected repositories, scored with the existing cosine ranking, combined, capped, and passed to local Granite.
 
-A single Nomic query embedding is created per question. Candidate chunks are loaded only for the authenticated local user from the selected private source repositories, scored using the existing cosine-similarity rules, combined, ranked, and capped before Granite generation.
-
-No Story or Vault source is sent to a cloud model.
-
-### 14.3 Story citations
-
-Story results are cited with user-readable provenance:
-
-```text
-My Story › Life Story › Childhood and early memories
-```
-
-Vault citations remain document-based as today.
-
-Renderer citations never expose local row IDs as meaningful identity, filesystem paths, embedding data, or model internals.
+Story citations render as `My Story › <Chapter> › <Memory label>`; Vault citations remain document-based. No filesystem path, embedding, internal port, or meaningful local DB identity is exposed.
 
 ## 15. Main-process architecture
 
@@ -643,31 +463,28 @@ Expected units:
 
 ```text
 StoryService
-  ├── protected-session ownership
-  ├── StoryRepository
-  ├── StoryHistoryRepository
-  ├── StoryMediaRepository
-  ├── StoryMediaStore
-  ├── StoryIndexService
-  ├── StoryLegacyImporter
-  └── VoiceTranscriptionService
+├── StoryRepository
+├── StoryHistoryRepository
+├── StoryMediaRepository
+├── StoryMediaStore
+├── StoryIndexService
+├── StoryLegacyImporter
+└── VoiceTranscriptionService
 
-PrivateArchiveQueryService (or equivalent generalized query layer)
-  ├── VaultChunkRepository
-  ├── StoryChunkRepository
-  ├── NomicClient
-  └── GraniteClient
+PrivateArchiveQueryService (or equivalent)
+├── VaultChunkRepository
+├── StoryChunkRepository
+├── NomicClient
+└── GraniteClient
 ```
 
-Units must remain independently testable. React never imports database/filesystem/model/process code.
+Every operation derives the local user from the protected session. React never imports database, filesystem, process, or model code.
 
-The implementation should reuse existing Vault and Private AI primitives where they are genuinely generic, but must not couple Story ownership to a Vault document ID or fake Story memories as Vault documents.
+Reuse generic Vault/Private-AI primitives only when they are genuinely generic; do not couple Story ownership to Vault document IDs.
 
-## 16. Public preload API
+## 16. Narrow preload API
 
-The renderer-facing Story API is narrow and reconstructs accepted business inputs field-by-field.
-
-Conceptual surface:
+Conceptual Story surface:
 
 ```text
 story.get()
@@ -684,133 +501,94 @@ story.transcribeRecording({ wavBytes, language })
 story.getVoiceStatus()
 story.setupVoice()
 story.retryVoiceSetup()
+story.onVoiceSetupProgress(listener)
 ```
 
-Actual setup-progress subscription naming should follow the existing `privateAi` preload pattern.
+Exact setup-progress naming should follow the existing private-AI client convention.
 
-No public Story input may contain:
-
-```text
-localUserId
-absolutePath
-storedRelativePath
-embeddingBlob
-modelPath
-runtimePath
-port
-apiKey
-circleId
-serverUserId
-```
-
-All IDs are treated as untrusted handles and re-resolved for the authenticated local user in main.
+Public Story inputs must never contain `localUserId`, absolute/stored paths, embedding blobs, model/runtime paths, ports, API keys, Circle IDs, or shared-service user IDs. Numeric/string handles such as media/version IDs are always re-resolved for the authenticated user in main.
 
 ## 17. Error and recovery behavior
 
-### Draft saving
-
-A failed draft autosave leaves the typed text visible and shows a retryable `Not saved yet` state. Raw SQLite errors are hidden.
-
-### Confirmation/indexing
-
-A confirmed answer is never lost because embedding fails. Confirmation remains durable, stale chunks are already deleted, `index_status` becomes `failed`, and retry is explicit.
-
-### Restore
-
-A failed DB restore does not replace current canonical answers. A successful restore followed by indexing failure keeps restored text but no stale pre-restore chunks.
-
-### Media
-
-Failed copy creates no media row. Failed open/delete returns stable user-facing errors without paths. Missing owned files are handled as recoverable cleanup, not as authorization bypasses.
-
-### Voice
-
-Missing/corrupt voice assets show setup/repair guidance. Microphone denial is a normal user-facing state. Temporary files and microphone tracks are cleaned up on all paths.
-
-### Private AI
-
-If Private AI is not installed, users can still create, confirm, review, version, and attach media to My Story. Confirmation can remain `pending`/`failed` for indexing until local AI becomes available. Story capture never requires cloud or model readiness.
+- Draft autosave failure keeps visible text and shows `Not saved yet`.
+- First edit of confirmed content snapshots old semantic state and removes stale chunks before normal debounce.
+- Embedding failure never loses a confirmed answer and never leaves stale chunks.
+- Failed DB restore leaves current canonical Story unchanged.
+- Successful restore followed by indexing failure keeps restored text and fails closed for search.
+- Failed normal media copy creates no active DB item.
+- Interrupted legacy media copy resumes through its reserved destination.
+- Missing/corrupt voice assets show setup/repair guidance.
+- Microphone denial is a normal recoverable UI state.
+- Private AI absence never blocks Story capture/history/media; indexing remains pending/failed until local AI is ready.
+- Public errors hide SQLite paths, media paths, model paths, process stderr, local AI ports, and secrets.
 
 ## 18. Security invariants
 
-Merge-blocking tests must prove all of the following:
+Merge-blocking tests must prove:
 
-1. User A cannot read User B Story answers.
-2. User A cannot save/confirm User B Story answers by injecting ownership fields.
-3. User A cannot list or restore User B Story versions.
-4. User A cannot open/delete User B Story media.
-5. Renderer cannot choose `local_user_id` or storage paths.
-6. Absolute legacy/current media paths never cross preload.
-7. Unconfirmed answers never exist in `story_chunks`.
-8. The first edit of confirmed text deletes stale searchable chunks before debounce can leave them visible to retrieval.
-9. Failed embedding leaves no stale prior chunks.
-10. Restoring a version cannot leave newer Story chunks searchable.
-11. Foreign/stale version and media IDs are rejected before filesystem/database mutation.
-12. Path traversal and out-of-root media paths are rejected.
-13. Legacy media importer reads only from the known legacy Story media root.
-14. Legacy import is idempotent.
-15. Legacy import never mutates the original database or original media files.
-16. Story content never reaches `LegacyCircleAuthAdapter`.
-17. Voice transcription cannot select arbitrary executables/models/arguments.
-18. Voice transcription has no network fallback.
-19. Temporary voice files are removed on success/failure/timeout.
-20. Attached audio/images are not silently transcribed, OCR'd, or indexed.
-21. Public errors do not reveal SQLite paths, media paths, model/runtime paths, local AI ports, process stderr, or secrets.
+1. User A cannot read/save/confirm User B Story answers.
+2. User A cannot list/restore User B versions.
+3. User A cannot open/delete User B media.
+4. Renderer cannot inject local ownership or filesystem/model/runtime paths.
+5. Absolute legacy/current paths never cross preload.
+6. Draft/unconfirmed answers never exist in `story_chunks`.
+7. First edit of confirmed text removes stale chunks immediately.
+8. Failed embedding leaves no old searchable chunks.
+9. Restore cannot leave newer chunks searchable.
+10. Stale/foreign media/version IDs are rejected before mutation.
+11. Media traversal/out-of-root paths are rejected.
+12. Legacy importer reads media only from the known legacy Story root.
+13. Legacy import is idempotent across restart/crash.
+14. Legacy database/files are never mutated.
+15. Story content never reaches `LegacyCircleAuthAdapter`.
+16. Voice cannot select arbitrary executable/model/flags/paths.
+17. Voice has no network fallback.
+18. Temp voice files are removed on success/failure/timeout.
+19. Attachments are never silently transcribed, OCR'd, or indexed.
+20. Public errors leak no sensitive internals.
 
-## 19. Accessibility requirements
+## 19. Accessibility
 
-My Story must be fully keyboard-usable and screen-reader meaningful.
-
-Required coverage includes:
+Required coverage:
 
 - four view controls expose selected state;
-- confirmed/draft/indexing state is textual and not color-only;
+- draft/confirmed/index status is textual, not color-only;
 - chapter progress has accessible names;
-- guided Previous/Next controls have deterministic focus behavior;
-- Confirm memory communicates its privacy/searchability effect;
-- recording/transcribing status is announced through a suitable live region;
-- media controls have filenames/types in accessible names;
-- History restore dialog traps/returns focus through the app's existing accessible-dialog pattern;
-- errors use an accessible alert/status surface;
-- no interaction relies solely on hover.
+- Previous/Next focus behavior is deterministic;
+- Confirm memory communicates its searchability effect;
+- recording/transcription state uses an appropriate live region;
+- media buttons include filename/type in accessible names;
+- restore confirmation follows the app's accessible-dialog/focus-return pattern;
+- errors use accessible alert/status semantics;
+- no core action depends on hover alone.
 
 ## 20. Testing strategy
 
-### Database/migrations
+### Database/migration
+Fresh schema, additive upgrade, legacy tables absent/present/damaged, answer fallback, confirmation/language preservation, semantic history dedupe/cap, media reservation restart, idempotency, FK cleanup, original-source immutability.
 
-Tests cover fresh schema, additive upgrade, old Story tables present/absent/damaged, idempotent import, history cap/deduplication, and foreign-key cleanup.
-
-### Story repositories/service
-
-Tests cover per-user ownership, draft invalidation, confirmation, meaningful versioning, restore, index state transitions, safe errors, and stale/foreign handles.
+### Story service/repositories
+Ownership, draft autosave, first-edit invalidation/versioning, confirm/retry, meaningful versioning, restore, index transitions, stale/foreign handles, safe errors.
 
 ### Media
-
-Tests cover supported signatures, type mismatch, size limits, randomized private storage, path traversal, owned open/delete, missing files, legacy-root enforcement, and copy-not-move migration.
+Signatures, extension mismatch, size limits, eight-file cap, randomized storage, traversal defense, ownership, open/delete, missing files, legacy-root enforcement, crash-safe copy reservation.
 
 ### Voice
+WAV validation, 25 MiB cap, reference language mapping, busy guard, verified command construction, timeout, cleanup, missing/corrupt assets, safe stderr handling, and proof that no network fallback is invoked.
 
-Tests cover WAV validation, 25 MiB cap, busy guard, language validation, command construction, timeout, temp cleanup, missing/corrupt assets, safe stderr handling, and explicit proof that no network fallback is called.
-
-### Indexing/retrieval
-
-Tests cover confirmed-only indexing, immediate stale-chunk deletion, per-field atomic replacement, failed indexing, restore rebuild, user ownership, Story/Vault/all scopes, combined ranking, one query embedding, Story citations, and no query-time re-embedding of all Story answers.
+### Retrieval
+Confirmed-only indexing, stale-chunk deletion, atomic per-field replacement, failure status, restore rebuild, user ownership, Story/Vault/all scopes, combined ranking, one query embedding, citations, and no query-time re-embedding of every Story answer.
 
 ### IPC/preload/client
+Exact channels/payloads, field-by-field reconstruction, identity/path stripping, dedicated Story client only, no Story internals in renderer contract.
 
-Tests prove exact allowed channels/payloads, identity/path stripping, no direct preload use outside dedicated clients, and no Story internals in the renderer contract.
-
-### UI
-
-Tests cover empty/new Story, all four modes, 16 fields/six chapters, confirmed progress, deterministic follow-ups, draft save state, confirmation, indexing retry, Review edit navigation, History restore, media, recording/transcription states, safe errors, and accessibility.
+### UI/accessibility
+New/empty Story, all four modes, 16 memories/six chapters, confirmed progress, follow-ups, save states, confirmation/index retry, Review editing, History restore, attachments, recorder states, safe errors, keyboard/screen-reader behavior.
 
 ### Architecture/security
+Add a merge-blocking Story security suite and extend architecture scanning so Story private internals cannot leak into renderer/shared-Circle code.
 
-Add a dedicated merge-blocking Story security test suite and extend the architecture boundary scanner so Story private internals cannot leak into renderer/shared Circle code.
-
-### Release
-
-Final verification remains:
+Final gate:
 
 ```text
 npm ci
@@ -818,45 +596,50 @@ npm run check
 npm audit --audit-level=high
 ```
 
-Then require exact-head Linux CI plus the full Windows NSIS/package verification chain before merge readiness.
+Then require exact-head Linux CI and the complete Windows NSIS/package-verification chain.
 
-## 21. Implementation sequencing constraints
+## 21. Implementation sequencing
 
 The implementation plan must preserve these dependencies:
 
-1. schema + migration foundations before Story repositories;
-2. ownership-safe Story service before IPC/preload;
-3. draft/confirmation/history before indexing;
-4. private media store before UI attachments;
-5. voice asset/runtime service before UI transcription;
-6. Story indexing before generalized My Story/Vault retrieval scopes;
-7. complete renderer client before the `/stories` page;
-8. security/accessibility tests before merge readiness.
+1. schema and legacy-migration foundations;
+2. owned Story repositories/service;
+3. draft, confirmation and history semantics;
+4. Story indexing and stale-chunk guarantees;
+5. private media store/service;
+6. optional verified voice pack + transcription service;
+7. Story IPC/preload/renderer client;
+8. My Story studio UI;
+9. generalized Story/Vault private retrieval;
+10. security/accessibility/docs/final exact-head review.
 
-Every behavior-changing task follows real RED → GREEN TDD with focused commits and exact-head verification at meaningful checkpoints.
+Every behavior-changing task uses real RED → GREEN TDD and focused commits.
 
 ## 22. Interaction with Family Tree PR
 
-This design branch intentionally starts from current `main`, not the unmerged Family Tree feature branch. My Story has no data/runtime dependency on Family Tree.
+This design branch intentionally starts from current `main`, not the unmerged Family Tree branch. My Story has no data/runtime dependency on Family Tree.
 
-If Family Tree merges before My Story implementation, the My Story branch should be rebased/updated onto the new `main` before implementation starts. The expected route-level overlap is limited to replacing the `/stories` placeholder in `App.tsx`; implementation must preserve the real `/family-tree` route after rebasing.
+Before implementation begins, if Family Tree has merged, update/rebase `feature/my-story` onto the new `main`. Route work must preserve the real `/family-tree` route while replacing only the `/stories` placeholder.
+
+Because the Family Tree branch currently also contains the nodemailer security bump that makes high-severity audit green, the implementation baseline must re-check dependency audit after updating from the latest `main`; do not assume this older base remains release-clean.
 
 ## 23. Acceptance criteria
 
-The feature is complete only when:
+My Story is complete only when:
 
-- `/stories` is a real My Story memory studio, not a placeholder;
+- `/stories` is a real four-view memory studio;
 - all 16 reference memories and six chapters are present;
 - drafts survive restart without becoming searchable;
-- confirmation explicitly controls Story AI searchability;
-- editing confirmed text fails closed by removing stale chunks;
-- meaningful history/restore works and remains capped at 30;
-- photo/audio attachments are private, owned, and path-safe;
-- microphone recording can transcribe locally through verified optional Whisper assets without cloud fallback;
+- confirmation explicitly controls searchability;
+- editing confirmed text snapshots prior state and immediately removes stale chunks;
+- meaningful history/restore works with a 30-version cap;
+- photo/audio media is private, owned, validated and path-safe;
+- optional Windows-x64 Whisper voice setup/transcription works locally with no cloud fallback;
 - transcripts remain drafts until explicit confirmation;
-- My Story, Vault, and combined private AI query scopes work with readable citations;
-- legacy Story content/history/media migrates copy-safely and idempotently;
-- no Story content or local identity crosses the Circle compatibility boundary;
+- exact reference language options are available;
+- My Story, Vault and combined private-AI scopes work with readable citations;
+- legacy answers/history/media migrate copy-safely and idempotently;
+- Story data never crosses the Circle compatibility boundary;
 - security/accessibility suites pass;
 - `npm run check` and high-severity audit are green;
-- exact feature head passes Linux CI and the Windows installer/package chain.
+- exact feature head passes Linux CI and full Windows installer/package verification.
