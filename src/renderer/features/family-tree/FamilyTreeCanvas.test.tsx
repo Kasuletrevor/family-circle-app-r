@@ -115,7 +115,7 @@ describe('FamilyTreeCanvas', () => {
     const viewport = screen.getByTestId('family-tree-viewport')
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Fit tree' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fit family tree' }))
 
     const scale = Number(viewport.getAttribute('data-scale'))
     expect(scale).toBeGreaterThanOrEqual(0.25)
