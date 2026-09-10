@@ -107,7 +107,12 @@ confirmed_at     INTEGER
 UNIQUE(local_user_id, field_key)
 ```
 
-`index_status` is one of `not_indexed`, `pending`, `ready`, `failed`.
+`index_status` is one of:
+
+- `not_indexed`: draft/unconfirmed content;
+- `pending`: confirmed content with no current chunks because local AI is unavailable or indexing has not completed;
+- `ready`: current confirmed text has current chunks;
+- `failed`: an indexing attempt with an available local runtime failed.
 
 Rows are created/upserted only when a field is saved/imported. Merely opening My Story does not create 16 database rows; the renderer client merges persisted rows over the fixed schema.
 
@@ -216,7 +221,9 @@ Main first commits authoritative confirmation state:
 3. delete any old chunks;
 4. set `index_status='pending'`.
 
-After commit, `StoryIndexService` calls Nomic. Success atomically replaces that field's chunks and sets `ready`. Failure leaves the confirmed answer durable, with **no stale chunks**, and sets `failed`. The UI offers **Retry private indexing**.
+After commit, if the Nomic runtime is ready, `StoryIndexService` indexes immediately. Success atomically replaces that field's chunks and sets `ready`; an attempted embedding failure leaves no stale chunks and sets `failed`.
+
+If Private AI is not installed/ready, confirmation stays durable with `index_status='pending'`. Completing Private AI setup must trigger retry of the signed-in user's pending confirmed Story fields. Story capture never requires model readiness.
 
 There is no cloud fallback.
 
@@ -241,7 +248,7 @@ validate owned version
 → delete all current Story chunks
 → mark restored confirmed non-empty fields pending
 → commit
-→ rebuild confirmed Story index
+→ rebuild confirmed Story index when local AI is available
 ```
 
 A database failure leaves the current Story unchanged. A post-commit indexing failure leaves restored text canonical and fails closed with no stale newer chunks.
@@ -286,7 +293,7 @@ For each preserved local user ID:
 1. Prefer valid `my_stories.story_json` as the most complete source.
 2. Import only known fixed-schema keys.
 3. Preserve explicit legacy `__confirmed` state.
-4. If confirmation metadata predates the legacy record, treat non-empty answers as confirmed so previously searchable memories do not disappear after upgrade.
+4. If a legacy record predates the confirmation feature and has no explicit `__confirmed` metadata, treat its non-empty answers as confirmed so previously searchable memories do not disappear after upgrade.
 5. Preserve per-field `__languages`; otherwise fall back to matching `story_entries.language`, then `__language`, then `en`.
 6. If `my_stories` is absent/damaged, reconstruct known fields from `story_entries` where available.
 7. Unknown keys remain untouched in legacy source tables and are not silently promoted into the v1 schema.
@@ -306,7 +313,7 @@ Each legacy row gets a stable opaque `legacy_source_key` derived from its legacy
 3. copy the original into the **same reserved destination**;
 4. mark the row `active` after successful copy.
 
-On restart, a `copying` reservation is retried to the same destination rather than allocating another file. Thus a crash cannot create repeated DB items or repeated destination paths.
+On restart, a `copying` reservation is retried to the same destination rather than allocating another file. A user's `legacy-my-story-v1` import marker is written only after all eligible media reservations are active or explicitly classified as skipped diagnostics. Thus a crash cannot create repeated DB items or destination paths.
 
 Original media is copied, never moved or deleted. Missing/invalid/out-of-root legacy items are skipped and recorded as migration diagnostics; arbitrary source paths are never opened.
 
@@ -401,7 +408,6 @@ To faithfully recreate the reference first release, selectable Story/voice langu
 
 ```text
 en   English
-afr? no
 fr   French
 es   Spanish
 pt   Portuguese
@@ -410,9 +416,9 @@ ja   Japanese
 fil  Filipino (Tagalog)
 ```
 
-The literal `afr? no` line above is **not** a supported value; it documents that no additional language is implied. The actual supported codes are exactly `en`, `fr`, `es`, `pt`, `zh`, `ja`, `fil`.
+Whisper language mapping is identity except `fil -> tl`, matching the reference.
 
-Whisper language mapping is identity except `fil -> tl`, matching the reference. Unknown codes normalize/fail to the documented default `en` rather than invoking any network service.
+The initial/default language is `en`. Renderer locale variants may normalize to one of the seven supported base codes. Main rejects unsupported Story/voice language codes instead of forwarding them to a model or network service.
 
 Each answer stores one of these validated codes and passes it to local transcription as a hint.
 
@@ -433,7 +439,9 @@ My Story       → story_chunks
                  Granite
 ```
 
-Confirmed Story memory chunks include provenance such as:
+Story and Vault chunks must use the **same Nomic embedding model/version and the same `search_document:` prefix convention** so cosine scores are comparable. Story chunking uses the existing deterministic **1000-character chunks with 150-character overlap** after adding Story provenance. Query embedding uses the existing `search_query:` convention.
+
+Confirmed Story chunks carry provenance such as:
 
 ```text
 [[MY STORY | childhood | Life Story | Childhood and early memories]]
@@ -453,7 +461,7 @@ Vault documents
 My Story + Vault
 ```
 
-One Nomic query embedding is created per question. Candidate chunks are loaded only for the authenticated local user from the selected repositories, scored with the existing cosine ranking, combined, capped, and passed to local Granite.
+Exactly **one Nomic query embedding** is created per question. Candidate chunks are loaded only for the authenticated local user from selected repositories, scored together using the existing cosine-similarity rules, and reduced to **one shared top-5 across all selected private sources** before Granite generation. Do not take five Story plus five Vault chunks.
 
 Story citations render as `My Story › <Chapter> › <Memory label>`; Vault citations remain document-based. No filesystem path, embedding, internal port, or meaningful local DB identity is exposed.
 
@@ -513,13 +521,14 @@ Public Story inputs must never contain `localUserId`, absolute/stored paths, emb
 - Draft autosave failure keeps visible text and shows `Not saved yet`.
 - First edit of confirmed content snapshots old semantic state and removes stale chunks before normal debounce.
 - Embedding failure never loses a confirmed answer and never leaves stale chunks.
+- Confirmed fields remain `pending` while Private AI is unavailable and are retried after setup becomes ready.
 - Failed DB restore leaves current canonical Story unchanged.
 - Successful restore followed by indexing failure keeps restored text and fails closed for search.
 - Failed normal media copy creates no active DB item.
 - Interrupted legacy media copy resumes through its reserved destination.
 - Missing/corrupt voice assets show setup/repair guidance.
 - Microphone denial is a normal recoverable UI state.
-- Private AI absence never blocks Story capture/history/media; indexing remains pending/failed until local AI is ready.
+- Private AI absence never blocks Story capture/history/media.
 - Public errors hide SQLite paths, media paths, model paths, process stderr, local AI ports, and secrets.
 
 ## 18. Security invariants
@@ -532,7 +541,7 @@ Merge-blocking tests must prove:
 4. Renderer cannot inject local ownership or filesystem/model/runtime paths.
 5. Absolute legacy/current paths never cross preload.
 6. Draft/unconfirmed answers never exist in `story_chunks`.
-7. First edit of confirmed text removes stale chunks immediately.
+7. First edit of confirmed text snapshots prior state and removes stale chunks immediately.
 8. Failed embedding leaves no old searchable chunks.
 9. Restore cannot leave newer chunks searchable.
 10. Stale/foreign media/version IDs are rejected before mutation.
@@ -574,10 +583,10 @@ Ownership, draft autosave, first-edit invalidation/versioning, confirm/retry, me
 Signatures, extension mismatch, size limits, eight-file cap, randomized storage, traversal defense, ownership, open/delete, missing files, legacy-root enforcement, crash-safe copy reservation.
 
 ### Voice
-WAV validation, 25 MiB cap, reference language mapping, busy guard, verified command construction, timeout, cleanup, missing/corrupt assets, safe stderr handling, and proof that no network fallback is invoked.
+WAV validation, 25 MiB cap, exact reference language mapping, busy guard, verified command construction, timeout, cleanup, missing/corrupt assets, safe stderr handling, and proof that no network fallback is invoked.
 
 ### Retrieval
-Confirmed-only indexing, stale-chunk deletion, atomic per-field replacement, failure status, restore rebuild, user ownership, Story/Vault/all scopes, combined ranking, one query embedding, citations, and no query-time re-embedding of every Story answer.
+Confirmed-only indexing, stale-chunk deletion, atomic per-field replacement, pending/failed status, setup-triggered retry, restore rebuild, user ownership, Story/Vault/all scopes, same embedding contract, one query embedding, shared top-5 ranking, citations, and no query-time re-embedding of every Story answer.
 
 ### IPC/preload/client
 Exact channels/payloads, field-by-field reconstruction, identity/path stripping, dedicated Story client only, no Story internals in renderer contract.
@@ -636,8 +645,8 @@ My Story is complete only when:
 - photo/audio media is private, owned, validated and path-safe;
 - optional Windows-x64 Whisper voice setup/transcription works locally with no cloud fallback;
 - transcripts remain drafts until explicit confirmation;
-- exact reference language options are available;
-- My Story, Vault and combined private-AI scopes work with readable citations;
+- the seven exact reference language options are available;
+- My Story, Vault and combined private-AI scopes use one comparable Nomic ranking and readable citations;
 - legacy answers/history/media migrate copy-safely and idempotently;
 - Story data never crosses the Circle compatibility boundary;
 - security/accessibility suites pass;
