@@ -7,6 +7,7 @@ import { CreateCircleDialog } from './CreateCircleDialog'
 
 function service(createCircle: CircleClient['createCircle']): CircleClient {
   return {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails: vi.fn(async () => null),
