@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthUser } from '../../shared/desktopApi'
 import { registerCircleIpc, type CircleIpcService } from './circleIpc'
@@ -236,14 +237,14 @@ describe('Family Tree security boundaries', () => {
       kind: 'father',
       aPersonId: 'user:99',
       bPersonId: 'user:88',
-    })).rejects.toThrow('cycle')
+    })).rejects.toThrow('ancestry loop')
 
     expect(port.addTreeRelation).not.toHaveBeenCalled()
   })
 
   it('keeps Family Tree mutations outside local SQLite and Vault persistence', () => {
-    const migrations = readFileSync(new URL('../database/migrations.ts', import.meta.url), 'utf8')
-    const serviceSource = readFileSync(new URL('./CircleService.ts', import.meta.url), 'utf8')
+    const migrations = readFileSync(resolve(process.cwd(), 'src/main/database/migrations.ts'), 'utf8')
+    const serviceSource = readFileSync(resolve(process.cwd(), 'src/main/circle/CircleService.ts'), 'utf8')
 
     expect(migrations).not.toMatch(/family[_ -]?tree|tree_(?:relations?|positions?)/i)
     expect(serviceSource).not.toMatch(/VaultRepository|DatabaseSync|node:sqlite/)
