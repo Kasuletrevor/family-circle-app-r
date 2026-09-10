@@ -82,6 +82,30 @@ describe('FamilyTreePage position persistence', () => {
     }))
   })
 
+  it('keeps a successful dragged position across parent selection rerenders', async () => {
+    const saveTreePosition = renderPage(ownerOverview)
+    const alice = await screen.findByRole('button', { name: 'Select Alice' })
+    const originalX = Number(alice.getAttribute('data-x'))
+    const originalY = Number(alice.getAttribute('data-y'))
+
+    drag(alice, 70, 35)
+    await waitFor(() => expect(saveTreePosition).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      expect(Number(alice.getAttribute('data-x'))).not.toBe(originalX)
+      expect(Number(alice.getAttribute('data-y'))).not.toBe(originalY)
+    })
+    const draggedX = Number(alice.getAttribute('data-x'))
+    const draggedY = Number(alice.getAttribute('data-y'))
+
+    fireEvent.click(alice)
+    expect(alice).toHaveAttribute('aria-pressed', 'true')
+
+    await waitFor(() => {
+      expect(Number(alice.getAttribute('data-x'))).toBe(draggedX)
+      expect(Number(alice.getAttribute('data-y'))).toBe(draggedY)
+    })
+  })
+
   it('ordinary member can persist only the viewer node movement', async () => {
     const memberOverview: CircleOverview = {
       ...ownerOverview,
