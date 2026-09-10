@@ -100,6 +100,7 @@ describe('Home', () => {
       .mockResolvedValueOnce(snapshot)
 
     renderHome({
+      getOverview: vi.fn(),
       getHomeSnapshot,
       getMyCircles: vi.fn(async () => [snapshot.activeCircle]),
       getCircleDetails: vi.fn(async () => null),
