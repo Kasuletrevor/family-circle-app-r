@@ -1,5 +1,6 @@
 import type {
   AddTreeRelationInput,
+  CircleOverview,
   CreateCircleInput,
   CreateCircleResult,
   InviteMemberInput,
@@ -87,6 +88,41 @@ const managementSnapshot: CircleManagementSnapshot = {
 
 export class MockCircleClient implements CircleClient {
   private activeCircleId = 'kasule-family'
+
+  async getOverview(): Promise<CircleOverview> {
+    const active = circles.find((circle) => circle.id === this.activeCircleId)
+    if (!active) {
+      return {
+        status: 'empty',
+        reason: 'no-circles',
+        circles: [],
+        activeCircleId: null,
+        viewerPersonId: null,
+        viewerIsOwner: false,
+        tree: null,
+        notifications: [],
+      }
+    }
+
+    return structuredClone({
+      status: 'ready',
+      activeCircleId: active.id,
+      viewerPersonId: 'trevor',
+      viewerIsOwner: active.role === 'Circle owner',
+      circles: circles.map((circle) => ({ id: circle.id, name: circle.name, role: circle.role ?? 'Family member' })),
+      tree: {
+        group: { id: active.id, name: active.name },
+        people: [
+          { id: 'trevor', kind: 'user', name: 'Trevor Kasule', email: 'trevor@kasule.family', role: 'Parent' },
+          { id: 'jane', kind: 'user', name: 'Jane Kasule', email: 'jane@kasule.family', role: 'Sibling' },
+          { id: 'invite:mock-1', kind: 'invite', name: 'Pending relative', email: 'relative@example.test', role: 'Child' },
+        ],
+        relations: [{ id: 'rel-trevor-jane', kind: 'sibling', aPersonId: 'trevor', bPersonId: 'jane' }],
+        positions: [],
+      },
+      notifications: [],
+    } satisfies CircleOverview)
+  }
 
   async getHomeSnapshot(): Promise<HomeSnapshot> {
     return structuredClone(homeSnapshot)

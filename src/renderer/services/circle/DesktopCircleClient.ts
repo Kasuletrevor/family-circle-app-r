@@ -125,11 +125,15 @@ export class DesktopCircleClient implements CircleClient {
   private readonly operations: CircleDesktopOperations
 
   constructor(
-    private readonly getOverview: GetOverview = defaultOverview,
+    private readonly fetchOverview: GetOverview = defaultOverview,
     private readonly now: () => number = Date.now,
     operations: Partial<CircleDesktopOperations> = {},
   ) {
     this.operations = { ...defaultOperations, ...operations }
+  }
+
+  getOverview(): Promise<CircleOverview> {
+    return this.readOverview()
   }
 
   async getHomeSnapshot(): Promise<HomeSnapshot> {
@@ -308,7 +312,7 @@ export class DesktopCircleClient implements CircleClient {
   private readOverview(): Promise<CircleOverview> {
     if (this.overviewInFlight) return this.overviewInFlight
 
-    const request = this.getOverview()
+    const request = this.fetchOverview()
     this.overviewInFlight = request
     void request.then(
       () => {

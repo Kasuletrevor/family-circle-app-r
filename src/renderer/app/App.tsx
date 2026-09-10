@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import type { AuthUser } from '../../shared/desktopApi'
 import { CircleManagement } from '../features/circles/CircleManagement'
 import { MyCircles } from '../features/circles/MyCircles'
+import { FamilyTreePage } from '../features/family-tree/FamilyTreePage'
 import { Home } from '../features/home/Home'
 import { AskVault } from '../features/vault/AskVault'
 import { Vault } from '../features/vault/Vault'
@@ -11,7 +12,6 @@ import { TopBar } from './TopBar'
 import './App.css'
 
 const placeholderRoutes = [
-  { path: '/family-tree', title: 'Family Tree' },
   { path: '/stories', title: 'Stories' },
   { path: '/memories', title: 'Memories' },
   { path: '/settings', title: 'Settings' },
@@ -27,6 +27,7 @@ export function AuthenticatedApp({ user }: { user: AuthUser }) {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/circles" element={<MyCircles />} />
+            <Route path="/family-tree" element={<FamilyTreePage />} />
             <Route path="/members" element={<CircleManagement initialSection="members" />} />
             <Route path="/invitations" element={<CircleManagement initialSection="invitations" />} />
             <Route path="/vault" element={<Vault />} />

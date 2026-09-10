@@ -1,5 +1,6 @@
 import type {
   AddTreeRelationInput,
+  CircleOverview,
   CreateCircleInput,
   CreateCircleResult,
   InviteMemberInput,
@@ -10,6 +11,7 @@ import type {
 import type { CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 export interface CircleClient {
+  getOverview(): Promise<CircleOverview>
   getHomeSnapshot(): Promise<HomeSnapshot>
   getMyCircles(): Promise<CircleSummary[]>
   getCircleDetails(): Promise<CircleManagementSnapshot | null>
