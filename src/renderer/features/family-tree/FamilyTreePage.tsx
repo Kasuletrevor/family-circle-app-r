@@ -6,6 +6,7 @@ import {
   type CircleTreePersonRecord,
   type CircleTreeRelationRecord,
   type FamilyRelationshipKind,
+  type SaveTreePositionInput,
 } from '../../../shared/desktopApi'
 import { useAppServices } from '../../app/services'
 import type { CircleClient } from '../../services/circle/CircleClient'
@@ -89,8 +90,6 @@ function RelationshipInspector({
     </aside>
   )
 }
-
-const readOnlyPositionChange = async () => undefined
 
 export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClient } = {}) {
   const { circle: contextCircle } = useAppServices()
@@ -215,6 +214,10 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
     } catch {
       setRelationshipDeleteError('Could not remove this relationship. Please try again.')
     }
+  }
+
+  async function handlePositionChange(input: SaveTreePositionInput): Promise<void> {
+    await circle.saveTreePosition(input)
   }
 
   if (state === 'loading') {
@@ -414,11 +417,11 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
         <FamilyTreeCanvas
           layout={layout}
           paths={paths}
-          viewerPersonId={null}
-          viewerIsOwner={false}
+          viewerPersonId={overview.viewerPersonId}
+          viewerIsOwner={overview.viewerIsOwner}
           selection={selection}
           onSelectionChange={handleSelectionChange}
-          onPositionChange={readOnlyPositionChange}
+          onPositionChange={handlePositionChange}
         />
         {selectedPerson ? (
           <PersonInspector
