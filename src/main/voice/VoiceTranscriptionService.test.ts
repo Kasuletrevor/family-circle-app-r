@@ -184,15 +184,15 @@ describe('VoiceTranscriptionService', () => {
     const runner = new WhisperProcessRunner({ spawnProcess })
     vi.useFakeTimers()
     try {
-      const pending = runner.run({
+      const rejection = expect(runner.run({
         executable: 'C:\\owned\\whisper-cli.exe',
         args: ['-m','C:\\owned\\model.bin'],
         wavPath: 'C:\\owned\\audio.wav',
         outputBase: 'C:\\owned\\out',
         timeoutMs: 120_000,
-      })
+      })).rejects.toMatchObject({ code: 'timeout', message: 'Voice transcription timed out' })
       await vi.advanceTimersByTimeAsync(120_001)
-      await expect(pending).rejects.toMatchObject({ code: 'timeout', message: 'Voice transcription timed out' })
+      await rejection
       expect(child.killed).toBe(true)
       expect(spawnProcess).toHaveBeenCalledWith(
         'C:\\owned\\whisper-cli.exe',
