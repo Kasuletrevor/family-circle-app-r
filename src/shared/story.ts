@@ -129,7 +129,7 @@ export const STORY_FIELDS = [
     prompt: 'What message would you like future generations to hear in your own words?',
     input: 'textarea',
   },
-] as const satisfies readonly Array<{
+] as const satisfies ReadonlyArray<{
   key: string
   section: StorySection
   label: string
