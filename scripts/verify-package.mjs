@@ -50,12 +50,19 @@ function verifyConfig() {
   assert(build.nsis?.deleteAppDataOnUninstall === false, 'Uninstall must preserve app data')
   assert(files.includes('dist/**/*'), 'Compiled dist/ output is not packaged')
   assert(files.includes('config/offline-ai-manifest.json'), 'Private AI manifest is not packaged')
-  assert(!/\.env|\.gguf|\.bin|models\/|bin\//i.test(files.join('\n')), 'Packaging allowlist contains forbidden secret/model inputs')
+  assert(files.includes('config/offline-voice-manifest.json'), 'Offline voice manifest is not packaged')
+  assert(files.includes('third_party/whisper.cpp-LICENSE.txt'), 'whisper.cpp license is not packaged')
+  assert(
+    !/\.env|\.gguf|models\/|bin\/|whisper-cli\.exe|ggml-base\.bin|whisper-bin/i.test(files.join('\n')),
+    'Packaging allowlist contains forbidden secret/runtime/model inputs',
+  )
 
   const iconPath = resolve(root, build.win?.icon ?? '')
   assert(build.win?.icon === 'build/family-circle.ico', 'Unexpected Windows icon path')
   assert(existsSync(iconPath) && statSync(iconPath).size > 10_000, 'Windows icon is missing or invalid')
   assert(existsSync(resolve(root, 'config/offline-ai-manifest.json')), 'Private AI manifest file is missing')
+  assert(existsSync(resolve(root, 'config/offline-voice-manifest.json')), 'Offline voice manifest file is missing')
+  assert(existsSync(resolve(root, 'third_party/whisper.cpp-LICENSE.txt')), 'whisper.cpp license file is missing')
   verifyCompiledFilesWhenPresent()
 
   console.log('Packaging configuration verified')
@@ -93,8 +100,11 @@ function verifyNoForbiddenLooseResources(releaseDir) {
     const hasForbiddenSecret = base === '.env' || base.startsWith('.env.')
     const hasForbiddenModelFile = lower.endsWith('.gguf') || lower.endsWith('.bin')
     const hasForbiddenPrivateAiDirectory = !inNodeModules && /(^|\/)(models|bin)(\/|$)/i.test(normalized)
+    const hasForbiddenVoicePayload = lower.endsWith('whisper-cli.exe')
+      || lower.endsWith('ggml-base.bin')
+      || /(^|\/)offline-voice\/(runtime|models)(\/|$)/i.test(normalized)
 
-    if (hasForbiddenSecret || hasForbiddenModelFile || hasForbiddenPrivateAiDirectory) {
+    if (hasForbiddenSecret || hasForbiddenModelFile || hasForbiddenPrivateAiDirectory || hasForbiddenVoicePayload) {
       throw new Error(`Forbidden packaged resource: ${normalized}`)
     }
   }

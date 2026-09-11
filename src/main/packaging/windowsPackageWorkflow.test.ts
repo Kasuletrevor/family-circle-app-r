@@ -46,8 +46,14 @@ describe('Windows packaging workflow', () => {
 
   it('keeps the approved push/tag/base trigger policy and adds Story/voice PR path filters', () => {
     const source = workflow()
-    expect(source).toMatch(/push:\n\s+branches:\n\s+- feature\/windows-packaging-release\n\s+tags:\n\s+- 'v\*'/)
-    expect(source).not.toMatch(/push:[\s\S]*?branches:[\s\S]*?- main/)
+    const pushStart = source.indexOf('  push:\n')
+    const pullStart = source.indexOf('  pull_request:\n')
+    expect(pushStart).toBeGreaterThanOrEqual(0)
+    expect(pullStart).toBeGreaterThan(pushStart)
+    const pushBlock = source.slice(pushStart, pullStart)
+    expect(pushBlock).toContain('branches:\n      - feature/windows-packaging-release')
+    expect(pushBlock).toContain("tags:\n      - 'v*'")
+    expect(pushBlock).not.toContain('- main')
     expect(source).toMatch(/pull_request:\n\s+branches:\n\s+- main/)
     for (const path of [
       "config/offline-voice-manifest.json",
