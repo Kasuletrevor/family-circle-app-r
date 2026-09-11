@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, open, stat, unlink } from 'node:fs/promises'
-import { extname, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 
 export type StoryMediaType = 'photo' | 'audio'
 export const MAX_STORY_PHOTO_BYTES = 25 * 1024 * 1024
@@ -107,14 +107,25 @@ export class StoryMediaStore {
     return { ...descriptor, sizeBytes: metadata.size }
   }
 
-  async copyIntoStory(localUserId: number, sourcePath: string, extension: string): Promise<string> {
+  async reserveStoredPath(localUserId: number, extension: string): Promise<string> {
     requireUserId(localUserId)
     const safeExtension = requireStorageExtension(extension)
     const root = this.userMediaRoot(localUserId)
     await mkdir(root, { recursive: true })
     const destination = join(root, `${randomUUID()}${safeExtension}`)
-    await copyFile(sourcePath, destination)
     return relative(resolve(this.userDataPath), destination)
+  }
+
+  async copyIntoReserved(localUserId: number, sourcePath: string, storedRelativePath: string): Promise<void> {
+    const destination = this.resolveOwnedPath(localUserId, storedRelativePath)
+    await mkdir(dirname(destination), { recursive: true })
+    await copyFile(sourcePath, destination)
+  }
+
+  async copyIntoStory(localUserId: number, sourcePath: string, extension: string): Promise<string> {
+    const storedRelativePath = await this.reserveStoredPath(localUserId, extension)
+    await this.copyIntoReserved(localUserId, sourcePath, storedRelativePath)
+    return storedRelativePath
   }
 
   resolveOwnedPath(localUserId: number, storedRelativePath: string): string {
