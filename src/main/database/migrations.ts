@@ -146,6 +146,99 @@ function ensureVaultChunks(db: DatabaseSync): void {
   `)
 }
 
+function ensureStoryAnswers(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS story_answers (
+      id INTEGER PRIMARY KEY,
+      local_user_id INTEGER NOT NULL,
+      field_key TEXT NOT NULL,
+      schema_version INTEGER NOT NULL,
+      section TEXT NOT NULL,
+      label TEXT NOT NULL,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL DEFAULT '',
+      language TEXT NOT NULL DEFAULT 'en',
+      confirmed INTEGER NOT NULL DEFAULT 0,
+      index_status TEXT NOT NULL DEFAULT 'not_indexed',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      confirmed_at INTEGER,
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(local_user_id, field_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_story_answers_user
+      ON story_answers(local_user_id, field_key);
+  `)
+}
+
+function ensureStoryVersions(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS story_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      local_user_id INTEGER NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      semantic_signature TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_story_versions_user_created
+      ON story_versions(local_user_id, created_at DESC, id DESC);
+  `)
+}
+
+function ensureStoryMediaItems(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS story_media_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      local_user_id INTEGER NOT NULL,
+      field_key TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      stored_relative_path TEXT NOT NULL,
+      storage_status TEXT NOT NULL DEFAULT 'active',
+      legacy_source_key TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(local_user_id, legacy_source_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_story_media_user_field
+      ON story_media_items(local_user_id, field_key, created_at DESC, id DESC);
+  `)
+}
+
+function ensureStoryChunks(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS story_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      story_answer_id INTEGER NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      embedding_blob BLOB NOT NULL,
+      embedding_model TEXT NOT NULL,
+      index_version INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (story_answer_id) REFERENCES story_answers(id) ON DELETE CASCADE,
+      UNIQUE(story_answer_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_story_chunks_answer ON story_chunks(story_answer_id);
+  `)
+}
+
+function ensureStoryImportState(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS story_import_state (
+      local_user_id INTEGER NOT NULL,
+      migration_key TEXT NOT NULL,
+      completed_at INTEGER NOT NULL,
+      PRIMARY KEY(local_user_id, migration_key),
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `)
+}
+
 export function runMigrations(db: DatabaseSync): void {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -157,6 +250,11 @@ export function runMigrations(db: DatabaseSync): void {
     ensurePasswordResetTokens(db)
     ensureVaultDocuments(db)
     ensureVaultChunks(db)
+    ensureStoryAnswers(db)
+    ensureStoryVersions(db)
+    ensureStoryMediaItems(db)
+    ensureStoryChunks(db)
+    ensureStoryImportState(db)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
