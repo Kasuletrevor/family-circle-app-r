@@ -1,9 +1,10 @@
+import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from '../ai/embeddingContract'
 import type { VaultDocumentInternal } from './vaultModels'
 import type { VaultIndexChunkInput } from './VaultChunkRepository'
 import { chunkDocument } from './chunkDocument'
 
-export const INDEX_VERSION = 1
-export const EMBEDDING_MODEL_ID = 'nomic-embed-text-v1.5.Q4_K_M'
+export { EMBEDDING_MODEL_ID } from '../ai/embeddingContract'
+export const INDEX_VERSION = EMBEDDING_INDEX_VERSION
 
 export interface VaultIndexDocumentRepository {
   getByIdForUser(localUserId: number, documentId: number): Promise<VaultDocumentInternal | null>
@@ -95,7 +96,7 @@ export class VaultIndexService {
         id,
         indexedChunks,
         EMBEDDING_MODEL_ID,
-        INDEX_VERSION,
+        EMBEDDING_INDEX_VERSION,
       )
     } catch {
       try {
