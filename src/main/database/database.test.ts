@@ -82,6 +82,44 @@ describe('database preparation', () => {
     db.close()
   })
 
+  it('imports legacy My Story only from the rebuild-owned copy and leaves the original database unchanged', async () => {
+    const root = createTempRoot()
+    const paths = {
+      userDataPath: join(root, 'new-app'),
+      appDataPath: join(root, 'app-data'),
+    }
+    const resolved = resolveDatabasePaths(paths)
+    createLegacyDatabase(resolved.legacyPath)
+
+    const legacy = new DatabaseSync(resolved.legacyPath)
+    legacy.exec(`
+      CREATE TABLE my_stories (user_id INTEGER PRIMARY KEY, story_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      INSERT INTO my_stories (user_id, story_json, updated_at)
+      VALUES (1, '{"childhood":"Copied memory","__confirmed":{"childhood":true},"__language":"en"}', 1234);
+    `)
+    legacy.close()
+    const sourceBefore = readFileSync(resolved.legacyPath)
+
+    const db = await prepareDatabase(paths)
+    const sourceAfter = readFileSync(resolved.legacyPath)
+
+    expect(Buffer.compare(sourceBefore, sourceAfter)).toBe(0)
+    expect(db.prepare(`
+      SELECT answer, confirmed, index_status, confirmed_at
+        FROM story_answers WHERE local_user_id = 1 AND field_key = 'childhood'
+    `).get()).toEqual({
+      answer: 'Copied memory',
+      confirmed: 1,
+      index_status: 'pending',
+      confirmed_at: 1234,
+    })
+    expect(db.prepare(`
+      SELECT COUNT(*) AS n FROM story_import_state
+       WHERE local_user_id = 1 AND migration_key = 'legacy-my-story-v1'
+    `).get()).toEqual({ n: 1 })
+    db.close()
+  })
+
   it('refuses to migrate when active and legacy paths resolve to the same file', async () => {
     const root = createTempRoot()
     await expect(prepareDatabase({
