@@ -43,4 +43,22 @@ describe('Windows packaging workflow', () => {
     expect(source).toMatch(/release:[\s\S]*?permissions:\n\s+contents: write/)
     expect(source).toContain('actions/download-artifact@')
   })
+
+  it('keeps the approved push/tag/base trigger policy and adds Story/voice PR path filters', () => {
+    const source = workflow()
+    expect(source).toMatch(/push:\n\s+branches:\n\s+- feature\/windows-packaging-release\n\s+tags:\n\s+- 'v\*'/)
+    expect(source).not.toMatch(/push:[\s\S]*?branches:[\s\S]*?- main/)
+    expect(source).toMatch(/pull_request:\n\s+branches:\n\s+- main/)
+    for (const path of [
+      "config/offline-voice-manifest.json",
+      "third_party/whisper.cpp-LICENSE.txt",
+      "src/main/story/**",
+      "src/main/voice/**",
+      "src/renderer/features/story/**",
+      "src/renderer/services/story/**",
+      "src/shared/story.ts",
+    ]) {
+      expect(source).toContain(`- '${path}'`)
+    }
+  })
 })
