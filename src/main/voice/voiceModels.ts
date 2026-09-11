@@ -66,11 +66,12 @@ export function parseVoiceManifest(raw: string): OfflineAiManifest {
   } catch {
     throw new Error('Invalid offline voice manifest')
   }
-  if (!isRecord(parsed)
-    || parsed.version !== VOICE_PACK_VERSION
-    || !Array.isArray(parsed.files)
-    || parsed.files.length !== PINNED_FILES.length
-    || !PINNED_FILES.every((pinned, index) => isExactPinnedFile(parsed.files[index], pinned))) {
+  if (!isRecord(parsed) || parsed.version !== VOICE_PACK_VERSION || !Array.isArray(parsed.files)) {
+    throw new Error('Invalid offline voice manifest')
+  }
+  const files = parsed.files
+  if (files.length !== PINNED_FILES.length
+    || !PINNED_FILES.every((pinned, index) => isExactPinnedFile(files[index], pinned))) {
     throw new Error('Invalid offline voice manifest')
   }
   return {
