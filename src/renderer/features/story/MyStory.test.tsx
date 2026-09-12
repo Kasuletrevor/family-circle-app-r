@@ -63,10 +63,10 @@ function client(initial: StoryPublicState) {
     openMedia: vi.fn(async () => ({ success: true as const })),
     deleteMedia: vi.fn(async () => ({ success: true as const })),
     transcribeRecording: vi.fn(async () => ({ transcript: '' })),
-    getVoiceStatus: vi.fn(async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
-    startVoiceSetup: vi.fn(async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
-    pauseVoiceSetup: vi.fn(async () => ({ state: 'paused', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
-    repairVoiceSetup: vi.fn(async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
+    getVoiceStatus: vi.fn(async () => ({ state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
+    startVoiceSetup: vi.fn(async () => ({ state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
+    pauseVoiceSetup: vi.fn(async () => ({ state: 'paused' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
+    repairVoiceSetup: vi.fn(async () => ({ state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
     onVoiceSetupProgress: vi.fn(() => () => undefined),
   }
   return storyClient
