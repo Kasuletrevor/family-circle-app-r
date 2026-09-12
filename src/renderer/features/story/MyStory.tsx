@@ -57,18 +57,20 @@ function optimisticDraft(
   language: StoryLanguage,
 ): StoryPublicState {
   const existing = answerFor(state, field.key)
-  const next: StoryPublicAnswer = {
+  const base: StoryPublicAnswer = existing ?? {
     fieldKey: field.key,
     section: field.section,
     label: field.label,
     question: field.prompt,
-    answer: value,
+    answer: '',
     language,
     confirmed: false,
     indexStatus: 'not_indexed',
     updatedAt: Date.now(),
     confirmedAt: null,
-    ...existing,
+  }
+  const next: StoryPublicAnswer = {
+    ...base,
     answer: value,
     language,
     confirmed: false,
@@ -98,23 +100,34 @@ function fieldControl(
   onValueChange: (value: string) => void,
   onLanguageChange: (language: StoryLanguage) => void,
 ) {
-  const common = {
-    id: `story-${field.key}`,
-    value,
-    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => onValueChange(event.target.value),
-  }
-
   return (
     <>
       {field.input === 'textarea' ? (
-        <textarea {...common} rows={6} aria-label={field.label} />
+        <textarea
+          id={`story-${field.key}`}
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          rows={6}
+          aria-label={field.label}
+        />
       ) : field.input === 'select' ? (
-        <select {...common} aria-label={field.label}>
+        <select
+          id={`story-${field.key}`}
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          aria-label={field.label}
+        >
           <option value="">Choose one</option>
           {field.options?.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
       ) : (
-        <input {...common} type="text" aria-label={field.label} />
+        <input
+          id={`story-${field.key}`}
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          type="text"
+          aria-label={field.label}
+        />
       )}
       <label className="my-story__language">
         <span>Language for this memory</span>
@@ -179,7 +192,7 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
     value: string,
     language: StoryLanguage,
     revision: number,
-  ) {
+  ): Promise<boolean> {
     setSaveStatus('saving')
     try {
       const next = await client.saveDraft(fieldKey, value, language)
@@ -188,8 +201,10 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
         commitLocal(next)
       }
       setSaveStatus('saved')
+      return true
     } catch {
       setSaveStatus('error')
+      return false
     }
   }
 
@@ -232,34 +247,27 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
     scheduleDraft(field, value, language)
   }
 
-  async function flushPendingDrafts() {
+  async function flushField(fieldKey: StoryFieldKey): Promise<boolean> {
     const current = storyRef.current
-    if (!current) return
-    const fields = [...dirtyFields.current]
-    for (const fieldKey of fields) {
-      const timer = timers.current.get(fieldKey)
-      if (timer) clearTimeout(timer)
-      timers.current.delete(fieldKey)
-      const answer = answerFor(storyRef.current ?? current, fieldKey)
-      if (!answer) continue
-      const revision = revisions.current.get(fieldKey) ?? 0
-      await persistDraft(fieldKey, answer.answer, answer.language, revision)
+    const answer = current ? answerFor(current, fieldKey) : undefined
+    if (!answer) return true
+    const timer = timers.current.get(fieldKey)
+    if (timer) clearTimeout(timer)
+    timers.current.delete(fieldKey)
+    const revision = revisions.current.get(fieldKey) ?? 0
+    return persistDraft(fieldKey, answer.answer, answer.language, revision)
+  }
+
+  async function flushPendingDrafts(): Promise<boolean> {
+    for (const fieldKey of [...dirtyFields.current]) {
+      if (!await flushField(fieldKey)) return false
     }
+    return true
   }
 
   async function confirmField(fieldKey: StoryFieldKey) {
     try {
-      if (dirtyFields.current.has(fieldKey)) {
-        const current = storyRef.current
-        const answer = current ? answerFor(current, fieldKey) : undefined
-        if (answer) {
-          const timer = timers.current.get(fieldKey)
-          if (timer) clearTimeout(timer)
-          timers.current.delete(fieldKey)
-          const revision = revisions.current.get(fieldKey) ?? 0
-          await persistDraft(fieldKey, answer.answer, answer.language, revision)
-        }
-      }
+      if (dirtyFields.current.has(fieldKey) && !await flushField(fieldKey)) return
       const next = await client.confirmField(fieldKey)
       commitLocal(next)
       setSaveStatus('saved')
@@ -280,7 +288,7 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
   async function saveNow() {
     setSaveStatus('saving')
     try {
-      await flushPendingDrafts()
+      if (!await flushPendingDrafts()) return
       const next = await client.saveNow()
       commitLocal(next)
       setSaveStatus('saved')
@@ -346,7 +354,6 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
       <section className="my-story">
         <h1>My Story</h1>
         <p role="alert">We couldn't load My Story. Your private data has not been changed.</p>
-        <button type="button" onClick={() => window.location.reload()}>Try again</button>
       </section>
     )
   }
