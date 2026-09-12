@@ -327,15 +327,19 @@ function safeStoryMediaList(value: unknown): StoryMediaPublicItem[] {
 
 function safeStoryMediaAdd(value: unknown): StoryMediaAddResult {
   const raw = recordOf(value)
-  const items = (Array.isArray(raw.items) ? raw.items : []).flatMap((item) => {
+  const items: StoryMediaAddResult['items'] = []
+  for (const item of Array.isArray(raw.items) ? raw.items : []) {
     const safe = safeStoryMediaItem(item)
-    if (safe) return [safe]
+    if (safe) {
+      items.push(safe)
+      continue
+    }
     const row = recordOf(item)
     const outcome = row.outcome === 'unsupported' || row.outcome === 'too-large' || row.outcome === 'failed'
       ? row.outcome
       : 'failed'
-    return [{ fileName: String(row.fileName ?? ''), outcome }]
-  })
+    items.push({ fileName: String(row.fileName ?? ''), outcome })
+  }
   return { canceled: raw.canceled === true, items }
 }
 
