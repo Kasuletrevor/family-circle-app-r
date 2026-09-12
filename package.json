@@ -22,7 +22,7 @@
     "bcryptjs": "3.0.3",
     "lucide-react": "1.39.0",
     "mammoth": "1.12.2",
-    "nodemailer": "9.0.6",
+    "nodemailer": "9.1.1",
     "pdf-parse": "2.4.5",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -49,7 +49,9 @@
     "productName": "Family Circle",
     "files": [
       "dist/**/*",
-      "config/offline-ai-manifest.json"
+      "config/offline-ai-manifest.json",
+      "config/offline-voice-manifest.json",
+      "third_party/whisper.cpp-LICENSE.txt"
     ],
     "directories": {
       "output": "release",

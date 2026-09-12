@@ -15,8 +15,15 @@ on:
       - 'package-lock.json'
       - 'build/**'
       - 'config/offline-ai-manifest.json'
+      - 'config/offline-voice-manifest.json'
+      - 'third_party/whisper.cpp-LICENSE.txt'
       - 'scripts/verify-package.mjs'
       - 'src/main/packaging/**'
+      - 'src/main/story/**'
+      - 'src/main/voice/**'
+      - 'src/renderer/features/story/**'
+      - 'src/renderer/services/story/**'
+      - 'src/shared/story.ts'
       - '.github/workflows/windows-package.yml'
 
 permissions:

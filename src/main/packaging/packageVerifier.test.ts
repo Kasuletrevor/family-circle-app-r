@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -30,6 +30,15 @@ describe('Windows package verifier', () => {
     const result = runVerifier('--config-only')
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Packaging configuration verified')
+  })
+
+  it('requires the optional voice manifest/license while excluding its runtime and model', () => {
+    const source = readFileSync(verifier, 'utf8')
+    expect(source).toContain('config/offline-voice-manifest.json')
+    expect(source).toContain('third_party/whisper.cpp-LICENSE.txt')
+    expect(source).toMatch(/offline-voice-manifest\.json[\s\S]*existsSync/)
+    expect(source).toMatch(/whisper\.cpp-LICENSE\.txt[\s\S]*existsSync/)
+    expect(source).toMatch(/whisper-cli|ggml-base|offline-voice\/runtime|offline-voice\/models/i)
   })
 
   it('accepts exactly one expected Windows installer', () => {
@@ -81,6 +90,18 @@ describe('Windows package verifier', () => {
     const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources')
     mkdirSync(resourcesDir, { recursive: true })
     writeFileSync(resolve(resourcesDir, 'private-ai.bin'), 'must never ship')
+
+    const result = runVerifier('--release-dir', releaseDir)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Forbidden packaged resource')
+  })
+
+  it('rejects loose Whisper runtime/model payloads if they appear in packaged resources', () => {
+    const releaseDir = tempReleaseDir()
+    writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+    const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources', 'offline-voice', 'runtime')
+    mkdirSync(resourcesDir, { recursive: true })
+    writeFileSync(resolve(resourcesDir, 'whisper-cli.exe'), 'must never ship')
 
     const result = runVerifier('--release-dir', releaseDir)
     expect(result.status).not.toBe(0)

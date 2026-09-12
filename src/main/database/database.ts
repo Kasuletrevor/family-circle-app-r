@@ -1,6 +1,8 @@
 import { copyFileSync, existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { StoryLegacyImporter } from '../story/StoryLegacyImporter'
+import { StoryMediaStore } from '../story/StoryMediaStore'
 import { runMigrations } from './migrations'
 
 export interface DatabasePathInputs {
@@ -57,6 +59,12 @@ export async function prepareDatabase(paths: DatabasePathInputs): Promise<Databa
     db.exec('PRAGMA foreign_keys = ON')
     db.exec('PRAGMA journal_mode = WAL')
     runMigrations(db)
+    await new StoryLegacyImporter({
+      db,
+      appDataPath: paths.appDataPath,
+      userDataPath: paths.userDataPath,
+      mediaStore: new StoryMediaStore(paths.userDataPath),
+    }).importForExistingUsers()
     return db
   } catch (error) {
     db.close()
