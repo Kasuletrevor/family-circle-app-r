@@ -1,0 +1,254 @@
+.my-story {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 0 2rem;
+  color: #232a35;
+}
+
+.my-story__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.my-story__header h1,
+.my-story__memory h2,
+.my-story__chapter h2 {
+  margin: 0;
+}
+
+.my-story__header p,
+.my-story__memory p {
+  margin: 0.35rem 0 0;
+}
+
+.my-story__eyebrow {
+  color: #6f7885;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.my-story__save-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  color: #6f7885;
+  font-size: 0.875rem;
+}
+
+.my-story button,
+.my-story select,
+.my-story input,
+.my-story textarea {
+  font: inherit;
+}
+
+.my-story button {
+  border: 1px solid #d9dee7;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #303744;
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+}
+
+.my-story button:hover:not(:disabled) {
+  border-color: #aeb8c8;
+  background: #f8f9fb;
+}
+
+.my-story button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.my-story__primary {
+  border-color: #4758d6 !important;
+  background: #4758d6 !important;
+  color: #fff !important;
+}
+
+.my-story__tabs,
+.my-story__chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.my-story__tabs button[aria-pressed='true'] {
+  border-color: #4758d6;
+  background: #eef0ff;
+  color: #3443b5;
+  font-weight: 700;
+}
+
+.my-story__chapters {
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #e7eaf0;
+}
+
+.my-story__chapters button {
+  border-color: transparent;
+  background: transparent;
+  padding-inline: 0.45rem;
+  color: #5b6574;
+}
+
+.my-story__guided,
+.my-story__chapter-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.my-story__counter {
+  margin: 0;
+  color: #77808f;
+  font-size: 0.875rem;
+}
+
+.my-story__memory {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #e2e6ed;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 1.25rem;
+  box-shadow: 0 6px 22px rgba(35, 42, 53, 0.04);
+}
+
+.my-story__memory--guided {
+  padding: 1.5rem;
+}
+
+.my-story__memory-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.my-story__state {
+  border-radius: 999px;
+  background: #f0f2f5;
+  color: #67717f;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.my-story__state--confirmed {
+  background: #e8f7ef;
+  color: #26724b;
+}
+
+.my-story__prompt {
+  color: #5c6675;
+  line-height: 1.55;
+}
+
+.my-story__memory input,
+.my-story__memory textarea,
+.my-story__memory select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d8dde6;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #232a35;
+  padding: 0.75rem;
+}
+
+.my-story__memory textarea {
+  resize: vertical;
+  min-height: 8rem;
+  line-height: 1.5;
+}
+
+.my-story__memory input:focus,
+.my-story__memory textarea:focus,
+.my-story__memory select:focus,
+.my-story button:focus-visible {
+  outline: 3px solid rgba(71, 88, 214, 0.2);
+  outline-offset: 2px;
+  border-color: #4758d6;
+}
+
+.my-story__language {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 19rem;
+  color: #646f7e;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.my-story__followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.my-story__followups button {
+  border-radius: 999px;
+  background: #f7f8fb;
+  padding: 0.45rem 0.7rem;
+  color: #566171;
+  font-size: 0.82rem;
+}
+
+.my-story__followup-note {
+  border-left: 3px solid #8a96eb;
+  padding-left: 0.75rem;
+  color: #596474;
+  font-size: 0.9rem;
+}
+
+.my-story__memory-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid #edf0f4;
+  padding-top: 0.9rem;
+  color: #6b7584;
+  font-size: 0.85rem;
+}
+
+.my-story__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.my-story__guided-navigation {
+  display: flex;
+  justify-content: space-between;
+}
+
+.my-story__chapter {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.my-story__chapter > h2 {
+  padding: 1rem 0 0.25rem;
+  font-size: 1.05rem;
+  color: #4d5765;
+}
+
+@media (max-width: 760px) {
+  .my-story__header,
+  .my-story__memory-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .my-story__save-area {
+    justify-content: space-between;
+  }
+}
