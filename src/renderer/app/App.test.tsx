@@ -118,8 +118,8 @@ describe('App shell', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'My Story' })).toBeInTheDocument()
-    expect(screen.getByText('0 of 16 memories confirmed')).toBeInTheDocument()
+    expect(await screen.findByText('0 of 16 memories confirmed')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My Story' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Stories' })).toBeNull()
   })
 })
