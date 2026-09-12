@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDesktopApi } from './createDesktopApi'
 
 describe('createDesktopApi', () => {
-  it('exposes only approved application, auth, onboarding, Circle, Vault, and Private AI capabilities', async () => {
+  it('exposes only approved application, auth, onboarding, Circle, Vault, Private AI, and Story capabilities', async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'app:get-version') return '0.1.0'
       if (channel === 'app:get-platform') return 'win32'
@@ -60,7 +60,7 @@ describe('createDesktopApi', () => {
     const subscribe = vi.fn(() => () => undefined)
     const api = createDesktopApi(invoke, subscribe)
 
-    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'privateAi'])
+    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'privateAi', 'story'])
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
