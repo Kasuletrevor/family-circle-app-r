@@ -16,6 +16,8 @@ import { registerCircleIpc } from './circle/circleIpc'
 import { CircleService } from './circle/CircleService'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
+import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
+import { registerStoryIpc } from './story/storyIpc'
 import { DocumentExtractor } from './vault/DocumentExtractor'
 import { VaultChunkRepository } from './vault/VaultChunkRepository'
 import { VaultFileStore } from './vault/VaultFileStore'
@@ -30,7 +32,9 @@ let mainWindow: BrowserWindow | null = null
 let database: DatabaseSync | null = null
 let aiRuntimeManager: AiRuntimeManager | null = null
 
-interface AppServices {
+type StoryServices = ReturnType<typeof createStoryServices>
+
+interface AppServices extends StoryServices {
   authService: AuthService
   circleService: CircleService
   vaultService: VaultService
@@ -46,10 +50,18 @@ function registerDesktopIpc(services: AppServices) {
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
   registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)
+  registerStoryIpc(ipcMain, {
+    story: services.storyService,
+    media: services.storyMediaService,
+    voiceAssets: services.voiceAssetService,
+    transcription: services.voiceTranscriptionService,
+  })
   registerPrivateAiIpc(ipcMain, services.privateAiService, () => {
-    void services.sessions.restore().then((current) => {
-      if (current) void services.vaultIndexService.indexPendingDocuments(current.id)
-    }).catch(() => undefined)
+    void retryPendingPrivateIndexes(
+      services.sessions,
+      services.vaultIndexService,
+      services.storyIndexService,
+    ).catch(() => undefined)
   })
 }
 
@@ -118,6 +130,30 @@ async function createAppServices(): Promise<AppServices> {
     },
   })
 
+  const storyServices = createStoryServices({
+    db: database,
+    sessions,
+    userDataPath,
+    voiceManifestPath: join(app.getAppPath(), 'config', 'offline-voice-manifest.json'),
+    runtime: aiRuntimeManager,
+    nomic: nomicClient,
+    privateAiAssets: privateAiService,
+    picker: {
+      async chooseMedia(mediaType) {
+        const result = await dialog.showOpenDialog({
+          properties: ['openFile', 'multiSelections'],
+          filters: mediaType === 'photo'
+            ? [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }]
+            : [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'webm'] }],
+        })
+        return result.canceled ? [] : result.filePaths
+      },
+    },
+    opener: {
+      openPath: (absolutePath) => shell.openPath(absolutePath),
+    },
+  })
+
   const services: AppServices = {
     authService: new AuthService(users, sessions, recovery, circle),
     circleService: new CircleService(sessions, users, circle),
@@ -126,12 +162,12 @@ async function createAppServices(): Promise<AppServices> {
     privateAiService,
     vaultIndexService,
     sessions,
+    ...storyServices,
   }
 
-  void privateAiService.getStatus().then(async (status) => {
+  void privateAiService.getStatus().then((status) => {
     if (status.state !== 'ready') return
-    const current = await sessions.restore()
-    if (current) void vaultIndexService.indexPendingDocuments(current.id)
+    return retryPendingPrivateIndexes(sessions, vaultIndexService, storyServices.storyIndexService)
   }).catch(() => undefined)
 
   return services
