@@ -83,4 +83,43 @@ describe('App shell', () => {
     expect(screen.getByText('Your private documents stay on this computer.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
   })
+
+  it('routes /stories to the real private My Story studio instead of the Stories placeholder', async () => {
+    Object.defineProperty(window, 'familyCircle', {
+      configurable: true,
+      value: {
+        story: {
+          get: async () => ({ schemaVersion: 1, answers: [], confirmedCount: 0 }),
+          saveDraft: async () => ({ schemaVersion: 1, answers: [], confirmedCount: 0 }),
+          confirmField: async () => ({ schemaVersion: 1, answers: [], confirmedCount: 0 }),
+          retryIndexing: async () => ({ schemaVersion: 1, answers: [], confirmedCount: 0 }),
+          saveNow: async () => ({ schemaVersion: 1, answers: [], confirmedCount: 0 }),
+          getHistory: async () => [],
+          restoreVersion: async () => ({ schemaVersion: 1, answers: [], confirmedCount: 0 }),
+          chooseAndAddMedia: async () => ({ canceled: true, items: [] }),
+          listMedia: async () => [],
+          openMedia: async () => ({ success: true }),
+          deleteMedia: async () => ({ success: true }),
+          transcribeRecording: async () => ({ transcript: '' }),
+          getVoiceStatus: async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null }),
+          startVoiceSetup: async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null }),
+          pauseVoiceSetup: async () => ({ state: 'paused', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null }),
+          repairVoiceSetup: async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null }),
+          onVoiceSetupProgress: () => () => undefined,
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/stories']}>
+        <AppServicesProvider services={{ circle: new MockCircleClient() }}>
+          <App user={user} />
+        </AppServicesProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'My Story' })).toBeInTheDocument()
+    expect(screen.getByText('0 of 16 memories confirmed')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Stories' })).toBeNull()
+  })
 })
