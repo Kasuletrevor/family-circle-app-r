@@ -84,8 +84,8 @@ describe('MyStory', () => {
     ))
     render(<MyStory client={storyClient} />)
 
-    expect(await screen.findByRole('heading', { name: 'My Story' })).toBeInTheDocument()
-    expect(screen.getByText('1 of 16 memories confirmed')).toBeInTheDocument()
+    expect(await screen.findByText('1 of 16 memories confirmed')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My Story' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Guided' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('heading', { name: 'Full name' })).toBeInTheDocument()
     expect(screen.getByText('What is your full name, and is there a story behind it?')).toBeInTheDocument()
