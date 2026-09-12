@@ -14,6 +14,7 @@ export function HistoryStoryView({
   onRestore(versionId: number): Promise<void>
 }) {
   const [restoreTarget, setRestoreTarget] = useState<StoryVersionSummary | null>(null)
+  const [restoreError, setRestoreError] = useState(false)
   const restoreFocus = useRef<HTMLElement | null>(null)
   const ordered = useMemo(
     () => [...versions].sort((left, right) => right.createdAt - left.createdAt || right.versionId - left.versionId),
@@ -28,15 +29,21 @@ export function HistoryStoryView({
 
   function cancelRestore() {
     setRestoreTarget(null)
+    setRestoreError(false)
     returnFocus()
   }
 
   async function confirmRestore() {
     if (!restoreTarget) return
     const versionId = restoreTarget.versionId
-    await onRestore(versionId)
-    setRestoreTarget(null)
-    returnFocus()
+    setRestoreError(false)
+    try {
+      await onRestore(versionId)
+      setRestoreTarget(null)
+      returnFocus()
+    } catch {
+      setRestoreError(true)
+    }
   }
 
   return (
@@ -48,6 +55,9 @@ export function HistoryStoryView({
 
       {loading && <p>Loading Story history…</p>}
       {error && <p role="alert">Story history could not be loaded. Try again.</p>}
+      {restoreError && (
+        <p role="alert">That Story version could not be restored. Your current Story was not changed. Try again.</p>
+      )}
       {!loading && !error && ordered.length === 0 && <p className="my-story__empty">No saved Story versions yet.</p>}
 
       <div className="my-story__history-list">
@@ -63,6 +73,7 @@ export function HistoryStoryView({
               aria-label={`Restore version ${version.versionId}`}
               onClick={(event) => {
                 restoreFocus.current = event.currentTarget
+                setRestoreError(false)
                 setRestoreTarget(version)
               }}
             >
