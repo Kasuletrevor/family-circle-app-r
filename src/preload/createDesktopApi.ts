@@ -18,6 +18,8 @@ import type {
   ResendInvitationResult,
   ResetPasswordInput,
   SignInInput,
+  StoryMediaAddResult,
+  StoryMediaPublicItem,
   VaultAnswer,
   VaultDocumentIssue,
   VaultDocumentSummary,
@@ -29,7 +31,11 @@ import type {
   VaultUploadOutcome,
   VaultUploadProgress,
   VaultUploadStage,
+  VoicePublicProgress,
+  VoicePublicStatus,
 } from '../shared/desktopApi'
+import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus } from '../shared/story'
+import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
 
 type DesktopChannel =
   | 'app:get-version'
@@ -67,9 +73,25 @@ type DesktopChannel =
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
   | 'private-ai:repair'
+  | 'story:get'
+  | 'story:save-draft'
+  | 'story:confirm-field'
+  | 'story:retry-indexing'
+  | 'story:save-now'
+  | 'story:get-history'
+  | 'story:restore-version'
+  | 'story:choose-add-media'
+  | 'story:list-media'
+  | 'story:open-media'
+  | 'story:delete-media'
+  | 'story:transcribe-recording'
+  | 'story:voice-status'
+  | 'story:voice-start-setup'
+  | 'story:voice-pause-setup'
+  | 'story:voice-repair-setup'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
-type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress'
+type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress'
 type Subscribe = (channel: DesktopEventChannel, listener: (payload: unknown) => void) => () => void
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -226,6 +248,109 @@ function safePrivateAiProgress(value: unknown): PrivateAiPublicProgress {
   }
 }
 
+function safeStoryIndexStatus(value: unknown): StoryIndexStatus {
+  return value === 'not_indexed' || value === 'pending' || value === 'ready' || value === 'failed'
+    ? value
+    : 'not_indexed'
+}
+
+function safeStoryAnswer(value: unknown): StoryPublicAnswer | null {
+  const raw = recordOf(value)
+  try {
+    const field = requireStoryField(raw.fieldKey)
+    const language = normalizeStoryLanguage(raw.language).code
+    return {
+      fieldKey: field.key,
+      section: field.section,
+      label: String(raw.label ?? field.label),
+      question: String(raw.question ?? field.prompt),
+      answer: String(raw.answer ?? ''),
+      language,
+      confirmed: raw.confirmed === true,
+      indexStatus: safeStoryIndexStatus(raw.indexStatus),
+      updatedAt: Number(raw.updatedAt) || 0,
+      confirmedAt: raw.confirmedAt == null ? null : Number(raw.confirmedAt) || 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+function safeStoryState(value: unknown): StoryPublicState {
+  const raw = recordOf(value)
+  const answers = (Array.isArray(raw.answers) ? raw.answers : [])
+    .map(safeStoryAnswer)
+    .filter((answer): answer is StoryPublicAnswer => answer !== null)
+  return { schemaVersion: 1, answers, confirmedCount: answers.filter((answer) => answer.confirmed).length }
+}
+
+function safeStoryHistory(value: unknown): StoryVersionSummary[] {
+  return (Array.isArray(value) ? value : []).flatMap((item) => {
+    const raw = recordOf(item)
+    const versionId = Number(raw.versionId)
+    if (!Number.isSafeInteger(versionId) || versionId <= 0) return []
+    return [{
+      versionId,
+      createdAt: Number(raw.createdAt) || 0,
+      confirmedCount: Math.max(0, Math.floor(Number(raw.confirmedCount) || 0)),
+    }]
+  })
+}
+
+function safeStoryMediaItem(value: unknown): StoryMediaPublicItem | null {
+  const raw = recordOf(value)
+  const id = Number(raw.id)
+  if (!Number.isSafeInteger(id) || id <= 0) return null
+  try {
+    const fieldKey = requireStoryField(raw.fieldKey).key
+    const mediaType = raw.mediaType === 'photo' || raw.mediaType === 'audio' ? raw.mediaType : null
+    if (!mediaType) return null
+    return {
+      id,
+      fieldKey,
+      mediaType,
+      fileName: String(raw.fileName ?? ''),
+      mimeType: String(raw.mimeType ?? ''),
+      sizeBytes: Math.max(0, Number(raw.sizeBytes) || 0),
+      createdAt: Number(raw.createdAt) || 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+function safeStoryMediaList(value: unknown): StoryMediaPublicItem[] {
+  return (Array.isArray(value) ? value : [])
+    .map(safeStoryMediaItem)
+    .filter((item): item is StoryMediaPublicItem => item !== null)
+}
+
+function safeStoryMediaAdd(value: unknown): StoryMediaAddResult {
+  const raw = recordOf(value)
+  const items = (Array.isArray(raw.items) ? raw.items : []).flatMap((item) => {
+    const safe = safeStoryMediaItem(item)
+    if (safe) return [safe]
+    const row = recordOf(item)
+    const outcome = row.outcome === 'unsupported' || row.outcome === 'too-large' || row.outcome === 'failed'
+      ? row.outcome
+      : 'failed'
+    return [{ fileName: String(row.fileName ?? ''), outcome }]
+  })
+  return { canceled: raw.canceled === true, items }
+}
+
+function safeTranscript(value: unknown): { transcript: string } {
+  return { transcript: String(recordOf(value).transcript ?? '') }
+}
+
+function safeVoiceStatus(value: unknown): VoicePublicStatus {
+  return safePrivateAiStatus(value)
+}
+
+function safeVoiceProgress(value: unknown): VoicePublicProgress {
+  return safePrivateAiProgress(value)
+}
+
 const noopSubscribe: Subscribe = () => () => undefined
 
 export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubscribe): DesktopApi {
@@ -255,11 +380,7 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
         return invoke('auth:sign-out') as Promise<{ success: true }>
       },
       requestPasswordReset(email: string) {
-        return invoke('auth:request-password-reset', email) as Promise<{
-          success: true
-          message: string
-          expiresInMinutes: number
-        }>
+        return invoke('auth:request-password-reset', email) as Promise<{ success: true; message: string; expiresInMinutes: number }>
       },
       resetPassword(input: ResetPasswordInput) {
         return invoke('auth:reset-password', input) as Promise<{ success: true }>
@@ -359,6 +480,66 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       onProgress(listener: (progress: PrivateAiPublicProgress) => void) {
         return subscribe('private-ai:progress', (payload) => listener(safePrivateAiProgress(payload)))
+      },
+    },
+    story: {
+      async get() {
+        return safeStoryState(await invoke('story:get'))
+      },
+      async saveDraft(input) {
+        return safeStoryState(await invoke('story:save-draft', {
+          fieldKey: input.fieldKey,
+          answer: String(input.answer ?? ''),
+          language: input.language,
+        }))
+      },
+      async confirmField(input) {
+        return safeStoryState(await invoke('story:confirm-field', { fieldKey: input.fieldKey }))
+      },
+      async retryIndexing(input) {
+        return safeStoryState(await invoke('story:retry-indexing', { fieldKey: input.fieldKey }))
+      },
+      async saveNow() {
+        return safeStoryState(await invoke('story:save-now'))
+      },
+      async getHistory() {
+        return safeStoryHistory(await invoke('story:get-history'))
+      },
+      async restoreVersion(input) {
+        return safeStoryState(await invoke('story:restore-version', { versionId: input.versionId }))
+      },
+      async chooseAndAddMedia(input) {
+        return safeStoryMediaAdd(await invoke('story:choose-add-media', { fieldKey: input.fieldKey, mediaType: input.mediaType }))
+      },
+      async listMedia() {
+        return safeStoryMediaList(await invoke('story:list-media'))
+      },
+      openMedia(input) {
+        return invoke('story:open-media', { mediaId: input.mediaId }) as Promise<{ success: true }>
+      },
+      deleteMedia(input) {
+        return invoke('story:delete-media', { mediaId: input.mediaId }) as Promise<{ success: true }>
+      },
+      async transcribeRecording(input) {
+        return safeTranscript(await invoke('story:transcribe-recording', {
+          wavBytes: new Uint8Array(input.wavBytes),
+          language: input.language,
+        }))
+      },
+      async getVoiceStatus() {
+        return safeVoiceStatus(await invoke('story:voice-status'))
+      },
+      async startVoiceSetup() {
+        return safeVoiceStatus(await invoke('story:voice-start-setup'))
+      },
+      async pauseVoiceSetup() {
+        return safeVoiceStatus(await invoke('story:voice-pause-setup'))
+      },
+      async repairVoiceSetup() {
+        return safeVoiceStatus(await invoke('story:voice-repair-setup'))
+      },
+      onVoiceSetupProgress(listener: (progress: VoicePublicProgress) => void) {
+        return subscribe('story:voice-setup-progress', (payload) => listener(safeVoiceProgress(payload)))
       },
     },
   }

@@ -1,3 +1,6 @@
+import type { StoryFieldKey, StoryLanguage } from './story'
+import type { StoryPublicState, StoryVersionSummary } from './storyPublic'
+
 export type AccountOrigin = 'registered' | 'invited' | 'existing'
 export type OnboardingNextAction = 'create-circle' | 'home' | 'joined-circle'
 
@@ -270,6 +273,51 @@ export interface PrivateAiPublicProgress {
   message: string | null
 }
 
+export type StoryMediaType = 'photo' | 'audio'
+
+export interface StoryMediaPublicItem {
+  id: number
+  fieldKey: StoryFieldKey
+  mediaType: StoryMediaType
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  createdAt: number
+}
+
+export interface StoryMediaAddFailure {
+  fileName: string
+  outcome: 'unsupported' | 'too-large' | 'failed'
+}
+
+export interface StoryMediaAddResult {
+  canceled: boolean
+  items: Array<StoryMediaPublicItem | StoryMediaAddFailure>
+}
+
+export type VoicePublicStatus = PrivateAiPublicStatus
+export type VoicePublicProgress = PrivateAiPublicProgress
+
+export interface StoryDesktopApi {
+  get(): Promise<StoryPublicState>
+  saveDraft(input: { fieldKey: StoryFieldKey; answer: string; language: StoryLanguage }): Promise<StoryPublicState>
+  confirmField(input: { fieldKey: StoryFieldKey }): Promise<StoryPublicState>
+  retryIndexing(input: { fieldKey: StoryFieldKey }): Promise<StoryPublicState>
+  saveNow(): Promise<StoryPublicState>
+  getHistory(): Promise<StoryVersionSummary[]>
+  restoreVersion(input: { versionId: number }): Promise<StoryPublicState>
+  chooseAndAddMedia(input: { fieldKey: StoryFieldKey; mediaType: StoryMediaType }): Promise<StoryMediaAddResult>
+  listMedia(): Promise<StoryMediaPublicItem[]>
+  openMedia(input: { mediaId: number }): Promise<{ success: true }>
+  deleteMedia(input: { mediaId: number }): Promise<{ success: true }>
+  transcribeRecording(input: { wavBytes: Uint8Array; language: StoryLanguage }): Promise<{ transcript: string }>
+  getVoiceStatus(): Promise<VoicePublicStatus>
+  startVoiceSetup(): Promise<VoicePublicStatus>
+  pauseVoiceSetup(): Promise<VoicePublicStatus>
+  repairVoiceSetup(): Promise<VoicePublicStatus>
+  onVoiceSetupProgress(listener: (progress: VoicePublicProgress) => void): () => void
+}
+
 export interface DesktopApi {
   app: {
     getVersion(): Promise<string>
@@ -320,4 +368,5 @@ export interface DesktopApi {
     repair(): Promise<PrivateAiPublicStatus>
     onProgress(listener: (progress: PrivateAiPublicProgress) => void): () => void
   }
+  story: StoryDesktopApi
 }
