@@ -6,6 +6,7 @@ const INSTALLED: InstalledAiPaths = {
   llamaDir: 'C:/FamilyCircle/offline-ai/bin/runtime',
   serverExe: 'C:/FamilyCircle/offline-ai/bin/runtime/llama-server.exe',
   graniteModel: 'C:/FamilyCircle/offline-ai/models/granite.gguf',
+  fastGraniteModel: 'C:/FamilyCircle/offline-ai/models/granite-fast.gguf',
   nomicModel: 'C:/FamilyCircle/offline-ai/models/nomic.gguf',
 }
 
@@ -83,6 +84,20 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     ])
   })
 
+  it('starts only fast Granite for fast generation request', async () => {
+    const { manager, process } = makeHarness()
+
+    await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(true)
+
+    expect(process.spawn).toHaveBeenCalledTimes(1)
+    expect(process.spawn.mock.calls[0]?.[1]).toEqual([
+      '--model', INSTALLED.fastGraniteModel,
+      '--port', '8082',
+      '--threads', '4',
+      '--ctx-size', '2048',
+    ])
+  })
+
   it('reuses healthy managed process', async () => {
     const { manager, process } = makeHarness({ health: [true, true] })
 
@@ -108,17 +123,19 @@ describe('AiRuntimeManager lazy split runtimes', () => {
 
     await expect(manager.ensureEmbeddingRuntime()).resolves.toBe(false)
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(false)
+    await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(false)
     expect(process.spawn).not.toHaveBeenCalled()
   })
 
-  it('stops both managed children', async () => {
-    const { manager, children } = makeHarness({ health: [true, true, true, true] })
+  it('stops all managed children', async () => {
+    const { manager, children } = makeHarness({ health: [true, true, true, true, true, true] })
     await manager.ensureEmbeddingRuntime()
     await manager.ensureGenerationRuntime()
+    await manager.ensureFastGenerationRuntime()
 
     manager.stopAll()
 
-    expect(children).toHaveLength(2)
+    expect(children).toHaveLength(3)
     expect(children.every((child) => child.killed)).toBe(true)
   })
 
