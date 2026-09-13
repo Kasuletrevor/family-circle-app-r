@@ -187,19 +187,22 @@ export class OfflineAiAssetService {
   private async verifyRequiredAssets(manifest: OfflineAiManifest): Promise<InstalledAiPaths | null> {
     const runtime = this.requiredByType(manifest, 'runtime')
     const granite = this.requiredByType(manifest, 'model')
+    const fastGranite = this.requiredByType(manifest, 'fast-model')
     const nomic = this.requiredByType(manifest, 'embedding')
-    if (!runtime || !granite || !nomic) return null
+    if (!runtime || !granite || !fastGranite || !nomic) return null
 
     const llamaDir = join(this.rootPath, runtime.targetPath)
     const serverExe = join(llamaDir, 'llama-server.exe')
     if (!(await this.fileExists(serverExe))) return null
 
     const graniteModel = join(this.rootPath, granite.targetPath)
+    const fastGraniteModel = join(this.rootPath, fastGranite.targetPath)
     const nomicModel = join(this.rootPath, nomic.targetPath)
     if (!(await this.verifyModelFile(graniteModel, granite))) return null
+    if (!(await this.verifyModelFile(fastGraniteModel, fastGranite))) return null
     if (!(await this.verifyModelFile(nomicModel, nomic))) return null
 
-    return { llamaDir, serverExe, graniteModel, nomicModel }
+    return { llamaDir, serverExe, graniteModel, fastGraniteModel, nomicModel }
   }
 
   private requiredByType(manifest: OfflineAiManifest, type: OfflineAiManifestFile['type']): OfflineAiManifestFile | null {
