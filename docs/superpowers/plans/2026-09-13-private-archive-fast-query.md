@@ -159,7 +159,7 @@ npx vitest run src/main/ai/PrivateArchiveQueryService.test.ts src/main/vault/Vau
 
 **Files:**
 - Modify: `src/main/main.ts`
-- Modify: `src/main/main.test.ts` or the existing composition test that owns Private AI service wiring
+- Modify: `src/main/story/createStoryServices.test.ts`
 - Create: `scripts/benchmark-private-ai.mjs`
 - Create: `src/main/ai/privateAiBenchmarkContract.test.ts`
 - Modify: `README.md`
@@ -185,10 +185,8 @@ The benchmark accepts loopback fast/complex generation endpoints and writes one 
 - [ ] **Step 2: Run RED:**
 
 ```bash
-npx vitest run src/main/ai/privateAiBenchmarkContract.test.ts src/main/main.test.ts
+npx vitest run src/main/ai/privateAiBenchmarkContract.test.ts src/main/story/createStoryServices.test.ts
 ```
-
-Use the repository's actual composition test path if `src/main/main.test.ts` does not exist; do not invent a second composition harness.
 
 - [ ] **Step 3: Implement wiring and benchmark script.** The benchmark must not run in normal app startup or CI because model binaries are intentionally absent there.
 - [ ] **Step 4: Run focused GREEN, then full gate:**
@@ -199,5 +197,5 @@ npm audit --audit-level=high
 ```
 
 - [ ] **Step 5: Run exact-head Linux CI and Windows packaging.** Windows must still package manifests/licenses only and must not package GGUF/runtime binaries.
-- [ ] **Step 6: Review changed-file scope, raw error handling, loopback-only generation, and PR threads; fix regressions with RED tests first.
+- [ ] **Step 6: Review changed-file scope, raw error handling, loopback-only generation, and PR threads; fix regressions with RED tests first.**
 - [ ] **Step 7: Commit** as `feat: route private archive queries for low latency` and mark the PR review-ready only after exact-head gates are green.
