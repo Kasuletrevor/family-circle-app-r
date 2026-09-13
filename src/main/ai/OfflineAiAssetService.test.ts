@@ -18,6 +18,7 @@ async function makeFixture() {
   const userDataPath = join(root, 'user-data')
   const manifestPath = join(root, 'offline-ai-manifest.json')
   const graniteBytes = 'granite-test-bytes'
+  const fastGraniteBytes = 'fast-granite-test-bytes'
   const nomicBytes = 'nomic-test-bytes'
   const runtimeZipBytes = 'runtime-zip-test-bytes'
   const manifest: OfflineAiManifest = {
@@ -40,6 +41,16 @@ async function makeFixture() {
         targetPath: 'models/granite.gguf',
         sha256: sha256(graniteBytes),
         sizeBytes: Buffer.byteLength(graniteBytes),
+        extract: false,
+        required: true,
+      },
+      {
+        name: 'AI fast answers',
+        type: 'fast-model',
+        url: 'https://example.invalid/granite-fast.gguf',
+        targetPath: 'models/granite-fast.gguf',
+        sha256: sha256(fastGraniteBytes),
+        sizeBytes: Buffer.byteLength(fastGraniteBytes),
         extract: false,
         required: true,
       },
@@ -77,6 +88,7 @@ async function makeFixture() {
   async function writeValidInstalledAssets() {
     await write('bin/runtime/llama-server.exe', 'fake executable')
     await write('models/granite.gguf', graniteBytes)
+    await write('models/granite-fast.gguf', fastGraniteBytes)
     await write('models/nomic.gguf', nomicBytes)
     await writeMarker()
   }
@@ -121,6 +133,7 @@ describe('OfflineAiAssetService installed asset state', () => {
       llamaDir: join(offlineAiRoot, 'bin/runtime'),
       serverExe: join(offlineAiRoot, 'bin/runtime/llama-server.exe'),
       graniteModel: join(offlineAiRoot, 'models/granite.gguf'),
+      fastGraniteModel: join(offlineAiRoot, 'models/granite-fast.gguf'),
       nomicModel: join(offlineAiRoot, 'models/nomic.gguf'),
     })
   })
