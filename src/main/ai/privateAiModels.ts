@@ -16,7 +16,7 @@ export type PrivateAiPhase =
   | 'ready'
   | 'failed'
 
-export type OfflineAiAssetType = 'runtime' | 'model' | 'embedding'
+export type OfflineAiAssetType = 'runtime' | 'model' | 'fast-model' | 'embedding'
 
 export interface OfflineAiManifestFile {
   name: string
@@ -54,6 +54,7 @@ export interface InstalledAiPaths {
   llamaDir: string
   serverExe: string
   graniteModel: string
+  fastGraniteModel: string
   nomicModel: string
 }
 

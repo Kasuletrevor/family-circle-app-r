@@ -5,10 +5,11 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AiRuntimeManager } from '../ai/AiRuntimeManager'
 import { OfflineAiAssetService } from '../ai/OfflineAiAssetService'
+import { PrivateArchiveQueryService, type PrivateArchiveQueryServiceDependencies } from '../ai/PrivateArchiveQueryService'
 import { runMigrations } from '../database/migrations'
 import { VaultChunkRepository } from './VaultChunkRepository'
 import { VaultIndexService } from './VaultIndexService'
-import { VaultQueryService, type VaultQueryServiceDependencies } from './VaultQueryService'
+import { VaultQueryService } from './VaultQueryService'
 import { float32ToBlob } from './vectorCodec'
 
 const tempRoots: string[] = []
@@ -17,32 +18,40 @@ afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-function queryDeps(overrides: Partial<VaultQueryServiceDependencies> = {}): VaultQueryServiceDependencies {
+function archiveDeps(overrides: Partial<PrivateArchiveQueryServiceDependencies> = {}): PrivateArchiveQueryServiceDependencies {
   return {
     session: { restore: vi.fn(async () => ({ id: 7 } as never)) },
     documents: { getByIdForUser: vi.fn(async (_userId, id) => ({ id, deleteStatus: 'active' })) },
-    chunks: {
+    vaultChunks: {
       listQueryChunks: vi.fn(async () => [{
         documentId: 1,
         fileName: 'History.pdf',
         chunkIndex: 0,
         text: 'Known private fact',
         embedding: new Float32Array([1, 0]),
-        embeddingModel: 'nomic',
+        embeddingModel: 'nomic-embed-text-v1.5.Q4_K_M',
         indexVersion: 1,
       }]),
     },
+    storyChunks: { listQueryChunks: vi.fn(async () => []) },
     runtime: {
       ensureEmbeddingRuntime: vi.fn(async () => true),
+      ensureFastGenerationRuntime: vi.fn(async () => true),
       ensureGenerationRuntime: vi.fn(async () => true),
     },
-    nomic: {
-      embedQuery: vi.fn(async () => new Float32Array([1, 0])),
-      embedDocument: vi.fn(async () => new Float32Array([1, 0])),
+    nomic: { embedQuery: vi.fn(async () => new Float32Array([1, 0])) },
+    fast: {
+      generate: vi.fn(async () => 'Grounded answer'),
+      translateForRetrieval: vi.fn(async () => 'Known?'),
     },
     granite: { generate: vi.fn(async () => 'Grounded answer') },
+    direct: { answer: vi.fn(async () => null) },
     ...overrides,
   }
+}
+
+function vaultQueryService(overrides: Partial<PrivateArchiveQueryServiceDependencies> = {}): VaultQueryService {
+  return new VaultQueryService(new PrivateArchiveQueryService(archiveDeps(overrides)))
 }
 
 function insertUser(db: DatabaseSync, id: number, email: string): void {
@@ -75,15 +84,17 @@ describe('Vault RAG privacy and lifecycle boundaries', () => {
     const getByIdForUser = vi.fn(async (_userId: number, documentId: number) => (
       documentId === 99 ? null : { id: documentId, deleteStatus: 'active' }
     ))
-    const service = new VaultQueryService(queryDeps({
+    const service = vaultQueryService({
       documents: { getByIdForUser },
-      chunks: { listQueryChunks },
-    }))
+      vaultChunks: { listQueryChunks },
+    })
 
     await expect(service.ask({
       question: 'Private question?',
       scope: { type: 'documents', documentIds: [1, 99] },
     })).rejects.toMatchObject({ code: 'invalid-scope' })
+    expect(getByIdForUser).toHaveBeenCalledWith(7, 1)
+    expect(getByIdForUser).toHaveBeenCalledWith(7, 99)
     expect(listQueryChunks).not.toHaveBeenCalled()
   })
 
@@ -107,22 +118,28 @@ describe('Vault RAG privacy and lifecycle boundaries', () => {
   })
 
   it('never sends Vault content to Circle adapter', async () => {
-    const source = await readFile(join(process.cwd(), 'src/main/vault/VaultQueryService.ts'), 'utf8')
-    expect(source).not.toMatch(/CircleService|LegacyCircle|circleAdapter|CIRCLE_API/)
+    const facade = await readFile(join(process.cwd(), 'src/main/vault/VaultQueryService.ts'), 'utf8')
+    const archive = await readFile(join(process.cwd(), 'src/main/ai/PrivateArchiveQueryService.ts'), 'utf8')
+    expect(facade).not.toMatch(/CircleService|LegacyCircle|circleAdapter|CIRCLE_API/)
+    expect(archive).not.toMatch(/CircleService|LegacyCircle|circleAdapter|CIRCLE_API/)
   })
 
   it('never cloud-falls-back', async () => {
     const granite = await readFile(join(process.cwd(), 'src/main/ai/GraniteClient.ts'), 'utf8')
-    const query = await readFile(join(process.cwd(), 'src/main/vault/VaultQueryService.ts'), 'utf8')
+    const fastGranite = await readFile(join(process.cwd(), 'src/main/ai/FastGraniteClient.ts'), 'utf8')
+    const archive = await readFile(join(process.cwd(), 'src/main/ai/PrivateArchiveQueryService.ts'), 'utf8')
     expect(granite).toContain("host: '127.0.0.1'")
+    expect(fastGranite).toContain("host: '127.0.0.1'")
     expect(granite).not.toMatch(/node:https|\bfetch\s*\(|https:\/\//)
-    expect(query).not.toMatch(/\bfetch\s*\(|https?:\/\//)
+    expect(fastGranite).not.toMatch(/node:https|\bfetch\s*\(|https:\/\//)
+    expect(archive).not.toMatch(/\bfetch\s*\(|https?:\/\//)
   })
 
   it('never re-embeds document chunks on ask', async () => {
     const embedQuery = vi.fn(async () => new Float32Array([1, 0]))
     const embedDocument = vi.fn(async () => new Float32Array([0, 1]))
-    const service = new VaultQueryService(queryDeps({ nomic: { embedQuery, embedDocument } }))
+    const nomic = { embedQuery, embedDocument }
+    const service = vaultQueryService({ nomic })
 
     await service.ask({ question: 'Known?', scope: { type: 'all' } })
     expect(embedQuery).toHaveBeenCalledTimes(1)
