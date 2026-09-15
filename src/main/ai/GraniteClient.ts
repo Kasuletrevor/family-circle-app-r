@@ -1,6 +1,6 @@
 import { request as httpRequest } from 'node:http'
 
-const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided Vault source context. If the answer is not supported by the context, say you could not find it in the selected Vault documents.'
+const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources.'
 
 export interface GraniteHttpPort {
   post(path: string, body: unknown): Promise<unknown>
@@ -87,10 +87,10 @@ export class GraniteClient {
           { role: 'system', content: SYSTEM_INSTRUCTION },
           {
             role: 'user',
-            content: `Vault source context:\n${context}\n\nQuestion:\n${question}`,
+            content: `Private source context:\n${context}\n\nQuestion:\n${question}`,
           },
         ],
-        max_tokens: 512,
+        max_tokens: 384,
         temperature: 0,
         top_k: 40,
         top_p: 0.95,
