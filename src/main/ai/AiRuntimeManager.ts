@@ -3,6 +3,7 @@ import { request as httpRequest } from 'node:http'
 import { availableParallelism } from 'node:os'
 import type { InstalledAiPaths } from './privateAiModels'
 
+const LOOPBACK_HOST = '127.0.0.1'
 const EMBEDDING_PORT = 8081
 const GENERATION_PORT = 8080
 const FAST_GENERATION_PORT = 8082
@@ -57,7 +58,7 @@ class LocalHealthPort implements AiRuntimeHealthPort {
 
       const request = httpRequest(
         {
-          host: '127.0.0.1',
+          host: LOOPBACK_HOST,
           port,
           path: '/health',
           method: 'GET',
@@ -152,6 +153,7 @@ export class AiRuntimeManager {
     if (kind === 'embedding') {
       return [
         '--model', installed.nomicModel,
+        '--host', LOOPBACK_HOST,
         '--port', String(EMBEDDING_PORT),
         '--threads', threads,
         '--ctx-size', '2048',
@@ -163,6 +165,7 @@ export class AiRuntimeManager {
     if (kind === 'fast-generation') {
       return [
         '--model', installed.fastGraniteModel,
+        '--host', LOOPBACK_HOST,
         '--port', String(FAST_GENERATION_PORT),
         '--threads', threads,
         '--ctx-size', '2048',
@@ -171,6 +174,7 @@ export class AiRuntimeManager {
 
     return [
       '--model', installed.graniteModel,
+      '--host', LOOPBACK_HOST,
       '--port', String(GENERATION_PORT),
       '--threads', threads,
       '--ctx-size', '4096',
