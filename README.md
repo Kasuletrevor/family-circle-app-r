@@ -4,7 +4,7 @@ A clean Electron + React + TypeScript rebuild of the Kin-Keepers Family Circle d
 
 ## Current slice
 
-This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, and Invitations**, a real **private local Vault**, and optional **local Private AI + Vault RAG**.
+This branch includes the secure desktop shell, protected authentication and onboarding, the real Circle Home, protected shared-state management for **My Circles, Open Circle, Create Circle, Invite Member, Members, and Invitations**, a real **private local Vault**, private local **My Story**, and optional **local Private AI + private archive retrieval**.
 
 - Electron desktop shell with `contextIsolation: true`, renderer sandboxing, and Node integration disabled.
 - React + TypeScript renderer with routed desktop navigation.
@@ -29,17 +29,21 @@ This branch includes the secure desktop shell, protected authentication and onbo
 - Local document validation, 50 MiB safety limit, SHA-256 duplicate detection, private randomized storage, and text extraction without requiring AI.
 - Exact-byte duplicates are rejected per local user; same-name files with different bytes are retained as separate versions instead of replacing earlier content.
 - Extraction failures keep the source document stored and expose a safe retry action; successful extraction becomes `waiting_for_ai` when Private AI is not ready and can be indexed later without re-upload.
-- Optional user-triggered Private AI setup with resumable downloads, immutable size/SHA verification, pause/continue/repair states, and no automatic ~2 GiB download at app startup.
-- Persistent Nomic chunk embeddings stored locally in SQLite; documents are embedded during indexing rather than re-embedded on every question.
-- Real **Ask your Vault** at `/ai`, using one Nomic query embedding, in-process cosine retrieval over owned persisted chunks, and local Granite generation from the retrieved context only.
-- All/selected-document question scope with protected per-user document-ID validation and safe source excerpts.
+- A private local **My Story** subsystem with fixed guided prompts, drafts, confirmation state, history, media, and local indexing of confirmed content only.
+- Optional user-triggered Private AI setup with resumable downloads, immutable size/SHA verification, pause/continue/repair states, and no automatic ~2.15 GiB download at app startup.
+- Persistent Nomic chunk embeddings stored locally in SQLite for Vault documents and confirmed Story answers; stored chunks are not re-embedded for each question.
+- One `PrivateArchiveQueryService` ranks eligible Story + Vault chunks together with a **shared maximum of three chunks**.
+- High-confidence confirmed Story facts can bypass embeddings and generation through a deterministic local lookup.
+- Normal grounded generation uses **Granite 4.0 350M Q4_K_M** with a 192-token ceiling; explicit complex combined synthesis and fast-model fallback use **Granite 4.0 H-Micro Q4_K_M** with a 384-token ceiling.
+- The existing **Ask your Vault** UI at `/ai` remains Vault-scoped and now delegates to that shared low-latency engine; Story/combined query surfaces can reuse the same backend without widening the renderer trust boundary.
+- All/selected-document Vault scope keeps protected per-user document-ID validation and safe source excerpts.
 - Intentional no-Circle state for accounts that have no memberships.
 - Authenticated user identity, active Circle, and unread notification count in the shell without hardcoded profile or badge values.
-- Automated renderer/main-process/public-contract boundary checks, RAG privacy/lifecycle regressions, and dependency audit in CI.
+- Automated renderer/main-process/public-contract boundary checks, private-RAG privacy/lifecycle regressions, and dependency audit in CI.
 
-Stories, Memories, and Upcoming items are not presented as fabricated real data. Those values remain absent until their actual source slices are migrated.
+Upcoming/shared content is not presented as fabricated real data. Shared responsibilities remain absent until their actual source slices are migrated.
 
-This slice intentionally does **not** add Circle rename/delete, ownership transfer, relationship/tree mutations, tree editing, or the future secure `/v2` Circle API migration. Those remain later protected slices.
+This slice intentionally does **not** add Circle rename/delete, ownership transfer, relationship/tree mutations, tree editing, automatic Story sharing, cloud AI/transcription, or the future secure `/v2` Circle API migration. Those remain separate protected slices.
 
 ## Desktop architecture
 
@@ -52,6 +56,7 @@ typed renderer clients
    ├── DesktopAuthClient
    ├── DesktopCircleClient
    ├── DesktopVaultClient
+   ├── DesktopStoryClient
    └── DesktopPrivateAiClient
             ↓
 window.familyCircle typed preload API
@@ -74,12 +79,17 @@ main-process services
    │       ├── VaultRepository
    │       ├── VaultFileStore
    │       └── DocumentExtractor
-   └── Private local AI/RAG
+   ├── StoryService / StoryMediaService
+   │       └── private local Story repositories + media
+   └── Private local AI / retrieval
            ├── OfflineAiAssetService
            ├── AiRuntimeManager
-           ├── VaultIndexService + VaultChunkRepository
+           ├── VaultIndexService + StoryIndexService
+           ├── VaultChunkRepository + StoryChunkRepository
            ├── NomicClient
-           ├── VaultQueryService
+           ├── StoryDirectAnswerService
+           ├── PrivateArchiveQueryService
+           ├── FastGraniteClient
            └── GraniteClient
 ```
 
@@ -108,7 +118,7 @@ Jose's current Circle API
 
 `DesktopCircleClient` is the single production renderer adapter for Circle reads and mutations. React feature components do not call Circle URLs directly and do not receive the compatibility API key, shared service identity, invitation ID/token, or temporary password.
 
-`DesktopVaultClient` is the single production renderer adapter for Vault operations, including grounded Vault questions. `DesktopPrivateAiClient` is the single production renderer adapter for setup/status/progress actions. React never chooses arbitrary filesystem paths, never receives the stored source path, SHA-256 hash, full extracted text, local user ID, embedding BLOB/vector, model path, local model endpoint, or AI process detail.
+`DesktopVaultClient` is the single production renderer adapter for Vault operations, including grounded Vault questions. `DesktopPrivateAiClient` is the single production renderer adapter for setup/status/progress actions. Story feature code uses its typed Story client. React never chooses arbitrary filesystem paths, never receives stored source paths, SHA-256 hashes, full extracted text, local user IDs, embedding BLOBs/vectors, model paths, local model endpoints, or AI process details.
 
 The renderer never receives a password hash, session credential, database handle, Circle API key, raw Circle API URL, raw shared `ownerId`, raw shared `userId`, `serverUserId`, `targetServerUserId`, or trusted invitation ID. Auth state is not stored in renderer `localStorage` or `sessionStorage`, and there is no local JWT.
 
@@ -272,9 +282,15 @@ Open, retry, query, and delete always re-resolve document ownership from the pro
 
 `DesktopVaultClient` is the only production renderer path to `window.familyCircle.vault`. The architecture boundary verifier rejects private Vault/AI field names and direct local-AI port dependencies in production renderer code and the public desktop contract.
 
-## Private AI and local Vault RAG
+## Private local My Story
 
-Private AI is optional and explicitly user-triggered. The app does not silently download its roughly 1.93 GiB required runtime/model stack on startup, sign-in, or upload. The public setup states are exactly:
+My Story is private local desktop state, not Circle/server content. Draft answers can be stored without AI. Confirmation is the privacy/indexing gate: only confirmed answers are eligible for Story chunk indexing and private retrieval. If confirmed text is materially edited, its previous chunks are invalidated and the changed answer must be confirmed again before it becomes queryable.
+
+Story history, media ownership, and restore behavior remain local-user scoped. Raw local media paths and local user IDs are not exposed to React.
+
+## Private AI and private archive retrieval
+
+Private AI is optional and explicitly user-triggered. The app does not silently download its roughly **2.15 GiB** required runtime/model stack on startup, sign-in, upload, or Story editing. The public setup states are exactly:
 
 ```text
 not_installed
@@ -286,23 +302,37 @@ repair_required
 failed
 ```
 
-The configured llama.cpp runtime, Granite model, and Nomic embedding model must pass immutable expected size/SHA verification before setup reaches `ready`. Resumable `.part` downloads are staged beneath the app user-data directory; pause preserves valid partial bytes and repair re-runs verified setup.
+The configured llama.cpp runtime, Granite H-Micro model, Granite 350M fast model, and Nomic embedding model must pass immutable expected size/SHA verification before setup reaches `ready`. Resumable `.part` downloads are staged beneath the app user-data directory; pause preserves valid partial bytes and repair re-runs verified setup.
 
-Indexing uses Nomic only. Extraction-ready text is deterministically chunked, embedded with the `search_document: ` prefix, and atomically persisted in `vault_chunks` as text plus Float32 embedding BLOBs with model/version metadata. `INDEX_VERSION` is currently `1`.
+Indexing uses Nomic only. Vault extraction-ready text and confirmed Story answers are chunked and embedded with the `search_document: ` prefix, then persisted locally with model/version metadata. Generation models are never required for indexing.
 
-`Ask your Vault` at `/ai` supports all indexed documents or explicit selected document IDs. The selected IDs are validated for the protected local user. Each question gets one `search_query: ` Nomic embedding; retrieval loads that user's already-persisted chunks and ranks them with in-process cosine similarity. Only the top retrieved context is passed to local Granite. Document chunks are **not** re-embedded on each question.
+For semantic questions, the service loads already-persisted eligible chunks and ranks all candidates together with in-process cosine similarity. The context budget is a single **top three chunks total** across the selected private sources. Vault document chunks and Story chunks are not re-embedded on every question.
 
-Granite starts lazily only when generation has usable retrieved context. Indexing never starts Granite. Both llama.cpp runtimes are main-process-owned and are stopped on application shutdown.
+For supported direct Story fact questions, `StoryDirectAnswerService` reads the canonical confirmed Story field and returns without starting Nomic or either Granite model.
 
-There is no cloud fallback and no Vault-content path through Jose's Circle adapter. The RAG feature continues to work against existing indexed content when the machine is offline.
+Normal grounded generated questions use the local Granite 350M runtime on the fast path. Explicit complex synthesis over combined private sources uses H-Micro; a fast-runtime/generation failure can fall back only to that larger local model. There is no cloud fallback.
 
-Developer/runtime details, hashes, lifecycle rules, and the Windows clean-machine acceptance procedure are documented in [`docs/PRIVATE_AI.md`](docs/PRIVATE_AI.md).
+English semantic retrieval embeds one query. Where a supported non-English query language is supplied, retrieval can use the original query plus a local English translation; translation failure falls back to the original query rather than a network service.
+
+The existing `/ai` renderer surface remains **Ask your Vault**, so its public response stays the legacy safe `{answer, sources}` Vault DTO. Internally it delegates to `PrivateArchiveQueryService` with a Vault-only scope. Story and combined scopes remain main-process capabilities for the next UI surface rather than being exposed by widening the current Vault contract.
+
+All model servers are main-process-owned, loopback-only, lazy, and stopped on application shutdown:
+
+```text
+Granite H-Micro complex generation   8080
+Nomic embedding/search               8081
+Granite 350M fast generation         8082
+```
+
+The port numbers are developer implementation details and are rejected from the production renderer/public contract.
+
+Developer/runtime details, hashes, lifecycle rules, benchmark usage, and the Windows clean-machine acceptance procedure are documented in [`docs/PRIVATE_AI.md`](docs/PRIVATE_AI.md).
 
 ## Windows installer
 
 Windows x64 builds use a one-click per-user NSIS installer named `Family-Circle-Setup-${version}.exe`. **GitHub Releases are the canonical public download source.** Branch and pull-request packaging runs also publish the installer as a GitHub Actions artifact for verification.
 
-The normal installer stays small: Private AI is not bundled and is downloaded only after the user explicitly chooses **Set up Private AI**. `.env` files, model/runtime payloads, Vault data, and user data are excluded from the package. See [`docs/WINDOWS_RELEASE.md`](docs/WINDOWS_RELEASE.md) for the exact build commands, release workflow, unsigned-installer/SmartScreen note, and 12-step clean-machine acceptance test.
+The normal installer stays small: Private AI is not bundled and is downloaded only after the user explicitly chooses **Set up Private AI**. `.env` files, model/runtime payloads, Vault/Story data, and user data are excluded from the package. See [`docs/WINDOWS_RELEASE.md`](docs/WINDOWS_RELEASE.md) for the exact build commands, release workflow, unsigned-installer/SmartScreen note, and 12-step clean-machine acceptance test.
 
 ## Copy-safe legacy database import
 
@@ -395,7 +425,7 @@ CIRCLE_API_URL=...
 CIRCLE_API_KEY=...
 ```
 
-Private AI requires no cloud AI credential. Model/runtime setup is performed explicitly from the application using `config/offline-ai-manifest.json`. See `docs/PRIVATE_AI.md` for asset verification, local layout, lifecycle, and Windows acceptance testing.
+Private AI requires no cloud AI credential. Model/runtime setup is performed explicitly from the application using `config/offline-ai-manifest.json`. See `docs/PRIVATE_AI.md` for asset verification, local layout, lifecycle, benchmark usage, and Windows acceptance testing.
 
 Do not place real secrets in tracked files.
 
@@ -430,17 +460,25 @@ npm run build
 npm audit
 ```
 
-The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, shared-service identity/invitation-secret fields in the public Circle contract or production Circle renderer code, private Vault/AI internals in production renderer/public-contract code, direct Vault preload access outside `DesktopVaultClient`, direct Private AI preload access outside `DesktopPrivateAiClient`, and renderer dependencies on local AI HTTP ports/model/process technicals.
+The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, shared-service identity/invitation-secret fields in the public Circle contract or production Circle renderer code, private Vault/Story/AI internals in production renderer/public-contract code, direct Vault preload access outside `DesktopVaultClient`, direct Private AI preload access outside `DesktopPrivateAiClient`, and renderer dependencies on local AI HTTP ports/model/process technicals.
 
-`VaultRagSecurity.test.ts` is merge-blocking and covers cross-user selected-ID rejection, SQLite chunk ownership isolation, absence of Circle/cloud RAG paths, no query-time document re-embedding, explicit-only model downloads, no Granite during indexing, lazy runtime construction, and upload/extraction independence from AI state.
+`VaultRagSecurity.test.ts` is merge-blocking and covers cross-user selected-ID rejection, SQLite chunk ownership isolation, absence of Circle/cloud paths, no query-time document re-embedding, explicit-only model downloads, no Granite during indexing, lazy runtime construction, and upload/extraction independence from AI state. `PrivateArchiveQueryService.test.ts` covers the shared top-three budget, Story/Vault ranking, direct-answer short-circuit, multilingual planning, local fast/complex routing, and safe source projection.
+
+The optional developer benchmark is intentionally outside `npm run check` and CI:
+
+```bash
+node scripts/benchmark-private-ai.mjs --fixtures ./private-ai-benchmark-fixtures.json --model both
+```
+
+It requires already-running local llama.cpp endpoints and accepts loopback addresses only.
 
 ## Product boundary
 
-Private/local responsibilities stay on the desktop: the copied SQLite database, protected session state, the local active-Circle preference, Vault/document data, persisted chunks/embeddings, local Private AI/RAG, personal stories, local media, voice, and backup/restore as those slices are migrated.
+Private/local responsibilities stay on the desktop: the copied SQLite database, protected session state, the local active-Circle preference, Vault/document data, My Story answers/history/media, persisted chunks/embeddings, local Private AI/retrieval, voice, and backup/restore as those slices are migrated.
 
 Shared family responsibilities remain server-owned: Circles, memberships, invitations, relationships, shared tree state, notifications, and deliberately shared profile/content data.
 
-This slice includes the minimum protected shared writes for Circle creation, invitation delivery/management, member removal, and leaving a Circle, plus the private local Vault and optional Private AI/RAG. Still excluded:
+This slice includes the minimum protected shared writes for Circle creation, invitation delivery/management, member removal, and leaving a Circle, plus the private local Vault, My Story, and optional Private AI retrieval. Still excluded:
 
 - Circle rename
 - Circle delete
@@ -449,5 +487,6 @@ This slice includes the minimum protected shared writes for Circle creation, inv
 - tree placeholder mutations
 - tree/node-position mutations
 - secure `/v2` migration
+- automatic sharing of private Story/Vault content
 
-Those can be added as separate protected slices without widening the renderer trust boundary. Circle settings and Family Tree editing remain later shared-state slices; the private Vault + local RAG path remains independent of Circle authorization and content transport.
+Those can be added as separate protected slices without widening the renderer trust boundary. Circle settings and Family Tree editing remain later shared-state slices; private Vault + My Story + local retrieval remain independent of Circle authorization and content transport.
