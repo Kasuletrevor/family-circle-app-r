@@ -52,7 +52,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn).not.toHaveBeenCalled()
   })
 
-  it('starts only Nomic for embedding request', async () => {
+  it('starts only Nomic for embedding request and explicitly binds it to loopback', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureEmbeddingRuntime()).resolves.toBe(true)
@@ -61,6 +61,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[0]).toBe(INSTALLED.serverExe)
     expect(process.spawn.mock.calls[0]?.[1]).toEqual([
       '--model', INSTALLED.nomicModel,
+      '--host', '127.0.0.1',
       '--port', '8081',
       '--threads', '4',
       '--ctx-size', '2048',
@@ -70,7 +71,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true })
   })
 
-  it('starts only Granite for generation request', async () => {
+  it('starts only Granite for generation request and explicitly binds it to loopback', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(true)
@@ -78,13 +79,14 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn).toHaveBeenCalledTimes(1)
     expect(process.spawn.mock.calls[0]?.[1]).toEqual([
       '--model', INSTALLED.graniteModel,
+      '--host', '127.0.0.1',
       '--port', '8080',
       '--threads', '4',
       '--ctx-size', '4096',
     ])
   })
 
-  it('starts only fast Granite for fast generation request', async () => {
+  it('starts only fast Granite for fast generation request and explicitly binds it to loopback', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(true)
@@ -92,6 +94,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn).toHaveBeenCalledTimes(1)
     expect(process.spawn.mock.calls[0]?.[1]).toEqual([
       '--model', INSTALLED.fastGraniteModel,
+      '--host', '127.0.0.1',
       '--port', '8082',
       '--threads', '4',
       '--ctx-size', '2048',
