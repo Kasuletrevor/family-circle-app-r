@@ -9,6 +9,15 @@ const INSTALLED: InstalledAiPaths = {
   nomicModel: 'C:/FamilyCircle/offline-ai/models/nomic.gguf',
 }
 
+const QWEN_ARGS = [
+  '--model', INSTALLED.generationModel,
+  '--host', '127.0.0.1',
+  '--port', '8080',
+  '--threads', '4',
+  '--ctx-size', '4096',
+  '--chat-template-kwargs', '{"enable_thinking":false}',
+]
+
 class FakeChild {
   killed = false
   readonly listeners: Array<() => void> = []
@@ -70,35 +79,23 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true })
   })
 
-  it('starts Qwen for generation request and explicitly binds it to loopback', async () => {
+  it('starts Qwen for generation request with thinking disabled and loopback-only binding', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(true)
 
     expect(process.spawn).toHaveBeenCalledTimes(1)
-    expect(process.spawn.mock.calls[0]?.[1]).toEqual([
-      '--model', INSTALLED.generationModel,
-      '--host', '127.0.0.1',
-      '--port', '8080',
-      '--threads', '4',
-      '--ctx-size', '4096',
-    ])
+    expect(process.spawn.mock.calls[0]?.[1]).toEqual(QWEN_ARGS)
   })
 
-  it('maps the fast generation request onto the same Qwen runtime', async () => {
+  it('maps the fast generation request onto the same non-thinking Qwen runtime', async () => {
     const { manager, process } = makeHarness({ health: [true, true] })
 
     await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(true)
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(true)
 
     expect(process.spawn).toHaveBeenCalledTimes(1)
-    expect(process.spawn.mock.calls[0]?.[1]).toEqual([
-      '--model', INSTALLED.generationModel,
-      '--host', '127.0.0.1',
-      '--port', '8080',
-      '--threads', '4',
-      '--ctx-size', '4096',
-    ])
+    expect(process.spawn.mock.calls[0]?.[1]).toEqual(QWEN_ARGS)
   })
 
   it('reuses healthy managed process', async () => {
