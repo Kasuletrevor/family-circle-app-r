@@ -148,6 +148,31 @@ describe('PrivateArchiveQueryService', () => {
     expect(embedQuery.mock.calls.map(([query]) => query)).toEqual(['¿Dónde nací?', 'Where was I born?'])
   })
 
+  it('reuses the English retrieval translation to select the complex Qwen budget for non-English combined synthesis', async () => {
+    const generateFast = vi.fn(async () => 'fast')
+    const generateComplex = vi.fn(async () => 'complex')
+    const translateForRetrieval = vi.fn(async () => 'Compare my story and documents.')
+    const service = new PrivateArchiveQueryService(deps({
+      qwen: {
+        generateFast,
+        generateComplex,
+        translateForRetrieval,
+      },
+    }))
+
+    const result = await service.ask({
+      question: 'Compara mi historia y mis documentos.',
+      language: 'es',
+      scope: { type: 'combined', vault: { type: 'all' } },
+    })
+
+    expect(translateForRetrieval).toHaveBeenCalledTimes(1)
+    expect(result.route).toBe('complex')
+    expect(result.answer).toBe('complex')
+    expect(generateComplex).toHaveBeenCalledTimes(1)
+    expect(generateFast).not.toHaveBeenCalled()
+  })
+
   it('skips malformed vectors and returns a safe no-context answer without starting generation', async () => {
     const ensureGenerationRuntime = vi.fn(async () => true)
     const generateFast = vi.fn(async () => 'should not run')
