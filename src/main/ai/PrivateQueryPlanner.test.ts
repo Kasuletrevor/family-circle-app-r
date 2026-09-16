@@ -57,4 +57,12 @@ describe('PrivateQueryPlanner generation routing', () => {
       scopeType: 'story',
     })).toBe('fast')
   })
+
+  it('uses an available English translation to detect non-English combined synthesis', () => {
+    expect(selectGenerationRoute({
+      question: 'Compara mi historia y mis documentos.',
+      translatedQuestion: 'Compare my story and documents.',
+      scopeType: 'combined',
+    })).toBe('complex')
+  })
 })
