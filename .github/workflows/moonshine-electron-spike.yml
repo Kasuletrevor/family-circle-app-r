@@ -42,7 +42,10 @@ jobs:
 
       - name: Run Moonshine utility-process smoke on Linux
         if: runner.os == 'Linux'
-        run: xvfb-run -a npx electron scripts/spikes/moonshine/electron-runner.cjs
+        # GitHub-hosted Ubuntu does not install Electron's chrome-sandbox with
+        # root ownership + mode 4755. This flag is confined to the disposable
+        # spike runner; Family Circle's production BrowserWindow remains sandboxed.
+        run: xvfb-run -a npx electron --no-sandbox scripts/spikes/moonshine/electron-runner.cjs
 
       - name: Run Moonshine utility-process smoke on Windows
         if: runner.os == 'Windows'
