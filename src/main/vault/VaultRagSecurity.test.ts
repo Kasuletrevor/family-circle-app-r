@@ -36,15 +36,14 @@ function archiveDeps(overrides: Partial<PrivateArchiveQueryServiceDependencies> 
     storyChunks: { listQueryChunks: vi.fn(async () => []) },
     runtime: {
       ensureEmbeddingRuntime: vi.fn(async () => true),
-      ensureFastGenerationRuntime: vi.fn(async () => true),
       ensureGenerationRuntime: vi.fn(async () => true),
     },
     nomic: { embedQuery: vi.fn(async () => new Float32Array([1, 0])) },
-    fast: {
-      generate: vi.fn(async () => 'Grounded answer'),
+    qwen: {
+      generateFast: vi.fn(async () => 'Grounded answer'),
+      generateComplex: vi.fn(async () => 'Grounded answer'),
       translateForRetrieval: vi.fn(async () => 'Known?'),
     },
-    granite: { generate: vi.fn(async () => 'Grounded answer') },
     direct: { answer: vi.fn(async () => null) },
     ...overrides,
   }
@@ -125,13 +124,10 @@ describe('Vault RAG privacy and lifecycle boundaries', () => {
   })
 
   it('never cloud-falls-back', async () => {
-    const granite = await readFile(join(process.cwd(), 'src/main/ai/GraniteClient.ts'), 'utf8')
-    const fastGranite = await readFile(join(process.cwd(), 'src/main/ai/FastGraniteClient.ts'), 'utf8')
+    const qwen = await readFile(join(process.cwd(), 'src/main/ai/QwenClient.ts'), 'utf8')
     const archive = await readFile(join(process.cwd(), 'src/main/ai/PrivateArchiveQueryService.ts'), 'utf8')
-    expect(granite).toContain("host: '127.0.0.1'")
-    expect(fastGranite).toContain("host: '127.0.0.1'")
-    expect(granite).not.toMatch(/node:https|\bfetch\s*\(|https:\/\//)
-    expect(fastGranite).not.toMatch(/node:https|\bfetch\s*\(|https:\/\//)
+    expect(qwen).toContain("host: '127.0.0.1'")
+    expect(qwen).not.toMatch(/node:https|\bfetch\s*\(|https:\/\//)
     expect(archive).not.toMatch(/\bfetch\s*\(|https?:\/\//)
   })
 
@@ -160,7 +156,7 @@ describe('Vault RAG privacy and lifecycle boundaries', () => {
     expect(downloadAll).not.toHaveBeenCalled()
   })
 
-  it('never starts Granite for indexing', async () => {
+  it('never starts Qwen for indexing', async () => {
     const ensureEmbeddingRuntime = vi.fn(async () => true)
     const ensureGenerationRuntime = vi.fn(async () => true)
     const runtime = { ensureEmbeddingRuntime, ensureGenerationRuntime }
