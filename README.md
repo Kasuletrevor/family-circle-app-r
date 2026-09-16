@@ -30,11 +30,11 @@ This branch includes the secure desktop shell, protected authentication and onbo
 - Exact-byte duplicates are rejected per local user; same-name files with different bytes are retained as separate versions instead of replacing earlier content.
 - Extraction failures keep the source document stored and expose a safe retry action; successful extraction becomes `waiting_for_ai` when Private AI is not ready and can be indexed later without re-upload.
 - A private local **My Story** subsystem with fixed guided prompts, drafts, confirmation state, history, media, and local indexing of confirmed content only.
-- Optional user-triggered Private AI setup with resumable downloads, immutable size/SHA verification, pause/continue/repair states, and no automatic ~2.15 GiB download at app startup.
+- Optional user-triggered Private AI setup with resumable downloads, immutable size/SHA verification, pause/continue/repair states, and no automatic ~671 MiB Private AI download at app startup.
 - Persistent Nomic chunk embeddings stored locally in SQLite for Vault documents and confirmed Story answers; stored chunks are not re-embedded for each question.
 - One `PrivateArchiveQueryService` ranks eligible Story + Vault chunks together with a **shared maximum of three chunks**.
 - High-confidence confirmed Story facts can bypass embeddings and generation through a deterministic local lookup.
-- Normal grounded generation uses **Granite 4.0 350M Q4_K_M** with a 192-token ceiling; explicit complex combined synthesis and fast-model fallback use **Granite 4.0 H-Micro Q4_K_M** with a 384-token ceiling.
+- Normal grounded generation and explicit combined synthesis use **Qwen3.5-0.8B Q4_K_M** on one local runtime, with 192- and 384-token output ceilings respectively.
 - The existing **Ask your Vault** UI at `/ai` remains Vault-scoped and now delegates to that shared low-latency engine; Story/combined query surfaces can reuse the same backend without widening the renderer trust boundary.
 - All/selected-document Vault scope keeps protected per-user document-ID validation and safe source excerpts.
 - Intentional no-Circle state for accounts that have no memberships.
@@ -89,8 +89,7 @@ main-process services
            ├── NomicClient
            ├── StoryDirectAnswerService
            ├── PrivateArchiveQueryService
-           ├── FastGraniteClient
-           └── GraniteClient
+           └── QwenClient
 ```
 
 For Circle management specifically:
@@ -268,7 +267,7 @@ The Electron main process owns the native file picker and all source/destination
 
 Stored files use randomized names beneath private per-user Vault storage. A second upload with identical bytes returns `already-exists` and is not copied again. A same-name file with different bytes is retained independently using a display-name suffix such as `Family History (2).pdf`; the earlier source and metadata are not replaced.
 
-Text extraction is entirely local and does **not** depend on Granite, Nomic, the Circle API, or any cloud service:
+Text extraction is entirely local and does **not** depend on Qwen, Nomic, the Circle API, or any cloud service:
 
 - PDF → local PDF parser.
 - DOCX → Mammoth raw-text extraction.
@@ -290,7 +289,7 @@ Story history, media ownership, and restore behavior remain local-user scoped. R
 
 ## Private AI and private archive retrieval
 
-Private AI is optional and explicitly user-triggered. The app does not silently download its roughly **2.15 GiB** required runtime/model stack on startup, sign-in, upload, or Story editing. The public setup states are exactly:
+Private AI is optional and explicitly user-triggered. The app does not silently download its roughly **671 MiB** required runtime/model stack on startup, sign-in, upload, or Story editing. The public setup states are exactly:
 
 ```text
 not_installed
@@ -302,26 +301,25 @@ repair_required
 failed
 ```
 
-The configured llama.cpp runtime, Granite H-Micro model, Granite 350M fast model, and Nomic embedding model must pass immutable expected size/SHA verification before setup reaches `ready`. Resumable `.part` downloads are staged beneath the app user-data directory; pause preserves valid partial bytes and repair re-runs verified setup.
+The configured llama.cpp runtime, Qwen3.5-0.8B Q4_K_M generation model, and Nomic embedding model must pass immutable expected size/SHA verification before setup reaches `ready`. Resumable `.part` downloads are staged beneath the app user-data directory; pause preserves valid partial bytes and repair re-runs verified setup.
 
-Indexing uses Nomic only. Vault extraction-ready text and confirmed Story answers are chunked and embedded with the `search_document: ` prefix, then persisted locally with model/version metadata. Generation models are never required for indexing.
+Indexing uses Nomic only. Vault extraction-ready text and confirmed Story answers are chunked and embedded with the `search_document: ` prefix, then persisted locally with model/version metadata. The generation model is never required for indexing.
 
 For semantic questions, the service loads already-persisted eligible chunks and ranks all candidates together with in-process cosine similarity. The context budget is a single **top three chunks total** across the selected private sources. Vault document chunks and Story chunks are not re-embedded on every question.
 
-For supported direct Story fact questions, `StoryDirectAnswerService` reads the canonical confirmed Story field and returns without starting Nomic or either Granite model.
+For supported direct Story fact questions, `StoryDirectAnswerService` reads the canonical confirmed Story field and returns without starting Nomic or Qwen.
 
-Normal grounded generated questions use the local Granite 350M runtime on the fast path. Explicit complex synthesis over combined private sources uses H-Micro; a fast-runtime/generation failure can fall back only to that larger local model. There is no cloud fallback.
+Normal grounded generated questions use the shared local Qwen runtime with a 192-token output ceiling. Explicit combined synthesis uses the same Qwen runtime with a 384-token output ceiling. Qwen reasoning is disabled at llama.cpp startup, and there is no cloud fallback.
 
-English semantic retrieval embeds one query. Where a supported non-English query language is supplied, retrieval can use the original query plus a local English translation; translation failure falls back to the original query rather than a network service.
+English semantic retrieval embeds one query. Where a supported non-English query language is supplied, retrieval can use the original query plus a local English translation. The same already-produced English translation is also considered when selecting the normal versus complex Qwen response budget, so explicit combined synthesis in supported non-English languages is not under-routed. Translation failure falls back to the original query rather than a network service.
 
 The existing `/ai` renderer surface remains **Ask your Vault**, so its public response stays the legacy safe `{answer, sources}` Vault DTO. Internally it delegates to `PrivateArchiveQueryService` with a Vault-only scope. Story and combined scopes remain main-process capabilities for the next UI surface rather than being exposed by widening the current Vault contract.
 
 All model servers are main-process-owned, loopback-only, lazy, and stopped on application shutdown:
 
 ```text
-Granite H-Micro complex generation   8080
-Nomic embedding/search               8081
-Granite 350M fast generation         8082
+Qwen3.5-0.8B generation / translation   8080
+Nomic embedding/search                   8081
 ```
 
 The port numbers are developer implementation details and are rejected from the production renderer/public contract.
@@ -462,7 +460,7 @@ npm audit
 
 The boundary verifier rejects renderer credential/token storage, direct feature network calls, Circle configuration/secrets, legacy API details, new `P2P_*` production usage, legacy Circle paths/header outside the quarantined main-process adapter, direct production Circle preload access outside `DesktopCircleClient`, production use of `MockCircleClient`, shared-service identity/invitation-secret fields in the public Circle contract or production Circle renderer code, private Vault/Story/AI internals in production renderer/public-contract code, direct Vault preload access outside `DesktopVaultClient`, direct Private AI preload access outside `DesktopPrivateAiClient`, and renderer dependencies on local AI HTTP ports/model/process technicals.
 
-`VaultRagSecurity.test.ts` is merge-blocking and covers cross-user selected-ID rejection, SQLite chunk ownership isolation, absence of Circle/cloud paths, no query-time document re-embedding, explicit-only model downloads, no Granite during indexing, lazy runtime construction, and upload/extraction independence from AI state. `PrivateArchiveQueryService.test.ts` covers the shared top-three budget, Story/Vault ranking, direct-answer short-circuit, multilingual planning, local fast/complex routing, and safe source projection.
+`VaultRagSecurity.test.ts` is merge-blocking and covers cross-user selected-ID rejection, SQLite chunk ownership isolation, absence of Circle/cloud paths, no query-time document re-embedding, explicit-only model downloads, Nomic-only indexing, lazy runtime construction, and upload/extraction independence from AI state. `PrivateArchiveQueryService.test.ts` covers the shared top-three budget, Story/Vault ranking, direct-answer short-circuit, multilingual planning, translated complex routing, local fast/complex Qwen budgets, and safe source projection.
 
 The optional developer benchmark is intentionally outside `npm run check` and CI:
 
@@ -470,7 +468,7 @@ The optional developer benchmark is intentionally outside `npm run check` and CI
 node scripts/benchmark-private-ai.mjs --fixtures ./private-ai-benchmark-fixtures.json --model both
 ```
 
-It requires already-running local llama.cpp endpoints and accepts loopback addresses only.
+It requires an already-running local Qwen llama.cpp endpoint and accepts loopback addresses only.
 
 ## Product boundary
 
