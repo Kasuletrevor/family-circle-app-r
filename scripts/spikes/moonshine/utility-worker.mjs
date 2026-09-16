@@ -1,3 +1,5 @@
+import { statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   loadMoonshineModule,
   ModelArch,
@@ -99,8 +101,25 @@ function joinedText(transcript) {
   return transcript.lines.map((line) => line.text).join(' ').toLowerCase()
 }
 
+function percentile(values, fraction) {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const index = Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)
+  return sorted[index]
+}
+
+function runtimeAssetBytes() {
+  const wasmPath = fileURLToPath(import.meta.resolve('@moonshine-ai/moonshine-wasm/moonshine.wasm'))
+  const mjsPath = fileURLToPath(import.meta.resolve('@moonshine-ai/moonshine-wasm/moonshine.mjs'))
+  return {
+    wasmBytes: statSync(wasmPath).size,
+    mjsBytes: statSync(mjsPath).size,
+  }
+}
+
 async function main() {
   const startedAt = performance.now()
+  const runtimeAssets = runtimeAssetBytes()
   const moduleLoadStartedAt = performance.now()
   const module = await loadMoonshineModule()
   const moduleLoadMs = performance.now() - moduleLoadStartedAt
@@ -137,20 +156,29 @@ async function main() {
 
     const chunkSamples = 1600 // 100 ms at 16 kHz
     let pendingSamples = 0
+    let audioSamplesFed = 0
     let passes = 0
     let firstPartialMs = null
+    let firstPartialAfterAudioSeconds = null
+    const passDurationsMs = []
     stream.addListener({
       onLineTextChanged: () => {
-        if (firstPartialMs === null) firstPartialMs = performance.now() - transcribeStartedAt
+        if (firstPartialMs === null) {
+          firstPartialMs = performance.now() - transcribeStartedAt
+          firstPartialAfterAudioSeconds = audioSamplesFed / sampleRate
+        }
       },
     })
 
     for (let i = 0; i < audio.length; i += chunkSamples) {
       const chunk = audio.subarray(i, Math.min(i + chunkSamples, audio.length))
       stream.addAudio(chunk, sampleRate)
+      audioSamplesFed += chunk.length
       pendingSamples += chunk.length
       if (pendingSamples >= 8000) {
+        const passStartedAt = performance.now()
         stream.transcribe()
+        passDurationsMs.push(performance.now() - passStartedAt)
         passes += 1
         pendingSamples = 0
       }
@@ -158,7 +186,10 @@ async function main() {
 
     const speechEndAt = performance.now()
     stream.stop()
+    const finalPassStartedAt = performance.now()
     const final = stream.transcribe()
+    const finalPassMs = performance.now() - finalPassStartedAt
+    passDurationsMs.push(finalPassMs)
     const finalizedAt = performance.now()
     passes += 1
     const text = joinedText(final)
@@ -167,6 +198,9 @@ async function main() {
       throw new Error(`transcript missed expected phrase(s): ${missing.join(', ')}; transcript=${JSON.stringify(text)}`)
     }
 
+    const audioSeconds = audio.length / sampleRate
+    const totalTranscribeMs = finalizedAt - transcribeStartedAt
+    const computeMs = passDurationsMs.reduce((sum, value) => sum + value, 0)
     const memory = process.memoryUsage()
     report({
       type: 'success',
@@ -180,13 +214,26 @@ async function main() {
       manifestFiles: manifestEntries,
       modelBytes,
       modelMiB: Number((modelBytes / 1024 / 1024).toFixed(2)),
-      audioSeconds: Number((audio.length / sampleRate).toFixed(2)),
+      wasmBytes: runtimeAssets.wasmBytes,
+      wasmMiB: Number((runtimeAssets.wasmBytes / 1024 / 1024).toFixed(2)),
+      moonshineMjsBytes: runtimeAssets.mjsBytes,
+      audioSeconds: Number(audioSeconds.toFixed(2)),
       moduleLoadMs: Math.round(moduleLoadMs),
       downloadMs: Math.round(downloadMs),
       loadMs: Math.round(loadMs),
       firstPartialMs: firstPartialMs === null ? null : Math.round(firstPartialMs),
+      firstPartialAfterAudioSeconds: firstPartialAfterAudioSeconds === null
+        ? null
+        : Number(firstPartialAfterAudioSeconds.toFixed(2)),
       speechEndToFinalMs: Math.round(finalizedAt - speechEndAt),
-      totalTranscribeMs: Math.round(finalizedAt - transcribeStartedAt),
+      finalPassMs: Math.round(finalPassMs),
+      passP50Ms: Math.round(percentile(passDurationsMs, 0.5) ?? 0),
+      passP95Ms: Math.round(percentile(passDurationsMs, 0.95) ?? 0),
+      passMaxMs: Math.round(Math.max(...passDurationsMs)),
+      computeMs: Math.round(computeMs),
+      totalTranscribeMs: Math.round(totalTranscribeMs),
+      realTimeFactor: Number((totalTranscribeMs / (audioSeconds * 1000)).toFixed(3)),
+      throughputXRealtime: Number(((audioSeconds * 1000) / totalTranscribeMs).toFixed(2)),
       passes,
       transcript: text,
       rssMiB: Number((memory.rss / 1024 / 1024).toFixed(1)),
