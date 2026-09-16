@@ -15,7 +15,7 @@ const QWEN_ARGS = [
   '--port', '8080',
   '--threads', '4',
   '--ctx-size', '4096',
-  '--chat-template-kwargs', '{"enable_thinking":false}',
+  '--reasoning', 'off',
 ]
 
 class FakeChild {
@@ -79,7 +79,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true })
   })
 
-  it('starts Qwen for generation request with thinking disabled and loopback-only binding', async () => {
+  it('starts Qwen for generation request with reasoning disabled and loopback-only binding', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(true)
@@ -88,7 +88,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[1]).toEqual(QWEN_ARGS)
   })
 
-  it('maps the fast generation request onto the same non-thinking Qwen runtime', async () => {
+  it('maps the fast generation request onto the same non-reasoning Qwen runtime', async () => {
     const { manager, process } = makeHarness({ health: [true, true] })
 
     await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(true)
