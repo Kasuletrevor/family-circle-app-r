@@ -48,6 +48,7 @@ describe('fast Private AI asset and runtime contract', () => {
     expect(process.spawn).toHaveBeenCalledTimes(1)
     expect(process.spawn.mock.calls[0]?.[1]).toEqual([
       '--model', INSTALLED.fastGraniteModel,
+      '--host', '127.0.0.1',
       '--port', '8082',
       '--threads', '4',
       '--ctx-size', '2048',
