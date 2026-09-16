@@ -18,7 +18,10 @@ describe('QwenClient', () => {
       stream: false,
       messages: [
         { role: 'system', content: SYSTEM },
-        { role: 'user' },
+        expect.objectContaining({
+          role: 'user',
+          content: expect.stringContaining('What did I say?'),
+        }),
       ],
     }))
   })
