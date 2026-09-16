@@ -1,16 +1,9 @@
-import { ModelArch, Transcriber } from '@moonshine-ai/moonshine-wasm'
+import {
+  loadMoonshineModule,
+  ModelArch,
+  Transcriber,
+} from '@moonshine-ai/moonshine-wasm'
 
-const MODEL_BASE = 'https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21'
-const MODEL_FILES = [
-  ['adapter.ort', 1319664],
-  ['cross_kv.ort', 1287544],
-  ['decoder_kv.ort', 32583720],
-  ['encoder.ort', 7675440],
-  ['frontend.model.ort', 23344],
-  ['frontend.weights.ort', 2093464],
-  ['streaming_config.json', 509],
-  ['tokenizer.bin', 249974],
-]
 const TEST_AUDIO_URL = 'https://raw.githubusercontent.com/moonshine-ai/moonshine/main/test-assets/two_cities_16k.wav'
 const EXPECTED_PHRASES = ['best of times', 'worst of times']
 
@@ -24,10 +17,38 @@ async function fetchExact(url, expectedBytes) {
     throw new Error(`download failed (${response.status}) for ${new URL(url).pathname}`)
   }
   const bytes = new Uint8Array(await response.arrayBuffer())
-  if (expectedBytes !== undefined && bytes.byteLength !== expectedBytes) {
+  if (Number.isFinite(expectedBytes) && bytes.byteLength !== expectedBytes) {
     throw new Error(`size mismatch for ${new URL(url).pathname}: expected ${expectedBytes}, got ${bytes.byteLength}`)
   }
   return bytes
+}
+
+function modelFilesFromRuntimeManifest(module) {
+  const raw = module.sttDependencies('en', String(ModelArch.TinyStreaming), false)
+  const manifest = JSON.parse(raw)
+  if (!Array.isArray(manifest.groups) || manifest.groups.length === 0) {
+    throw new Error('Moonshine runtime returned no dependency groups for Tiny Streaming English')
+  }
+
+  const entries = []
+  for (const group of manifest.groups) {
+    if (!Array.isArray(group.files)) continue
+    for (const file of group.files) {
+      if (!file?.name) throw new Error('Moonshine manifest contained an unnamed model file')
+      const url = file.url
+        ? new URL(file.url, group.base_url ? `${group.base_url.replace(/\/$/, '')}/` : undefined).href
+        : new URL(file.name, `${group.base_url.replace(/\/$/, '')}/`).href
+      entries.push({
+        name: file.name,
+        url,
+        size: Number(file.size),
+        checksum: file.checksum ?? null,
+        checksumType: file.checksum_type ?? null,
+      })
+    }
+  }
+  if (entries.length === 0) throw new Error('Moonshine runtime returned an empty model manifest')
+  return entries
 }
 
 function parsePcm16Wav(bytes) {
@@ -80,10 +101,15 @@ function joinedText(transcript) {
 
 async function main() {
   const startedAt = performance.now()
+  const moduleLoadStartedAt = performance.now()
+  const module = await loadMoonshineModule()
+  const moduleLoadMs = performance.now() - moduleLoadStartedAt
+  const manifestEntries = modelFilesFromRuntimeManifest(module)
+
   const downloadStartedAt = performance.now()
   const modelEntries = await Promise.all(
-    MODEL_FILES.map(async ([name, expectedBytes]) => {
-      const bytes = await fetchExact(`${MODEL_BASE}/${name}`, expectedBytes)
+    manifestEntries.map(async ({ name, url, size }) => {
+      const bytes = await fetchExact(url, size)
       return [name, bytes]
     }),
   )
@@ -99,6 +125,7 @@ async function main() {
   const transcriber = await Transcriber.load({
     files,
     modelArch: ModelArch.TinyStreaming,
+    module,
   })
   const loadMs = performance.now() - loadStartedAt
 
@@ -148,10 +175,13 @@ async function main() {
       arch: process.arch,
       node: process.versions.node,
       electron: process.versions.electron,
+      moonshineVersion: module.version(),
       moonshineModel: 'tiny-streaming-en',
+      manifestFiles: manifestEntries,
       modelBytes,
       modelMiB: Number((modelBytes / 1024 / 1024).toFixed(2)),
       audioSeconds: Number((audio.length / sampleRate).toFixed(2)),
+      moduleLoadMs: Math.round(moduleLoadMs),
       downloadMs: Math.round(downloadMs),
       loadMs: Math.round(loadMs),
       firstPartialMs: firstPartialMs === null ? null : Math.round(firstPartialMs),
