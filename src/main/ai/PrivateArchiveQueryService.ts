@@ -198,7 +198,11 @@ export class PrivateArchiveQueryService {
       `[Source ${index + 1}: ${candidate.fileName}]\n${candidate.text}`
     )).join('\n\n')
 
-    const route = selectGenerationRoute({ question, scopeType: input.scope.type as PrivateScopeType })
+    const route = selectGenerationRoute({
+      question,
+      translatedQuestion: queries[1],
+      scopeType: input.scope.type as PrivateScopeType,
+    })
     const answer = await this.generateAnswer(route, question, context)
 
     return {
