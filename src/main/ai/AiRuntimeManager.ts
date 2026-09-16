@@ -6,7 +6,6 @@ import type { InstalledAiPaths } from './privateAiModels'
 const LOOPBACK_HOST = '127.0.0.1'
 const EMBEDDING_PORT = 8081
 const GENERATION_PORT = 8080
-const FAST_GENERATION_PORT = 8082
 const STARTUP_POLL_MS = 500
 const STARTUP_ATTEMPTS = 120
 
@@ -35,7 +34,7 @@ interface AiRuntimeManagerDependencies {
   cpuCount?: () => number
 }
 
-type RuntimeKind = 'embedding' | 'generation' | 'fast-generation'
+type RuntimeKind = 'embedding' | 'generation'
 
 class NodeRuntimeProcessPort implements AiRuntimeProcessPort {
   spawn(executable: string, args: string[], options: { windowsHide: boolean }): ManagedAiChild {
@@ -90,7 +89,6 @@ export class AiRuntimeManager {
   private readonly cpuCount: () => number
   private embeddingChild: ManagedAiChild | null = null
   private generationChild: ManagedAiChild | null = null
-  private fastGenerationChild: ManagedAiChild | null = null
 
   constructor(private readonly dependencies: AiRuntimeManagerDependencies) {
     this.process = dependencies.process ?? new NodeRuntimeProcessPort()
@@ -108,13 +106,12 @@ export class AiRuntimeManager {
   }
 
   async ensureFastGenerationRuntime(): Promise<boolean> {
-    return this.ensureRuntime('fast-generation')
+    return this.ensureGenerationRuntime()
   }
 
   stopAll(): void {
     this.stopManagedChild('embedding')
     this.stopManagedChild('generation')
-    this.stopManagedChild('fast-generation')
   }
 
   private async ensureRuntime(kind: RuntimeKind): Promise<boolean> {
@@ -162,18 +159,8 @@ export class AiRuntimeManager {
       ]
     }
 
-    if (kind === 'fast-generation') {
-      return [
-        '--model', installed.fastGraniteModel,
-        '--host', LOOPBACK_HOST,
-        '--port', String(FAST_GENERATION_PORT),
-        '--threads', threads,
-        '--ctx-size', '2048',
-      ]
-    }
-
     return [
-      '--model', installed.graniteModel,
+      '--model', installed.generationModel,
       '--host', LOOPBACK_HOST,
       '--port', String(GENERATION_PORT),
       '--threads', threads,
@@ -182,20 +169,15 @@ export class AiRuntimeManager {
   }
 
   private portFor(kind: RuntimeKind): number {
-    if (kind === 'embedding') return EMBEDDING_PORT
-    if (kind === 'fast-generation') return FAST_GENERATION_PORT
-    return GENERATION_PORT
+    return kind === 'embedding' ? EMBEDDING_PORT : GENERATION_PORT
   }
 
   private childFor(kind: RuntimeKind): ManagedAiChild | null {
-    if (kind === 'embedding') return this.embeddingChild
-    if (kind === 'fast-generation') return this.fastGenerationChild
-    return this.generationChild
+    return kind === 'embedding' ? this.embeddingChild : this.generationChild
   }
 
   private setChild(kind: RuntimeKind, child: ManagedAiChild | null): void {
     if (kind === 'embedding') this.embeddingChild = child
-    else if (kind === 'fast-generation') this.fastGenerationChild = child
     else this.generationChild = child
   }
 

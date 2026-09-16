@@ -3,10 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
 
-const DEFAULT_ENDPOINTS = {
-  fast: 'http://127.0.0.1:8082',
-  complex: 'http://127.0.0.1:8080',
-}
+const DEFAULT_ENDPOINT = 'http://127.0.0.1:8080'
 
 const MODEL_MAX_TOKENS = {
   fast: 192,
@@ -15,15 +12,14 @@ const MODEL_MAX_TOKENS = {
 
 function usage(message) {
   console.error(message)
-  console.error('Usage: node scripts/benchmark-private-ai.mjs --fixtures <fixtures.json> [--model fast|complex|both] [--fast-url http://127.0.0.1:8082] [--complex-url http://127.0.0.1:8080]')
+  console.error('Usage: node scripts/benchmark-private-ai.mjs --fixtures <fixtures.json> [--model fast|complex|both] [--url http://127.0.0.1:8080]')
 }
 
 function parseArgs(argv) {
   const options = {
     fixtures: '',
     model: 'both',
-    fastUrl: DEFAULT_ENDPOINTS.fast,
-    complexUrl: DEFAULT_ENDPOINTS.complex,
+    url: DEFAULT_ENDPOINT,
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -35,11 +31,8 @@ function parseArgs(argv) {
     } else if (flag === '--model' && value) {
       options.model = value
       index += 1
-    } else if (flag === '--fast-url' && value) {
-      options.fastUrl = value
-      index += 1
-    } else if (flag === '--complex-url' && value) {
-      options.complexUrl = value
+    } else if (flag === '--url' && value) {
+      options.url = value
       index += 1
     } else if (flag === '--help' || flag === '-h') {
       usage('Private AI benchmark harness')
@@ -53,15 +46,14 @@ function parseArgs(argv) {
   if (!['fast', 'complex', 'both'].includes(options.model)) {
     throw new Error('--model must be fast, complex, or both')
   }
-  requireLoopback(options.fastUrl)
-  requireLoopback(options.complexUrl)
+  options.url = requireLoopback(options.url)
   return options
 }
 
 function requireLoopback(value) {
   const url = new URL(value)
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') {
-    throw new Error('Private AI benchmark endpoints must use http://127.0.0.1 loopback')
+    throw new Error('Private AI benchmark endpoint must use http://127.0.0.1 loopback')
   }
   return url.toString().replace(/\/$/, '')
 }
@@ -160,7 +152,7 @@ async function streamCompletion({ endpoint, model, fixture }) {
   })
 
   if (!response.ok || !response.body) {
-    throw new Error(`Local ${model} endpoint returned HTTP ${response.status}`)
+    throw new Error(`Local Qwen ${model} budget returned HTTP ${response.status}`)
   }
 
   const decoder = new TextDecoder()
@@ -209,7 +201,6 @@ async function streamCompletion({ endpoint, model, fixture }) {
     firstTokenMs,
     totalMs,
     generatedTokens,
-    // The model servers are separate processes. Do not mislabel this harness process RSS as model RSS.
     peakRssBytes: null,
     correct: quality.correct,
     grounded: quality.grounded,
@@ -220,15 +211,11 @@ async function main() {
   const options = parseArgs(process.argv.slice(2))
   const fixtures = await readFixtures(options.fixtures)
   const models = options.model === 'both' ? ['fast', 'complex'] : [options.model]
-  const endpoints = {
-    fast: requireLoopback(options.fastUrl),
-    complex: requireLoopback(options.complexUrl),
-  }
 
   for (const fixture of fixtures) {
     for (const model of models) {
       const result = await streamCompletion({
-        endpoint: endpoints[model],
+        endpoint: options.url,
         model,
         fixture,
       })

@@ -57,18 +57,15 @@ export interface PrivateArchiveQueryServiceDependencies {
   }
   runtime: {
     ensureEmbeddingRuntime(): Promise<boolean>
-    ensureFastGenerationRuntime(): Promise<boolean>
     ensureGenerationRuntime(): Promise<boolean>
   }
   nomic: {
     embedQuery(question: string): Promise<Float32Array>
   }
-  fast: {
-    generate(question: string, context: string): Promise<string>
+  qwen: {
+    generateFast(question: string, context: string): Promise<string>
+    generateComplex(question: string, context: string): Promise<string>
     translateForRetrieval(question: string): Promise<string>
-  }
-  granite: {
-    generate(question: string, context: string): Promise<string>
   }
   direct: {
     answer(localUserId: number, question: string): Promise<PrivateDirectAnswer | null>
@@ -163,10 +160,10 @@ export class PrivateArchiveQueryService {
       question,
       language: input.language,
       translateToEnglish: async (value) => {
-        if (!await this.dependencies.runtime.ensureFastGenerationRuntime()) {
-          throw new Error('Fast local translation unavailable')
+        if (!await this.dependencies.runtime.ensureGenerationRuntime()) {
+          throw new Error('Local translation unavailable')
         }
-        return this.dependencies.fast.translateForRetrieval(value)
+        return this.dependencies.qwen.translateForRetrieval(value)
       },
     })
 
@@ -197,19 +194,16 @@ export class PrivateArchiveQueryService {
 
     if (ranked.length === 0) return { answer: noContextAnswer(input.scope), sources: [], route: 'fast' }
 
-    const context = ranked.map(({ candidate }, index) => {
-      const label = candidate.kind === 'story' ? candidate.fileName : candidate.fileName
-      return `[Source ${index + 1}: ${label}]\n${candidate.text}`
-    }).join('\n\n')
+    const context = ranked.map(({ candidate }, index) => (
+      `[Source ${index + 1}: ${candidate.fileName}]\n${candidate.text}`
+    )).join('\n\n')
 
     const route = selectGenerationRoute({ question, scopeType: input.scope.type as PrivateScopeType })
-    const generated = route === 'complex'
-      ? await this.generateComplex(question, context)
-      : await this.generateFastWithLocalFallback(question, context)
+    const answer = await this.generateAnswer(route, question, context)
 
     return {
-      answer: generated.answer,
-      route: generated.route,
+      answer,
+      route,
       sources: this.deduplicateSources(ranked.map(({ candidate }) => candidate)),
     }
   }
@@ -277,27 +271,14 @@ export class PrivateArchiveQueryService {
     return candidates
   }
 
-  private async generateFastWithLocalFallback(question: string, context: string): Promise<{ answer: string; route: 'fast' | 'complex' }> {
-    if (await this.dependencies.runtime.ensureFastGenerationRuntime()) {
-      try {
-        return { answer: await this.dependencies.fast.generate(question, context), route: 'fast' }
-      } catch {
-        // Fast-model failure is allowed to fall back only to the larger local model.
-      }
-    }
-    return { answer: await this.generateComplexAnswer(question, context), route: 'complex' }
-  }
-
-  private async generateComplex(question: string, context: string): Promise<{ answer: string; route: 'complex' }> {
-    return { answer: await this.generateComplexAnswer(question, context), route: 'complex' }
-  }
-
-  private async generateComplexAnswer(question: string, context: string): Promise<string> {
+  private async generateAnswer(route: 'fast' | 'complex', question: string, context: string): Promise<string> {
     if (!await this.dependencies.runtime.ensureGenerationRuntime()) {
       throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI generation is unavailable')
     }
     try {
-      return await this.dependencies.granite.generate(question, context)
+      return route === 'complex'
+        ? await this.dependencies.qwen.generateComplex(question, context)
+        : await this.dependencies.qwen.generateFast(question, context)
     } catch {
       throw new PrivateArchiveQueryServiceError('generation-failed', 'Private AI answer generation failed')
     }

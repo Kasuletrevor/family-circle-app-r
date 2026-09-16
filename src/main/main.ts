@@ -2,12 +2,11 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
-import { FastGraniteClient } from './ai/FastGraniteClient'
-import { GraniteClient } from './ai/GraniteClient'
 import { NomicClient } from './ai/NomicClient'
 import { OfflineAiAssetService } from './ai/OfflineAiAssetService'
 import { PrivateArchiveQueryService } from './ai/PrivateArchiveQueryService'
 import { registerPrivateAiIpc } from './ai/privateAiIpc'
+import { QwenClient } from './ai/QwenClient'
 import { AuthService } from './auth/AuthService'
 import { registerAuthIpc } from './auth/authIpc'
 import { PasswordRecoveryService } from './auth/PasswordRecoveryService'
@@ -162,8 +161,7 @@ async function createAppServices(): Promise<AppServices> {
     storyChunks: storyQueryChunks,
     runtime: aiRuntimeManager,
     nomic: nomicClient,
-    fast: new FastGraniteClient(),
-    granite: new GraniteClient(),
+    qwen: new QwenClient(),
     direct: new StoryDirectAnswerService(storyQueryRepository),
   })
   const vaultQueryService = new VaultQueryService(privateArchiveQueryService)
