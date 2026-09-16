@@ -165,6 +165,7 @@ export class AiRuntimeManager {
       '--port', String(GENERATION_PORT),
       '--threads', threads,
       '--ctx-size', '4096',
+      '--reasoning', 'off',
     ]
   }
 
