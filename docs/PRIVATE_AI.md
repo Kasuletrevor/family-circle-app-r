@@ -6,20 +6,17 @@ The Private AI path is owned by the Electron main process. React receives only s
 
 ## Runtime contract
 
-Private AI uses the manifest in `config/offline-ai-manifest.json`. The current manifest version is `1.1.0` and requires four verified assets:
+Private AI uses `config/offline-ai-manifest.json`. Manifest version `1.2.0` requires exactly three verified assets:
 
 | Friendly name | Asset | Expected bytes | Expected SHA-256 |
 | --- | --- | ---: | --- |
 | AI engine | llama.cpp b8772 Windows CPU x64 runtime ZIP | 39,870,081 | `1C18C414B86E8F84D61D003F8605159ACF97492EEECF6891B2D879AF4A0DBFD2` |
-| AI knowledge | IBM Granite 4.0 H Micro Q4_K_M GGUF | 1,942,564,512 | `BCC78B9B25450101D1AD90D4B9A264E1BAC892F534DFB76066F4EEC792FDF023` |
-| AI fast answers | IBM Granite 4.0 350M Q4_K_M GGUF | 236,985,760 | `771C588A49607F274A2BBA3185733607EBE6F74B996AB90E2D6BEE0D98BCEC52` |
+| AI answers | Qwen3.5-0.8B Q4_K_M GGUF | 579,615,840 | `FB044E93939A70469C905781334F5DE1E6C8B608CED6CBC8C9249BD4127D9526` |
 | AI search | Nomic Embed Text v1.5 Q4_K_M GGUF | 84,106,624 | `D4E388894E09CF3816E8B0896D81D265B55E7A9FFF9AB03FE8BF4EF5E11295AC` |
 
-The combined required transfer is **2,303,526,977 bytes (about 2.15 GiB)**. The URLs and technical asset metadata are main-process/developer configuration, not renderer data.
+The required transfer is **703,592,545 bytes (about 671 MiB / 0.66 GiB)**. Granite 4.0 H-Micro and Granite 4.0 350M are no longer required assets.
 
 ### Local layout
-
-All AI assets are stored beneath Electron's `app.getPath('userData')` directory:
 
 ```text
 <userData>/offline-ai/
@@ -28,19 +25,18 @@ All AI assets are stored beneath Electron's `app.getPath('userData')` directory:
 │   └── llama-b8772-bin-win-cpu-x64/
 │       └── llama-server.exe
 ├── models/
-│   ├── granite-4.0-h-micro-Q4_K_M.gguf
-│   ├── granite-4.0-350m-Q4_K_M.gguf
+│   ├── Qwen_Qwen3.5-0.8B-Q4_K_M.gguf
 │   └── nomic-embed-text-v1.5.Q4_K_M.gguf
 └── .staging/
-    └── 1.1.0/
+    └── 1.2.0/
         └── ... resumable .part downloads ...
 ```
 
-The version marker is written only after every required asset verifies. Model files must match both the immutable expected byte size and SHA-256. The llama.cpp ZIP is verified before extraction and `llama-server.exe` must exist in the extracted target before the runtime can be considered installed.
+The version marker is written only after every required asset verifies. Model files must match both immutable byte size and SHA-256. The llama.cpp ZIP is verified before extraction and `llama-server.exe` must exist before the runtime is considered installed.
 
-Partial `.part` files are not considered installed. Setup can pause and resume using HTTP Range requests. If a server ignores a resume request, the downloader restarts that file safely rather than appending incompatible bytes. Existing verified files are reused when a manifest upgrade adds a new required asset.
+Partial `.part` files are never considered installed. Setup can pause/resume through HTTP Range requests. Existing verified files can be reused across manifest revisions when their configured asset identity still matches.
 
-## Seven setup states
+## Setup states
 
 The public setup state is exactly one of:
 
@@ -54,9 +50,9 @@ repair_required
 failed
 ```
 
-`ready` means the current manifest version is marked installed and all required assets still verify. A marker/version mismatch or invalid required asset becomes `repair_required`.
+`ready` means the current manifest version is marked installed and every required asset still verifies. A version mismatch or invalid required asset becomes `repair_required`.
 
-Setup and repair are explicit user actions:
+Setup and repair remain explicit user actions:
 
 - App startup does **not** download models.
 - Vault upload and Story editing do **not** trigger setup.
@@ -69,19 +65,20 @@ No setup state disables Vault upload, local extraction, or Story drafting/confir
 
 ## Lazy llama.cpp lifecycle
 
-`AiRuntimeManager` starts no AI process at construction or normal app startup. It owns three independent llama.cpp server lifecycles:
+`AiRuntimeManager` starts no AI process at construction or normal app startup. It owns two local llama.cpp server lifecycles:
 
 ```text
-Granite H-Micro complex generation   developer-only port 8080
-Nomic embedding/search               developer-only port 8081
-Granite 350M fast generation         developer-only port 8082
+Qwen3.5-0.8B generation / translation   developer-only port 8080
+Nomic embedding / search                developer-only port 8081
 ```
 
-These ports and endpoints are internal implementation details. They must never appear in the public desktop contract or production renderer code. All three servers bind only to local loopback use through main-process clients.
+Both bind to `127.0.0.1` only. Ports and endpoints are internal implementation details and must never appear in the renderer/public desktop contract.
+
+There is no separate fast-generation process. `ensureFastGenerationRuntime()` is only a compatibility alias to the shared Qwen generation runtime while older internal callers are removed.
 
 ## Indexing lifecycle
 
-Indexing uses **Nomic only**. Generation models are not required for document or Story indexing.
+Indexing uses **Nomic only**. Qwen is not required for document or Story indexing.
 
 Vault:
 
@@ -103,85 +100,67 @@ owned confirmed Story answer
   -> Story index_status = ready
 ```
 
-Draft Story answers are not queryable. Editing previously confirmed text invalidates its old chunks until the changed answer is explicitly confirmed and indexed again. Query-time Story retrieval joins through `story_answers` and requires both `confirmed = 1` and `index_status = 'ready'`.
+Draft Story answers are not queryable. Editing previously confirmed text invalidates its old chunks until the changed answer is explicitly confirmed and indexed again.
 
-The exact document prefix is:
+The current embedding contract remains intentionally unchanged in this Qwen migration:
 
 ```text
 search_document: <chunk text>
+search_query: <question>
 ```
 
-Embedding model/version compatibility is checked before a stored chunk is ranked. `EMBEDDING_INDEX_VERSION` is currently `1`.
+`EMBEDDING_INDEX_VERSION` remains `1`. Existing chunks are embedded once per index operation and persisted; they are **not re-embedded for every question**.
 
-Existing chunks are embedded once per index operation and persisted. They are **not re-embedded for each question**.
+A future embedding-model migration must update pooling/prefix semantics and bump the embedding index contract so old vectors cannot be mixed with a different embedding space.
 
-## Low-latency private query lifecycle
+## Private query lifecycle
 
-`PrivateArchiveQueryService` is the one main-process retrieval engine behind the existing Vault query façade and future Story/combined query surfaces.
-
-The approved order is:
+`PrivateArchiveQueryService` is the single main-process retrieval engine behind Vault questions and reusable Story/combined query surfaces.
 
 ```text
 protected local user + question + scope
   -> validate selected Vault document IDs, if any
   -> for Story/combined scope: try deterministic confirmed-Story fact lookup
-  -> load owned persistent Vault/Story chunks for the scope
+  -> load owned persistent Vault/Story chunks
   -> start/reuse Nomic only if semantic retrieval is required
   -> embed one English query
      OR original + local English translation for supported non-English input
-  -> score all eligible Story + Vault candidates in one shared rank
+  -> rank eligible Story + Vault candidates together
   -> keep at most top 3 chunks total
-  -> default: start/reuse Granite 350M fast generator
-  -> explicit complex combined synthesis: use Granite H-Micro
-  -> if the fast generator fails/unavailable: local H-Micro fallback only
+  -> start/reuse shared Qwen generation runtime
   -> grounded answer + display-safe source excerpts
 ```
 
-The exact query prefix is:
-
-```text
-search_query: <question>
-```
-
-There is **one shared retrieval budget of three chunks**. It is not three Vault chunks plus three Story chunks. Citation/source display is deduplicated after chunk ranking so multiple high-scoring chunks from one logical source cannot widen the context budget.
+There is **one shared retrieval budget of three chunks**. It is not three Vault chunks plus three Story chunks. Citation display is deduplicated after chunk ranking so repeated chunks from one logical source do not widen the context budget.
 
 ### Deterministic Story fast path
 
-High-confidence factual questions for a small fixed set of confirmed Story fields can be answered directly from the canonical Story row without Nomic or either generation model. The current direct intents include full name, preferred name, roots, languages, occupation, and education.
+High-confidence factual questions for a small fixed set of confirmed Story fields can be answered from the canonical Story row without Nomic or Qwen. The current direct intents include full name, preferred name, roots, languages, occupation, and education.
 
-This path remains confirmed-only and user-owned. If phrase matching is not high confidence, the request falls back to semantic retrieval rather than guessing.
+If phrase matching is not high confidence, the request falls back to semantic retrieval rather than guessing.
 
-### Generation routes
+### One Qwen model, two generation budgets
 
-Normal grounded questions use Granite 4.0 350M with a maximum of **192 output tokens**.
+Both generated-answer routes use **Qwen3.5-0.8B Q4_K_M** on the same local server:
 
-Explicit complex synthesis over combined private sources uses Granite 4.0 H-Micro with a maximum of **384 output tokens**. The H-Micro prompt is private-archive grounded rather than Vault-only.
+```text
+fast      normal grounded answer       max 192 output tokens
+complex   explicit combined synthesis  max 384 output tokens
+```
 
-No conversation transcript is automatically injected into either model. Both receive only the current question plus the selected retrieved private-source context.
+The route distinction is now a response-budget/policy distinction, **not a model-selection distinction**. There is no H-Micro fallback and no second generator download.
 
-If no usable context is found, the service returns a scope-appropriate local not-found answer and does not start a generation model.
+For supported non-English retrieval planning, the same Qwen runtime can produce a short local English retrieval translation before Nomic embeds both useful query forms.
+
+No conversation transcript is automatically injected. Qwen receives only the current request and the selected retrieved private-source context. If no usable context is found, the service returns a scope-appropriate local not-found answer and does not start generation.
 
 ## Persistent vector stores
 
-Vault chunks are stored in `vault_chunks` and derive ownership through `vault_documents.local_user_id`:
+Vault chunks live in `vault_chunks` and derive ownership through `vault_documents.local_user_id`. Story chunks live in `story_chunks` and derive ownership/confirmation state through their `story_answers` row.
 
-```text
-vault_chunks
-  document_id
-  chunk_index
-  text
-  embedding_blob
-  embedding_model
-  index_version
-  created_at
-  updated_at
-```
+Embeddings are serialized as exact-range Float32 bytes in SQLite BLOBs and decoded only in the main process. Invalid vectors and incompatible embedding model/version rows are skipped rather than sent to generation.
 
-Story chunks are stored in `story_chunks` and derive ownership/confirmation state through their `story_answers` row.
-
-Embeddings are serialized as exact-range Float32 bytes in SQLite BLOBs and decoded only inside the main process. Invalid/malformed vectors and incompatible embedding model/version rows are skipped at query time rather than exposed to generation.
-
-Replacing an index is transactional. Deleting or invalidating the owning content removes/stales its corresponding chunks so old private text is not silently queryable.
+Replacing an index is transactional. Deleting or invalidating owning content removes or stales its corresponding chunks so old private text is not silently queryable.
 
 ## Privacy and trust boundaries
 
@@ -199,8 +178,7 @@ localUserId
 embeddingBlob
 Float32Array
 modelPath
-graniteModel
-fastGraniteModel
+generationModel
 nomicModel
 llama-server.exe
 AI runtime ports/endpoints
@@ -214,34 +192,21 @@ Production renderer access stays narrow:
 - Story operations use the typed Story client/preload surface.
 - Feature components do not call localhost model endpoints directly.
 
-The private query engine derives the local user from the protected desktop session. Renderer-supplied identity is not accepted. Selected Vault IDs are revalidated against that user before chunk retrieval. Story chunks are queried only through the same user's confirmed/ready rows.
+The query engine derives the local user from the protected desktop session. Renderer-supplied identity is not accepted. Selected Vault IDs are revalidated against that user before chunk retrieval. Story chunks are queried only through the same user's confirmed/ready rows.
 
-Generation receives at most the three ranked local chunks needed for the current question. It does not send private content to Jose's Circle compatibility adapter or to an external AI service.
+Generation receives at most the three ranked local chunks needed for the current question. It does not send private content to the Circle compatibility adapter or an external AI service.
 
 ## Developer benchmark
 
-`scripts/benchmark-private-ai.mjs` is an explicit developer tool for comparing the fast and complex local generators. It is **not** called by app startup, `npm run check`, Desktop shell CI, or the Windows packaging workflow.
+`scripts/benchmark-private-ai.mjs` is an explicit developer tool. It benchmarks the **fast** and **complex** Qwen token budgets against the same loopback generation endpoint. It is not called by app startup, `npm run check`, Desktop shell CI, or the Windows packaging workflow.
 
-The llama.cpp servers must already be running locally. Example:
+The Qwen llama.cpp server must already be running locally:
 
 ```bash
 node scripts/benchmark-private-ai.mjs --fixtures ./private-ai-benchmark-fixtures.json --model both
 ```
 
-Fixture JSON is a non-empty array. Each case requires:
-
-```json
-{
-  "caseId": "known-family-fact",
-  "question": "Where was grandmother born?",
-  "context": "Grandmother was born in Jinja.",
-  "expectedIncludes": ["Jinja"],
-  "groundingIncludes": ["Jinja"],
-  "forbiddenIncludes": ["Kampala"]
-}
-```
-
-The harness permits only `http://127.0.0.1` endpoints. It emits one JSON line per fixture/model pair with:
+The harness permits only `http://127.0.0.1` endpoints and emits one JSON line per fixture/mode pair containing:
 
 ```text
 caseId
@@ -254,34 +219,33 @@ correct
 grounded
 ```
 
-`firstTokenMs` is measured from streaming output. `generatedTokens` is populated when the local server reports usage. `correct` and `grounded` are `null` when the fixture does not provide rules for those judgments. `peakRssBytes` is currently `null` because the benchmark process cannot safely infer the RSS of separately managed llama.cpp server processes; it deliberately does not report its own RSS as model memory.
+`firstTokenMs` comes from streaming output. `generatedTokens` is populated when the local server reports usage. `peakRssBytes` remains `null` because the benchmark process cannot safely infer the RSS of the separately managed llama.cpp process.
 
 ## Shutdown
 
-The main process owns every llama.cpp child it starts. Application shutdown stops the managed embedding, fast-generation, and complex-generation processes before database close. Family Circle does not attach to or kill unrelated system processes.
+The main process owns every llama.cpp child it starts. Application shutdown stops the managed embedding and shared Qwen generation processes before database close. Family Circle does not attach to or kill unrelated system processes.
 
 ## Manual Windows clean-machine acceptance test
 
-Run this sequence on a clean Windows machine before release. Use small known-answer documents and confirmed Story memories so grounding is easy to inspect.
-
 1. **Clean state** — confirm there is no existing `<userData>/offline-ai` installation.
-2. **Private data before AI** — upload Vault documents and edit My Story; confirm those local features work before setup.
-3. **Explicit setup** — click the Private AI setup action; confirm no download began before that user action.
-4. **Pause/resume** — pause during transfer, confirm partial bytes remain, continue, and confirm valid partial data is reused.
-5. **Verified ready** — confirm setup reaches `ready` only after all four required assets pass configured verification and the runtime executable exists.
-6. **Persistent indexing** — confirm Nomic indexes extraction-ready documents and confirmed Story answers without re-upload/re-entry.
-7. **Known-answer Vault RAG** — ask a question whose answer exists in a Vault document; confirm the answer and source excerpt are grounded.
-8. **Direct Story fact** — for a supported confirmed field, confirm the answer works without starting semantic/generation runtimes where the direct path applies.
-9. **Fast generated answer** — ask a normal grounded question requiring synthesis and confirm the 350M route is usable.
-10. **Offline question** — disconnect from the internet and confirm indexed/direct private questions still work.
-11. **User isolation** — switch to another local account; confirm the other account cannot list/select/retrieve first-user Vault or Story content.
-12. **Lifecycle cleanup** — exit Family Circle and confirm all managed llama.cpp processes stop.
+2. **Private data before AI** — upload Vault documents and edit My Story before setup.
+3. **Explicit setup** — confirm no AI download begins until the user starts setup.
+4. **Pause/resume** — pause during transfer and confirm valid partial bytes are reused.
+5. **Verified ready** — confirm setup reaches `ready` only after all three required assets verify and `llama-server.exe` exists.
+6. **Persistent indexing** — confirm Nomic indexes extraction-ready Vault documents and confirmed Story answers without re-upload/re-entry.
+7. **Known-answer Vault RAG** — confirm grounded answer and source excerpt.
+8. **Direct Story fact** — confirm supported direct facts do not start semantic/generation runtimes.
+9. **Fast Qwen answer** — confirm a normal grounded question uses the shared Qwen runtime with the 192-token budget.
+10. **Complex Qwen answer** — confirm an explicit combined comparison uses the same Qwen runtime with the 384-token budget.
+11. **Offline question** — disconnect from the internet and confirm indexed/direct private questions still work.
+12. **User isolation** — confirm another local account cannot retrieve first-user Vault or Story content.
+13. **Lifecycle cleanup** — exit Family Circle and confirm both managed llama.cpp processes stop.
 
-Also verify failure paths: corrupt a required asset and confirm `repair_required`; retry indexing without re-uploading; ask with a selected document ID from another account and confirm a safe rejection; stop the fast generator and confirm fallback stays local.
+Also verify failure paths: corrupt a required asset and confirm `repair_required`; retry indexing without re-uploading; ask with another account's selected document ID and confirm safe rejection; stop Qwen and confirm generation fails locally without any cloud fallback.
 
 ## CI contract
 
-CI must never download or start the real ~2.15 GiB AI stack. Downloader, runtime, model-server, planner, ranking, and health behavior is exercised with injected fakes/ports plus SQLite-backed security tests.
+CI must never download or start the real ~671 MiB AI stack. Downloader, runtime, model-server, planner, ranking, and health behavior is exercised with injected fakes/ports plus SQLite-backed security tests.
 
 The merge gate is:
 
@@ -290,4 +254,4 @@ npm run check
 npm audit --audit-level=high
 ```
 
-`npm run check` covers TypeScript, Vitest, architectural boundary verification, and Electron/renderer production builds. `VaultRagSecurity.test.ts` adds merge-blocking regressions for cross-user isolation, no cloud/Circle path, no query-time document re-embedding, explicit-only downloads, Nomic-only indexing, lazy runtime construction, and AI-independent upload/extraction. `PrivateArchiveQueryService.test.ts` covers deterministic/direct routing, the shared top-three budget, Story/Vault ranking, multilingual query planning, safe source projection, and local-only generation fallback.
+`npm run check` covers TypeScript, Vitest, architecture-boundary verification, and Electron/renderer production builds. `VaultRagSecurity.test.ts` blocks regressions in cross-user isolation, no cloud/Circle path, no query-time document re-embedding, explicit-only downloads, Nomic-only indexing, lazy runtime construction, and AI-independent upload/extraction. `PrivateArchiveQueryService.test.ts` covers deterministic/direct routing, the shared top-three budget, Story/Vault ranking, multilingual planning, safe source projection, and both Qwen generation budgets.

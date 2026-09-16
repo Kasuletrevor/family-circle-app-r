@@ -90,9 +90,11 @@ describe('createStoryServices', () => {
     const mainSource = readFileSync(resolve(__dirname, '../main.ts'), 'utf8')
 
     expect(mainSource).toContain("import { PrivateArchiveQueryService } from './ai/PrivateArchiveQueryService'")
-    expect(mainSource).toContain("import { FastGraniteClient } from './ai/FastGraniteClient'")
+    expect(mainSource).toContain("import { QwenClient } from './ai/QwenClient'")
+    expect(mainSource).not.toMatch(/FastGraniteClient|GraniteClient/)
     expect(mainSource).toContain("import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'")
     expect(mainSource.match(/new PrivateArchiveQueryService\(/g)).toHaveLength(1)
+    expect(mainSource.match(/new QwenClient\(/g)).toHaveLength(1)
     expect(mainSource).toMatch(/new VaultQueryService\(privateArchiveQueryService\)/)
     expect(mainSource).toContain('registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)')
   })
