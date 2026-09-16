@@ -50,9 +50,16 @@ export async function planRetrievalQueries(input: {
 
 export function selectGenerationRoute(input: {
   question: string
+  translatedQuestion?: string
   scopeType: PrivateScopeType
 }): PrivateGenerationRoute {
   if (input.scopeType !== 'combined') return 'fast'
-  const question = String(input.question ?? '').trim()
-  return COMPLEX_SYNTHESIS_PATTERNS.some((pattern) => pattern.test(question)) ? 'complex' : 'fast'
+
+  const questions = [input.question, input.translatedQuestion]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+
+  return questions.some((question) => (
+    COMPLEX_SYNTHESIS_PATTERNS.some((pattern) => pattern.test(question))
+  )) ? 'complex' : 'fast'
 }
