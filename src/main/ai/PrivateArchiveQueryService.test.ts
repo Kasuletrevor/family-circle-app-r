@@ -27,15 +27,14 @@ function deps(overrides: Partial<PrivateArchiveQueryServiceDependencies> = {}): 
     storyChunks: { listQueryChunks: vi.fn(async () => [storyChunk(2, 'childhood', 'Life Story', 'Childhood and early memories', 'I grew up near Jinja.', [0.9, 0.1])]) },
     runtime: {
       ensureEmbeddingRuntime: vi.fn(async () => true),
-      ensureFastGenerationRuntime: vi.fn(async () => true),
       ensureGenerationRuntime: vi.fn(async () => true),
     },
     nomic: { embedQuery: vi.fn(async () => new Float32Array([1, 0])) },
-    fast: {
-      generate: vi.fn(async () => 'Fast grounded answer'),
+    qwen: {
+      generateFast: vi.fn(async () => 'Fast grounded answer'),
+      generateComplex: vi.fn(async () => 'Complex grounded answer'),
       translateForRetrieval: vi.fn(async () => 'Where was I born?'),
     },
-    granite: { generate: vi.fn(async () => 'Complex grounded answer') },
     direct: { answer: vi.fn(async () => null) },
     ...overrides,
   }
@@ -63,7 +62,7 @@ describe('PrivateArchiveQueryService', () => {
     expect(listStory).not.toHaveBeenCalled()
   })
 
-  it('returns a direct confirmed Story fact without starting Nomic or either generator', async () => {
+  it('returns a direct confirmed Story fact without starting Nomic or Qwen', async () => {
     const direct = {
       answer: vi.fn(async () => ({
         answer: 'Amina Nansubuga',
@@ -83,12 +82,12 @@ describe('PrivateArchiveQueryService', () => {
 
     expect(result).toMatchObject({ answer: 'Amina Nansubuga', route: 'direct' })
     expect(dependencies.nomic.embedQuery).not.toHaveBeenCalled()
-    expect(dependencies.fast.generate).not.toHaveBeenCalled()
-    expect(dependencies.granite.generate).not.toHaveBeenCalled()
+    expect(dependencies.qwen.generateFast).not.toHaveBeenCalled()
+    expect(dependencies.qwen.generateComplex).not.toHaveBeenCalled()
   })
 
   it('ranks Story and Vault candidates together, keeps only three chunks total, and deduplicates citations by logical source', async () => {
-    const generate = vi.fn(async () => 'Grounded')
+    const generateFast = vi.fn(async () => 'Grounded')
     const service = new PrivateArchiveQueryService(deps({
       vaultChunks: {
         listQueryChunks: vi.fn(async () => [
@@ -103,8 +102,9 @@ describe('PrivateArchiveQueryService', () => {
           storyChunk(4, 'values', 'Values & Wishes', 'Values and lessons', 'STORY-EXCLUDED-5', [0, 1]),
         ]),
       },
-      fast: {
-        generate,
+      qwen: {
+        generateFast,
+        generateComplex: vi.fn(async () => 'unused'),
         translateForRetrieval: vi.fn(async () => 'unused'),
       },
     }))
@@ -120,7 +120,7 @@ describe('PrivateArchiveQueryService', () => {
       'A.pdf',
       'My Story › Life Story › Childhood and early memories',
     ])
-    const [, context] = generate.mock.calls[0]!
+    const [, context] = generateFast.mock.calls[0]!
     expect(context).toContain('A-TOP-1')
     expect(context).toContain('A-TOP-2-SAME-DOC')
     expect(context).toContain('STORY-TOP-3')
@@ -128,14 +128,18 @@ describe('PrivateArchiveQueryService', () => {
     expect(context).not.toContain('STORY-EXCLUDED-5')
   })
 
-  it('uses original and translated query embeddings for supported non-English retrieval', async () => {
+  it('uses Qwen translation plus original and translated embeddings for supported non-English retrieval', async () => {
     const embedQuery = vi.fn(async (query: string) => query.startsWith('Where')
       ? new Float32Array([0.8, 0.2])
       : new Float32Array([1, 0]))
     const translateForRetrieval = vi.fn(async () => 'Where was I born?')
     const service = new PrivateArchiveQueryService(deps({
       nomic: { embedQuery },
-      fast: { generate: vi.fn(async () => 'Answer'), translateForRetrieval },
+      qwen: {
+        generateFast: vi.fn(async () => 'Answer'),
+        generateComplex: vi.fn(async () => 'unused'),
+        translateForRetrieval,
+      },
     }))
 
     await service.ask({ question: '¿Dónde nací?', language: 'es', scope: { type: 'story' } })
@@ -145,33 +149,39 @@ describe('PrivateArchiveQueryService', () => {
   })
 
   it('skips malformed vectors and returns a safe no-context answer without starting generation', async () => {
-    const ensureFastGenerationRuntime = vi.fn(async () => true)
-    const fastGenerate = vi.fn(async () => 'should not run')
+    const ensureGenerationRuntime = vi.fn(async () => true)
+    const generateFast = vi.fn(async () => 'should not run')
     const service = new PrivateArchiveQueryService(deps({
       vaultChunks: { listQueryChunks: vi.fn(async () => [vaultChunk(1, 'Bad.pdf', 0, 'bad vector', [1, 0, 0])]) },
       storyChunks: { listQueryChunks: vi.fn(async () => []) },
       runtime: {
         ensureEmbeddingRuntime: vi.fn(async () => true),
-        ensureFastGenerationRuntime,
-        ensureGenerationRuntime: vi.fn(async () => true),
+        ensureGenerationRuntime,
       },
-      fast: { generate: fastGenerate, translateForRetrieval: vi.fn(async () => 'unused') },
+      qwen: {
+        generateFast,
+        generateComplex: vi.fn(async () => 'unused'),
+        translateForRetrieval: vi.fn(async () => 'unused'),
+      },
     }))
 
     const result = await service.ask({ question: 'Anything?', scope: { type: 'vault', vault: { type: 'all' } } })
 
     expect(result.answer).toBe('I could not find it in the selected Vault documents.')
     expect(result.sources).toEqual([])
-    expect(ensureFastGenerationRuntime).not.toHaveBeenCalled()
-    expect(fastGenerate).not.toHaveBeenCalled()
+    expect(ensureGenerationRuntime).not.toHaveBeenCalled()
+    expect(generateFast).not.toHaveBeenCalled()
   })
 
-  it('uses H-Micro only for explicit combined synthesis', async () => {
-    const fastGenerate = vi.fn(async () => 'fast')
-    const complexGenerate = vi.fn(async () => 'complex')
+  it('uses the same Qwen model with the complex token budget for explicit combined synthesis', async () => {
+    const generateFast = vi.fn(async () => 'fast')
+    const generateComplex = vi.fn(async () => 'complex')
     const service = new PrivateArchiveQueryService(deps({
-      fast: { generate: fastGenerate, translateForRetrieval: vi.fn(async () => 'unused') },
-      granite: { generate: complexGenerate },
+      qwen: {
+        generateFast,
+        generateComplex,
+        translateForRetrieval: vi.fn(async () => 'unused'),
+      },
     }))
 
     const result = await service.ask({
@@ -181,27 +191,21 @@ describe('PrivateArchiveQueryService', () => {
 
     expect(result.route).toBe('complex')
     expect(result.answer).toBe('complex')
-    expect(complexGenerate).toHaveBeenCalledTimes(1)
-    expect(fastGenerate).not.toHaveBeenCalled()
+    expect(generateComplex).toHaveBeenCalledTimes(1)
+    expect(generateFast).not.toHaveBeenCalled()
   })
 
-  it('falls back locally to H-Micro when the fast runtime is unavailable', async () => {
-    const complexGenerate = vi.fn(async () => 'local fallback')
-    const ensureGenerationRuntime = vi.fn(async () => true)
+  it('fails safely when the shared Qwen runtime is unavailable', async () => {
     const service = new PrivateArchiveQueryService(deps({
       runtime: {
         ensureEmbeddingRuntime: vi.fn(async () => true),
-        ensureFastGenerationRuntime: vi.fn(async () => false),
-        ensureGenerationRuntime,
+        ensureGenerationRuntime: vi.fn(async () => false),
       },
-      granite: { generate: complexGenerate },
     }))
 
-    const result = await service.ask({ question: 'Summarize this.', scope: { type: 'vault', vault: { type: 'all' } } })
-
-    expect(result.route).toBe('complex')
-    expect(result.answer).toBe('local fallback')
-    expect(ensureGenerationRuntime).toHaveBeenCalledTimes(1)
-    expect(complexGenerate).toHaveBeenCalledTimes(1)
+    await expect(service.ask({
+      question: 'Summarize this.',
+      scope: { type: 'vault', vault: { type: 'all' } },
+    })).rejects.toMatchObject({ code: 'private-ai-unavailable' })
   })
 })

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('private AI benchmark harness contract', () => {
-  it('benchmarks fast and complex loopback generation with comparable latency and quality fields', () => {
+  it('benchmarks fast and complex Qwen budgets on one loopback generation endpoint', () => {
     const benchmarkPath = resolve(process.cwd(), 'scripts/benchmark-private-ai.mjs')
     expect(existsSync(benchmarkPath)).toBe(true)
     if (!existsSync(benchmarkPath)) return
@@ -22,8 +22,8 @@ describe('private AI benchmark harness contract', () => {
       expect(source).toContain(field)
     }
     expect(source).toContain('127.0.0.1')
-    expect(source).toContain('8082')
     expect(source).toContain('8080')
+    expect(source).not.toContain('8082')
     expect(source).toContain("'fast'")
     expect(source).toContain("'complex'")
   })
