@@ -41,6 +41,8 @@ describe('Windows packaging contract', () => {
   it('does not package the obsolete SMTP transport or Nodemailer dependencies', () => {
     expect(pkg.dependencies?.nodemailer).toBeUndefined()
     expect(pkg.devDependencies?.['@types/nodemailer']).toBeUndefined()
+    expect(existsSync(resolve(root, 'node_modules/nodemailer'))).toBe(false)
+    expect(existsSync(resolve(root, 'node_modules/@types/nodemailer'))).toBe(false)
     const mailerSource = readFileSync(resolve(root, 'src/main/auth/RecoveryMailer.ts'), 'utf8')
     expect(mailerSource).not.toMatch(/nodemailer|SMTP_HOST|SMTP_PORT|SMTP_SECURE|MAIL_HOST/)
   })
