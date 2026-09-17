@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { appendFile, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, open as openFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
@@ -12,11 +12,16 @@ import type {
   PrivateAiProgress,
 } from './privateAiModels'
 
+export interface OfflineAiWriteSession {
+  write(chunk: Uint8Array): Promise<void>
+  close(): Promise<void>
+}
+
 export interface OfflineAiDownloadFs {
   stat(path: string): Promise<{ size: number } | null>
   mkdir(path: string): Promise<void>
   truncate(path: string): Promise<void>
-  append(path: string, chunk: Uint8Array): Promise<void>
+  openWriter(path: string, mode: 'append' | 'truncate'): Promise<OfflineAiWriteSession>
   readChunks(path: string): AsyncIterable<Uint8Array>
   rename(from: string, to: string): Promise<void>
   remove(path: string): Promise<void>
@@ -65,9 +70,21 @@ class NodeDownloadFs implements OfflineAiDownloadFs {
     await writeFile(path, Buffer.alloc(0))
   }
 
-  async append(path: string, chunk: Uint8Array): Promise<void> {
+  async openWriter(path: string, mode: 'append' | 'truncate'): Promise<OfflineAiWriteSession> {
     await mkdir(dirname(path), { recursive: true })
-    await appendFile(path, chunk)
+    const handle = await openFile(path, mode === 'append' ? 'a' : 'w')
+    let closed = false
+    return {
+      write: async (chunk) => {
+        if (closed) throw new Error('Offline AI writer is closed')
+        await handle.write(Buffer.from(chunk))
+      },
+      close: async () => {
+        if (closed) return
+        closed = true
+        await handle.close()
+      },
+    }
   }
 
   async *readChunks(path: string): AsyncIterable<Uint8Array> {
@@ -151,7 +168,17 @@ interface OfflineAiDownloaderDependencies {
   fs?: OfflineAiDownloadFs
   http?: OfflineAiHttpPort
   archive?: OfflineAiArchivePort
+  parallelDownloadThresholdBytes?: number
+  maxParallelParts?: number
 }
+
+interface ByteRange {
+  start: number
+  end: number
+}
+
+const DEFAULT_PARALLEL_DOWNLOAD_THRESHOLD_BYTES = 128 * 1024 * 1024
+const DEFAULT_MAX_PARALLEL_PARTS = 4
 
 function safeTarget(rootPath: string, relativeTarget: string): string {
   if (isAbsolute(relativeTarget)) throw new Error('Offline AI manifest target must be relative')
@@ -173,16 +200,46 @@ function percent(downloaded: number, total: number): number {
   return Math.max(0, Math.min(100, Math.round((downloaded / total) * 100)))
 }
 
+function headerValue(headers: OfflineAiHttpResponse['headers'], name: string): string | null {
+  const value = headers[name.toLowerCase()] ?? headers[name]
+  if (Array.isArray(value)) return value[0] ?? null
+  return value ?? null
+}
+
+function planByteRanges(sizeBytes: number, partCount: number): ByteRange[] {
+  const count = Math.max(1, Math.min(partCount, sizeBytes))
+  const partSize = Math.ceil(sizeBytes / count)
+  const ranges: ByteRange[] = []
+  for (let start = 0; start < sizeBytes; start += partSize) {
+    ranges.push({ start, end: Math.min(sizeBytes - 1, start + partSize - 1) })
+  }
+  return ranges
+}
+
+function contentRangeMatches(response: OfflineAiHttpResponse, range: ByteRange, totalSize: number): boolean {
+  const value = headerValue(response.headers, 'content-range')
+  if (!value) return false
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/.exec(value.trim())
+  if (!match) return false
+  return Number(match[1]) === range.start
+    && Number(match[2]) === range.end
+    && Number(match[3]) === totalSize
+}
+
 export class OfflineAiDownloader {
   private readonly fs: OfflineAiDownloadFs
   private readonly http: OfflineAiHttpPort
   private readonly archive: OfflineAiArchivePort
+  private readonly parallelDownloadThresholdBytes: number
+  private readonly maxParallelParts: number
   private pauseRequested = false
 
   constructor(dependencies: OfflineAiDownloaderDependencies = {}) {
     this.fs = dependencies.fs ?? new NodeDownloadFs()
     this.http = dependencies.http ?? new NodeHttpPort()
     this.archive = dependencies.archive ?? new PowerShellArchivePort()
+    this.parallelDownloadThresholdBytes = dependencies.parallelDownloadThresholdBytes ?? DEFAULT_PARALLEL_DOWNLOAD_THRESHOLD_BYTES
+    this.maxParallelParts = Math.max(2, Math.min(4, dependencies.maxParallelParts ?? DEFAULT_MAX_PARALLEL_PARTS))
   }
 
   pause(): void {
@@ -217,40 +274,19 @@ export class OfflineAiDownloader {
       }
 
       if (existingBytes < file.sizeBytes) {
-        const headers: Record<string, string> = {}
-        if (existingBytes > 0) headers.Range = `bytes=${existingBytes}-`
-        const response = await this.http.request(file.url, { headers })
-
-        if (existingBytes > 0 && response.statusCode === 200) {
-          await this.fs.truncate(partPath)
-          existingBytes = 0
-        } else if (response.statusCode !== 200 && response.statusCode !== 206) {
-          throw new OfflineAiDownloadError('http-error', 'Private AI asset download failed')
+        const progressContext = {
+          manifest,
+          file,
+          fileIndex: index + 1,
+          fileCount: requiredFiles.length,
+          completedBytes,
+          totalBytes,
+          onProgress,
         }
-
-        if (existingBytes === 0 && response.statusCode === 200) {
-          await this.fs.truncate(partPath)
-        }
-
-        let fileBytes = existingBytes
-        for await (const chunk of response.body) {
-          await this.fs.append(partPath, chunk)
-          fileBytes += chunk.byteLength
-          onProgress?.(this.progress({
-            state: 'downloading',
-            phase: 'downloading',
-            manifest,
-            file,
-            fileIndex: index + 1,
-            fileCount: requiredFiles.length,
-            fileBytes,
-            completedBytes,
-            totalBytes,
-            message: 'Downloading Private AI',
-          }))
-
-          if (this.pauseRequested) return { paused: true }
-        }
+        const paused = existingBytes === 0 && this.shouldParallelize(file)
+          ? await this.downloadParallel(partPath, progressContext)
+          : await this.downloadSequential(partPath, existingBytes, progressContext)
+        if (paused) return { paused: true }
       }
 
       const partInfo = await this.fs.stat(partPath)
@@ -301,6 +337,161 @@ export class OfflineAiDownloader {
     }
 
     return { paused: false }
+  }
+
+  private shouldParallelize(file: OfflineAiManifestFile): boolean {
+    return file.type === 'model'
+      && !file.extract
+      && file.sizeBytes >= this.parallelDownloadThresholdBytes
+  }
+
+  private async downloadSequential(
+    partPath: string,
+    initialBytes: number,
+    context: {
+      manifest: OfflineAiManifest
+      file: OfflineAiManifestFile
+      fileIndex: number
+      fileCount: number
+      completedBytes: number
+      totalBytes: number
+      onProgress?: (progress: PrivateAiProgress) => void
+    },
+    suppliedResponse?: OfflineAiHttpResponse,
+  ): Promise<boolean> {
+    let existingBytes = initialBytes
+    const headers: Record<string, string> = {}
+    if (existingBytes > 0) headers.Range = `bytes=${existingBytes}-`
+    const response = suppliedResponse ?? await this.http.request(context.file.url, { headers })
+
+    if (existingBytes > 0 && response.statusCode === 200) {
+      await this.fs.truncate(partPath)
+      existingBytes = 0
+    } else if (response.statusCode !== 200 && response.statusCode !== 206) {
+      throw new OfflineAiDownloadError('http-error', 'Private AI asset download failed')
+    }
+
+    if (existingBytes === 0 && response.statusCode === 200) {
+      await this.fs.truncate(partPath)
+    }
+
+    const writer = await this.fs.openWriter(partPath, 'append')
+    let fileBytes = existingBytes
+    try {
+      for await (const chunk of response.body) {
+        await writer.write(chunk)
+        fileBytes += chunk.byteLength
+        context.onProgress?.(this.progress({
+          state: 'downloading',
+          phase: 'downloading',
+          manifest: context.manifest,
+          file: context.file,
+          fileIndex: context.fileIndex,
+          fileCount: context.fileCount,
+          fileBytes,
+          completedBytes: context.completedBytes,
+          totalBytes: context.totalBytes,
+          message: 'Downloading Private AI',
+        }))
+        if (this.pauseRequested) return true
+      }
+    } finally {
+      await writer.close()
+    }
+    return false
+  }
+
+  private async downloadParallel(
+    partPath: string,
+    context: {
+      manifest: OfflineAiManifest
+      file: OfflineAiManifestFile
+      fileIndex: number
+      fileCount: number
+      completedBytes: number
+      totalBytes: number
+      onProgress?: (progress: PrivateAiProgress) => void
+    },
+  ): Promise<boolean> {
+    const ranges = planByteRanges(context.file.sizeBytes, this.maxParallelParts)
+    if (ranges.length < 2) return this.downloadSequential(partPath, 0, context)
+
+    const segmentPaths = ranges.map((_, index) => `${partPath}.range-${index}`)
+    await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+
+    const firstRange = ranges[0]!
+    const firstResponse = await this.http.request(context.file.url, {
+      headers: { Range: `bytes=${firstRange.start}-${firstRange.end}` },
+    })
+
+    if (firstResponse.statusCode === 200) {
+      return this.downloadSequential(partPath, 0, context, firstResponse)
+    }
+    if (firstResponse.statusCode !== 206 || !contentRangeMatches(firstResponse, firstRange, context.file.sizeBytes)) {
+      throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
+    }
+
+    const validator = headerValue(firstResponse.headers, 'etag') ?? headerValue(firstResponse.headers, 'last-modified')
+    const responses: OfflineAiHttpResponse[] = [firstResponse]
+    const remainingResponses = await Promise.all(ranges.slice(1).map(async (range) => {
+      const headers: Record<string, string> = { Range: `bytes=${range.start}-${range.end}` }
+      if (validator) headers['If-Range'] = validator
+      const response = await this.http.request(context.file.url, { headers })
+      if (response.statusCode !== 206 || !contentRangeMatches(response, range, context.file.sizeBytes)) {
+        throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
+      }
+      return response
+    }))
+    responses.push(...remainingResponses)
+
+    const downloadedByRange = ranges.map(() => 0)
+    await Promise.all(responses.map(async (response, rangeIndex) => {
+      const segmentPath = segmentPaths[rangeIndex]!
+      const writer = await this.fs.openWriter(segmentPath, 'truncate')
+      try {
+        for await (const chunk of response.body) {
+          await writer.write(chunk)
+          downloadedByRange[rangeIndex] = (downloadedByRange[rangeIndex] ?? 0) + chunk.byteLength
+          const fileBytes = downloadedByRange.reduce((sum, value) => sum + value, 0)
+          context.onProgress?.(this.progress({
+            state: 'downloading',
+            phase: 'downloading',
+            manifest: context.manifest,
+            file: context.file,
+            fileIndex: context.fileIndex,
+            fileCount: context.fileCount,
+            fileBytes,
+            completedBytes: context.completedBytes,
+            totalBytes: context.totalBytes,
+            message: 'Downloading Private AI',
+          }))
+          if (this.pauseRequested) return
+        }
+      } finally {
+        await writer.close()
+      }
+    }))
+
+    if (this.pauseRequested) return true
+
+    for (let index = 0; index < ranges.length; index += 1) {
+      const expectedSize = ranges[index]!.end - ranges[index]!.start + 1
+      const actualSize = (await this.fs.stat(segmentPaths[index]!))?.size ?? -1
+      if (actualSize !== expectedSize) {
+        throw new OfflineAiDownloadError('size-mismatch', 'Private AI range size verification failed')
+      }
+    }
+
+    const writer = await this.fs.openWriter(partPath, 'truncate')
+    try {
+      for (const segmentPath of segmentPaths) {
+        for await (const chunk of this.fs.readChunks(segmentPath)) await writer.write(chunk)
+      }
+    } finally {
+      await writer.close()
+    }
+    await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+    return false
   }
 
   private progress(input: {
