@@ -83,6 +83,13 @@ export class LegacyCircleAuthAdapter {
     }
   }
 
+  async getInvitationDelivery(emailInput: string): Promise<{ temporaryPassword: string } | null> {
+    const raw = await this.fetchInvitation(normalizeEmail(emailInput))
+    if (!raw.hasPendingInvite) return null
+    const temporaryPassword = String(raw.tempPassword ?? '').trim()
+    return temporaryPassword ? { temporaryPassword } : null
+  }
+
   async claimInvitation(input: { email: string; enteredPassword: string }): Promise<ClaimedInvitation> {
     const email = normalizeEmail(input.email)
     const invitation = await this.fetchInvitation(email)
@@ -193,7 +200,6 @@ export class LegacyCircleAuthAdapter {
     })
 
     if (data.alreadyMember) return { outcome: 'already-member' }
-    if (data.emailSent === false) return { outcome: 'delivery-failed' }
     if (data.alreadyPending) return { outcome: 'already-pending' }
     return { outcome: 'sent' }
   }
