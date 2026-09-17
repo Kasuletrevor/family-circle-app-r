@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -14,15 +14,26 @@ function tempReleaseDir(): string {
   return dir
 }
 
+function resourcesDir(releaseDir: string): string {
+  const dir = resolve(releaseDir, 'win-unpacked', 'resources')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
 function writeValidDemoMailConfig(releaseDir: string): void {
-  const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources')
-  mkdirSync(resourcesDir, { recursive: true })
-  writeFileSync(resolve(resourcesDir, 'demo-mail-config.json'), JSON.stringify({
+  writeFileSync(resolve(resourcesDir(releaseDir), 'demo-mail-config.json'), JSON.stringify({
     enabled: true,
     url: 'https://example.test/send-mail/',
     timeoutMs: 45_000,
     user: 'demo-user',
     password: 'demo-password',
+  }))
+}
+
+function writeValidDemoCircleConfig(releaseDir: string): void {
+  writeFileSync(resolve(resourcesDir(releaseDir), 'demo-circle-config.json'), JSON.stringify({
+    baseUrl: 'https://circle.example.test/circle-api',
+    apiKey: 'demo-circle-key',
   }))
 }
 
@@ -53,10 +64,11 @@ describe('Windows package verifier', () => {
     expect(source).toMatch(/whisper-cli|ggml-base|offline-voice\/runtime|offline-voice\/models/i)
   })
 
-  it('accepts exactly one expected Windows installer with the generated demo mail resource', () => {
+  it('accepts exactly one expected Windows installer with generated demo resources', () => {
     const releaseDir = tempReleaseDir()
     writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
     writeValidDemoMailConfig(releaseDir)
+    writeValidDemoCircleConfig(releaseDir)
 
     const result = runVerifier('--release-dir', releaseDir)
     expect(result.status).toBe(0)
@@ -66,10 +78,21 @@ describe('Windows package verifier', () => {
   it('rejects an installer when the generated demo mail resource is missing', () => {
     const releaseDir = tempReleaseDir()
     writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+    writeValidDemoCircleConfig(releaseDir)
 
     const result = runVerifier('--release-dir', releaseDir)
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('Packaged demo mail config is missing')
+  })
+
+  it('rejects an installer when the generated demo Circle resource is missing', () => {
+    const releaseDir = tempReleaseDir()
+    writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+    writeValidDemoMailConfig(releaseDir)
+
+    const result = runVerifier('--release-dir', releaseDir)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Packaged demo Circle config is missing')
   })
 
   it('fails when the Windows installer is missing or ambiguous', () => {
@@ -97,7 +120,7 @@ describe('Windows package verifier', () => {
   it('rejects forbidden loose secret or model resources', () => {
     const releaseDir = tempReleaseDir()
     writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
-    const forbiddenDir = resolve(releaseDir, 'win-unpacked', 'resources', 'models')
+    const forbiddenDir = resolve(resourcesDir(releaseDir), 'models')
     mkdirSync(forbiddenDir, { recursive: true })
     writeFileSync(resolve(forbiddenDir, 'private-model.gguf'), 'must never ship')
 
@@ -109,9 +132,7 @@ describe('Windows package verifier', () => {
   it('rejects loose binary model payloads outside model directories', () => {
     const releaseDir = tempReleaseDir()
     writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
-    const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources')
-    mkdirSync(resourcesDir, { recursive: true })
-    writeFileSync(resolve(resourcesDir, 'private-ai.bin'), 'must never ship')
+    writeFileSync(resolve(resourcesDir(releaseDir), 'private-ai.bin'), 'must never ship')
 
     const result = runVerifier('--release-dir', releaseDir)
     expect(result.status).not.toBe(0)
@@ -121,9 +142,9 @@ describe('Windows package verifier', () => {
   it('rejects loose Whisper runtime/model payloads if they appear in packaged resources', () => {
     const releaseDir = tempReleaseDir()
     writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
-    const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources', 'offline-voice', 'runtime')
-    mkdirSync(resourcesDir, { recursive: true })
-    writeFileSync(resolve(resourcesDir, 'whisper-cli.exe'), 'must never ship')
+    const voiceRuntimeDir = resolve(resourcesDir(releaseDir), 'offline-voice', 'runtime')
+    mkdirSync(voiceRuntimeDir, { recursive: true })
+    writeFileSync(resolve(voiceRuntimeDir, 'whisper-cli.exe'), 'must never ship')
 
     const result = runVerifier('--release-dir', releaseDir)
     expect(result.status).not.toBe(0)
