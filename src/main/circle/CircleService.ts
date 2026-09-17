@@ -45,13 +45,20 @@ export interface CircleUserSource {
   setActiveCircleId(userId: number, circleId: string | null): Promise<void>
 }
 
+export interface CircleInvitationDelivery {
+  to: string
+  circleName: string
+  role: string
+  temporaryPassword: string
+}
+
 export interface CircleInvitationMailer {
-  sendInvitation(input: {
-    to: string
-    circleName: string
-    role: string
-    temporaryPassword: string
-  }): Promise<void>
+  sendInvitation(input: CircleInvitationDelivery): Promise<void>
+}
+
+interface CircleInviteStateResult {
+  outcome: InviteMemberResult['outcome']
+  delivery?: CircleInvitationDelivery
 }
 
 export interface CirclePort {
@@ -65,7 +72,7 @@ export interface CirclePort {
     circleId: string
     email: string
     role: InvitationFamilyRole
-  }): Promise<InviteMemberResult>
+  }): Promise<CircleInviteStateResult>
   getInvitationDelivery(email: string): Promise<{ temporaryPassword: string } | null>
   cancelInvitation(input: {
     serverUserId: string
@@ -318,12 +325,13 @@ export class CircleService {
       email,
       role: input.role,
     })
-    if (result.outcome === 'already-member') return result
+    if (result.outcome === 'already-member') return { outcome: 'already-member' }
 
     const delivered = await this.deliverInvitation({
       email,
       circleName: group.name,
       role: input.role,
+      delivery: result.delivery,
     })
     if (!delivered) return { outcome: 'delivery-failed' }
     return { outcome: result.outcome === 'already-pending' ? 'already-pending' : 'sent' }
@@ -348,6 +356,7 @@ export class CircleService {
       email,
       circleName: context.group.name,
       role,
+      delivery: result.delivery,
     })
     return { outcome: delivered ? 'sent' : 'delivery-failed' }
   }
@@ -402,10 +411,16 @@ export class CircleService {
     email: string
     circleName: string
     role: string
+    delivery?: CircleInvitationDelivery
   }): Promise<boolean> {
     try {
-      const delivery = await this.circle.getInvitationDelivery(input.email)
-      const temporaryPassword = String(delivery?.temporaryPassword ?? '').trim()
+      if (input.delivery) {
+        await this.mailer.sendInvitation(input.delivery)
+        return true
+      }
+
+      const fallback = await this.circle.getInvitationDelivery(input.email)
+      const temporaryPassword = String(fallback?.temporaryPassword ?? '').trim()
       if (!temporaryPassword) return false
 
       await this.mailer.sendInvitation({
