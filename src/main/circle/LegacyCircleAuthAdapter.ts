@@ -79,13 +79,18 @@ function normalizePersonKind(value: unknown, id: string): CircleTreePersonIntern
   return 'user'
 }
 
-function deliveryFromPayload(payload: RawEmailPayload | null | undefined): LegacyInviteStateResult['delivery'] {
+function deliveryFromPayload(
+  payload: RawEmailPayload | null | undefined,
+  expectedEmail: string,
+  expectedRole: InvitationFamilyRole,
+): LegacyInviteStateResult['delivery'] {
   if (!payload) return undefined
   const to = normalizeEmail(String(payload.to ?? ''))
   const circleName = String(payload.groupName ?? '').trim()
   const role = String(payload.role ?? '').trim()
   const temporaryPassword = String(payload.tempPassword ?? '').trim()
   if (!to || !circleName || !role || !temporaryPassword) return undefined
+  if (to !== expectedEmail || role !== expectedRole) return undefined
   return { to, circleName, role, temporaryPassword }
 }
 
@@ -215,6 +220,7 @@ export class LegacyCircleAuthAdapter {
     email: string
     role: InvitationFamilyRole
   }): Promise<LegacyInviteStateResult> {
+    const expectedEmail = normalizeEmail(input.email)
     const data = await this.postJson<{
       alreadyMember?: boolean
       alreadyPending?: boolean
@@ -224,14 +230,14 @@ export class LegacyCircleAuthAdapter {
     }>('/api/group/invite-email', {
       fromUserId: String(input.serverUserId ?? '').trim(),
       groupId: String(input.circleId ?? '').trim(),
-      email: normalizeEmail(input.email),
+      email: expectedEmail,
       role: input.role,
     })
 
     if (data.alreadyMember) return { outcome: 'already-member' }
 
     const delivery = data.emailDeliveryRequired === true
-      ? deliveryFromPayload(data.emailPayload)
+      ? deliveryFromPayload(data.emailPayload, expectedEmail, input.role)
       : undefined
     const outcome: InviteMemberResult['outcome'] = data.alreadyPending ? 'already-pending' : 'sent'
     return delivery ? { outcome, delivery } : { outcome }
