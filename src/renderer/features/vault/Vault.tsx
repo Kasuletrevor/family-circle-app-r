@@ -147,6 +147,7 @@ export function Vault({
   const [privateAiProgress, setPrivateAiProgress] = useState<PrivateAiProgress | null>(null)
   const [privateAiTransferTelemetry, setPrivateAiTransferTelemetry] = useState<TransferTelemetry | null>(null)
   const [privateAiBusy, setPrivateAiBusy] = useState(false)
+  const [privateAiPauseBusy, setPrivateAiPauseBusy] = useState(false)
   const [privateAiError, setPrivateAiError] = useState<string | null>(null)
   const privateAiTransferSamples = useRef<TransferSample[]>([])
 
@@ -322,13 +323,16 @@ export function Vault({
   }
 
   async function runPrivateAiAction(action: 'start' | 'pause' | 'repair'): Promise<void> {
-    if (privateAiBusy) return
-    setPrivateAiBusy(true)
+    const isPause = action === 'pause'
+    if (isPause ? privateAiPauseBusy : privateAiBusy) return
+
+    if (isPause) setPrivateAiPauseBusy(true)
+    else setPrivateAiBusy(true)
     setPrivateAiError(null)
     try {
       const status = action === 'start'
         ? await privateAiClient.startSetup()
-        : action === 'pause'
+        : isPause
           ? await privateAiClient.pauseSetup()
           : await privateAiClient.repair()
       setPrivateAiStatus(status)
@@ -341,7 +345,8 @@ export function Vault({
     } catch {
       setPrivateAiError('Private AI setup could not continue. Please try again.')
     } finally {
-      setPrivateAiBusy(false)
+      if (isPause) setPrivateAiPauseBusy(false)
+      else setPrivateAiBusy(false)
     }
   }
 
@@ -413,7 +418,7 @@ export function Vault({
                     </button>
                   ) : null}
                   {privateAiStatus.state === 'downloading' ? (
-                    <button className="vault-button vault-button--secondary" type="button" disabled={privateAiBusy} onClick={() => void runPrivateAiAction('pause')}>
+                    <button className="vault-button vault-button--secondary" type="button" disabled={privateAiPauseBusy} onClick={() => void runPrivateAiAction('pause')}>
                       <Pause size={14} aria-hidden="true" /> Pause setup
                     </button>
                   ) : null}
