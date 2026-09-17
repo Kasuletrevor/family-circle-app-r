@@ -31,6 +31,7 @@ function verifyConfig() {
   const build = pkg.build ?? {}
   const target = Array.isArray(build.win?.target) ? build.win.target : []
   const files = Array.isArray(build.files) ? build.files : []
+  const extraResources = Array.isArray(build.extraResources) ? build.extraResources : []
 
   assert(pkg.devDependencies?.['electron-builder'] === '26.15.3', 'electron-builder must be locked as a development dependency')
   assert(
@@ -52,6 +53,10 @@ function verifyConfig() {
   assert(files.includes('config/offline-ai-manifest.json'), 'Private AI manifest is not packaged')
   assert(files.includes('config/offline-voice-manifest.json'), 'Offline voice manifest is not packaged')
   assert(files.includes('third_party/whisper.cpp-LICENSE.txt'), 'whisper.cpp license is not packaged')
+  assert(
+    extraResources.some((entry) => entry?.from === 'build/demo-mail-config.json' && entry?.to === 'demo-mail-config.json'),
+    'Temporary demo mail config is not packaged as an extra resource',
+  )
   assert(
     !/\.env|\.gguf|models\/|bin\/|whisper-cli\.exe|ggml-base\.bin|whisper-bin/i.test(files.join('\n')),
     'Packaging allowlist contains forbidden secret/runtime/model inputs',
@@ -110,6 +115,24 @@ function verifyNoForbiddenLooseResources(releaseDir) {
   }
 }
 
+function verifyDemoMailResource(releaseDir) {
+  const configPath = resolve(releaseDir, 'win-unpacked', 'resources', 'demo-mail-config.json')
+  assert(existsSync(configPath), 'Packaged demo mail config is missing')
+
+  let config
+  try {
+    config = JSON.parse(readFileSync(configPath, 'utf8'))
+  } catch {
+    throw new Error('Packaged demo mail config is invalid JSON')
+  }
+
+  assert(config?.enabled === true, 'Packaged demo mail config is not enabled')
+  assert(typeof config?.user === 'string' && config.user.length > 0, 'Packaged demo mail user is missing')
+  assert(typeof config?.password === 'string' && config.password.length > 0, 'Packaged demo mail password is missing')
+  assert(typeof config?.url === 'string' && config.url.startsWith('https://'), 'Packaged demo mail URL is invalid')
+  assert(Number.isInteger(config?.timeoutMs) && config.timeoutMs > 0, 'Packaged demo mail timeout is invalid')
+}
+
 function verifyRelease(releaseDir) {
   assert(existsSync(releaseDir), `Release directory does not exist: ${releaseDir}`)
   const installers = readdirSync(releaseDir, { withFileTypes: true })
@@ -126,6 +149,7 @@ function verifyRelease(releaseDir) {
   const installerPath = resolve(releaseDir, expectedInstaller)
   assert(statSync(installerPath).size > 0, `Windows installer is empty: ${basename(installerPath)}`)
   verifyNoForbiddenLooseResources(releaseDir)
+  verifyDemoMailResource(releaseDir)
   console.log(`Windows installer verified: ${expectedInstaller}`)
 }
 
