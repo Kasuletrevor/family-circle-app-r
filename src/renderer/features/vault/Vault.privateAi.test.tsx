@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { VaultDocumentSummary } from '../../../shared/desktopApi'
@@ -86,6 +86,54 @@ describe('Vault Private AI setup and indexing UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set up Private AI' }))
     await waitFor(() => expect(ai.startSetup).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
+  })
+
+  it('keeps Pause setup available while startSetup is still in flight', async () => {
+    let listener: ((progress: PrivateAiProgress) => void) | null = null
+    let resolveStart: ((status: PrivateAiStatus) => void) | null = null
+    const startSetup = vi.fn(() => new Promise<PrivateAiStatus>((resolve) => {
+      resolveStart = resolve
+    }))
+    const pauseSetup = vi.fn(async () => aiStatus('paused'))
+    const ai = privateAiClient(aiStatus('not_installed'), {
+      startSetup,
+      pauseSetup,
+      onProgress: vi.fn((next) => {
+        listener = next
+        return () => undefined
+      }),
+    })
+    render(<AiVault client={vaultClient()} privateAiClient={ai} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up Private AI' }))
+    await waitFor(() => expect(startSetup).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      ;(listener as ((progress: PrivateAiProgress) => void) | null)?.({
+        state: 'downloading',
+        percent: 1,
+        fileIndex: 1,
+        fileCount: 3,
+        fileName: 'Private AI component 1 of 3',
+        bytesDownloaded: 1,
+        totalSizeBytes: 1000,
+        fileBytesDownloaded: 1,
+        fileSizeBytes: 100,
+        message: 'Downloading Private AI',
+      })
+    })
+
+    const pauseButton = await screen.findByRole('button', { name: 'Pause setup' })
+    expect(pauseButton).toBeEnabled()
+    fireEvent.click(pauseButton)
+    await waitFor(() => expect(pauseSetup).toHaveBeenCalledTimes(1))
+
+    expect(await screen.findByRole('button', { name: 'Continue setup' })).toBeDisabled()
+    await act(async () => {
+      resolveStart?.(aiStatus('paused'))
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue setup' })).toBeEnabled())
   })
 
   it.each([
