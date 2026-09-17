@@ -29,6 +29,29 @@ function escapeHtml(value: string): string {
   })[character] ?? character)
 }
 
+function apiConfig(env: Environment): { url: string; authorization: string } {
+  const url = envValue(env, 'MAIL_API_URL')
+  const user = envValue(env, 'MAIL_API_USER')
+  const password = envValue(env, 'MAIL_API_PASSWORD')
+  if (!url || !user || !password) throw new Error('Mail API configuration is incomplete')
+  return {
+    url,
+    authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`,
+  }
+}
+
+async function postMail(env: Environment, input: { to: string; subject: string; body: string; html: string }): Promise<void> {
+  const config = apiConfig(env)
+  await fetch(config.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: config.authorization,
+    },
+    body: JSON.stringify(input),
+  })
+}
+
 function createTransport(env: Environment) {
   const host = envValue(env, 'SMTP_HOST', 'MAIL_HOST')
   const port = Number(envValue(env, 'SMTP_PORT', 'EMAIL_PORT') || 587)
@@ -69,19 +92,13 @@ export function createRecoveryMailer(env: Environment = process.env): RecoveryMa
 
   return {
     async sendCode({ to, code, expiresInMinutes }) {
-      const transport = createTransport(env)
-      try {
-        const safeCode = escapeHtml(code)
-        await transport.sendMail({
-          from: sender(env),
-          to,
-          subject: 'Your Kin Keepers recovery code',
-          text: `Your Kin Keepers recovery code is ${code}. It expires in ${expiresInMinutes} minutes.`,
-          html: `<!doctype html><html><body style="font-family:Arial,sans-serif;background:#EEF2F7;color:#0C2348;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:18px;padding:32px"><strong style="color:#0E9F9A">KIN-KEEPERS</strong><h1>Reset your password</h1><p>Enter this one-time recovery code in Family Circle:</p><div style="font-family:monospace;font-size:30px;letter-spacing:7px;font-weight:700;background:#E9FBF6;padding:18px;border-radius:12px;text-align:center">${safeCode}</div><p>It expires in ${Number(expiresInMinutes)} minutes and can be used only once.</p><p style="color:#667085">If you did not request this reset, ignore this email. Your password has not changed.</p></div></body></html>`,
-        })
-      } finally {
-        transport.close()
-      }
+      const safeCode = escapeHtml(code)
+      await postMail(env, {
+        to,
+        subject: 'Your Kin Keepers recovery code',
+        body: `Your Kin Keepers recovery code is ${code}. It expires in ${expiresInMinutes} minutes.`,
+        html: `<!doctype html><html><body style="font-family:Arial,sans-serif;background:#EEF2F7;color:#0C2348;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:18px;padding:32px"><strong style="color:#0E9F9A">KIN-KEEPERS</strong><h1>Reset your password</h1><p>Enter this one-time recovery code in Family Circle:</p><div style="font-family:monospace;font-size:30px;letter-spacing:7px;font-weight:700;background:#E9FBF6;padding:18px;border-radius:12px;text-align:center">${safeCode}</div><p>It expires in ${Number(expiresInMinutes)} minutes and can be used only once.</p><p style="color:#667085">If you did not request this reset, ignore this email. Your password has not changed.</p></div></body></html>`,
+      })
     },
 
     async sendChangedNotice({ to }) {
