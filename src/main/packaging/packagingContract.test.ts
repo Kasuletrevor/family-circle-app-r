@@ -38,8 +38,11 @@ describe('Windows packaging contract', () => {
     expect(pkg.build?.nsis?.deleteAppDataOnUninstall).toBe(false)
   })
 
-  it('pins the patched nodemailer runtime dependency required by the high-severity audit gate', () => {
-    expect(pkg.dependencies?.nodemailer).toBe('9.1.1')
+  it('does not package the obsolete SMTP transport or Nodemailer dependencies', () => {
+    expect(pkg.dependencies?.nodemailer).toBeUndefined()
+    expect(pkg.devDependencies?.['@types/nodemailer']).toBeUndefined()
+    const mailerSource = readFileSync(resolve(root, 'src/main/auth/RecoveryMailer.ts'), 'utf8')
+    expect(mailerSource).not.toMatch(/nodemailer|SMTP_HOST|SMTP_PORT|SMTP_SECURE|MAIL_HOST/)
   })
 
   it('packages compiled code plus manifests/licenses, but no secret, runtime, or model payloads', () => {
