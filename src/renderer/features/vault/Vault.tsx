@@ -23,6 +23,10 @@ function formatBytes(sizeBytes: number): string {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function approximateMegabytes(sizeBytes: number): string {
+  return `${Math.round(sizeBytes / (1024 * 1024))} MB`
+}
+
 function wordLabel(wordCount: number): string {
   return `${wordCount} ${wordCount === 1 ? 'word' : 'words'}`
 }
@@ -340,6 +344,13 @@ export function Vault({
                 </div>
               </div>
 
+              {privateAiStatus.state === 'not_installed' && privateAiStatus.totalSizeBytes > 0 ? (
+                <>
+                  <span className="vault-ai__detail">One-time download · about {approximateMegabytes(privateAiStatus.totalSizeBytes)}</span>
+                  <span className="vault-ai__detail">Works offline after setup. You can pause and resume anytime.</span>
+                </>
+              ) : null}
+
               {privateAiProgress && (privateAiStatus.state === 'downloading' || privateAiStatus.state === 'verifying') ? (
                 <div className="vault-ai__progress" role="status" aria-live="polite">
                   <div className="vault-ai__progress-copy">
@@ -349,6 +360,9 @@ export function Vault({
                   <div className="vault-progress__meter" aria-hidden="true">
                     <span style={{ width: `${Math.max(0, Math.min(100, privateAiProgress.percent))}%` }} />
                   </div>
+                  {privateAiProgress.totalSizeBytes > 0 ? (
+                    <span className="vault-ai__detail">{formatBytes(privateAiProgress.bytesDownloaded)} of {formatBytes(privateAiProgress.totalSizeBytes)}</span>
+                  ) : null}
                 </div>
               ) : null}
 
