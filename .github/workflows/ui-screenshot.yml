@@ -1,0 +1,61 @@
+name: Current UI Screenshot
+
+on:
+  push:
+    branches:
+      - chore/current-ui-screenshot
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      - name: Start renderer
+        run: |
+          npm exec vite -- --host 127.0.0.1 --port 4173 > /tmp/family-circle-vite.log 2>&1 &
+          echo $! > /tmp/family-circle-vite.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/screenshot.html >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/family-circle-vite.log
+          exit 1
+
+      - name: Capture current Home screen
+        run: |
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)"
+          test -n "$CHROME"
+          "$CHROME" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --hide-scrollbars \
+            --force-device-scale-factor=1 \
+            --window-size=1600,1100 \
+            --screenshot=family-circle-current-home.png \
+            http://127.0.0.1:4173/screenshot.html#/
+          test -s family-circle-current-home.png
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v6
+        with:
+          name: family-circle-current-ui
+          path: family-circle-current-home.png
+          if-no-files-found: error
+          retention-days: 7
