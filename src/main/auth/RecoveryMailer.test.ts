@@ -79,4 +79,20 @@ describe('RecoveryMailer HTTP transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]![0]).toBe('https://elderchatgpt.com/memorytest/api/send-mail/')
   })
+
+  it('uses the temporary embedded demo transport when the packaged app has no mail environment', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const mailer = createRecoveryMailer({})
+    await mailer.sendChangedNotice({ to: 'demo@example.com' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('https://elderchatgpt.com/memorytest/api/send-mail/')
+    expect(init?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: expect.stringMatching(/^Basic\s+\S+$/),
+    })
+  })
 })
