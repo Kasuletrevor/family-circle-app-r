@@ -7,6 +7,8 @@ export interface RecoveryMailer {
 
 type Environment = NodeJS.ProcessEnv
 
+const DEFAULT_MAIL_API_URL = 'https://elderchatgpt.com/memorytest/api/send-mail/'
+
 function envValue(env: Environment, ...names: string[]): string {
   for (const name of names) {
     const value = String(env[name] ?? '').trim()
@@ -30,10 +32,10 @@ function escapeHtml(value: string): string {
 }
 
 function apiConfig(env: Environment): { url: string; authorization: string } {
-  const url = envValue(env, 'MAIL_API_URL')
+  const url = envValue(env, 'MAIL_API_URL') || DEFAULT_MAIL_API_URL
   const user = envValue(env, 'MAIL_API_USER')
   const password = envValue(env, 'MAIL_API_PASSWORD')
-  if (!url || !user || !password) throw new Error('Mail API configuration is incomplete')
+  if (!user || !password) throw new Error('Mail API configuration is incomplete')
   return {
     url,
     authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`,
