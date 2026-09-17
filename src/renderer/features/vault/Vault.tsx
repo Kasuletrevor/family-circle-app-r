@@ -23,6 +23,10 @@ function formatBytes(sizeBytes: number): string {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function approximateMegabytes(sizeBytes: number): string {
+  return `${Math.round(sizeBytes / (1024 * 1024))} MB`
+}
+
 function wordLabel(wordCount: number): string {
   return `${wordCount} ${wordCount === 1 ? 'word' : 'words'}`
 }
@@ -112,6 +116,7 @@ export function Vault({
   const [privateAiStatus, setPrivateAiStatus] = useState<PrivateAiStatus | null>(null)
   const [privateAiProgress, setPrivateAiProgress] = useState<PrivateAiProgress | null>(null)
   const [privateAiBusy, setPrivateAiBusy] = useState(false)
+  const [privateAiPauseBusy, setPrivateAiPauseBusy] = useState(false)
   const [privateAiError, setPrivateAiError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -236,13 +241,16 @@ export function Vault({
   }
 
   async function runPrivateAiAction(action: 'start' | 'pause' | 'repair'): Promise<void> {
-    if (privateAiBusy) return
-    setPrivateAiBusy(true)
+    const isPause = action === 'pause'
+    if (isPause ? privateAiPauseBusy : privateAiBusy) return
+
+    if (isPause) setPrivateAiPauseBusy(true)
+    else setPrivateAiBusy(true)
     setPrivateAiError(null)
     try {
       const status = action === 'start'
         ? await privateAiClient.startSetup()
-        : action === 'pause'
+        : isPause
           ? await privateAiClient.pauseSetup()
           : await privateAiClient.repair()
       setPrivateAiStatus(status)
@@ -251,7 +259,8 @@ export function Vault({
     } catch {
       setPrivateAiError('Private AI setup could not continue. Please try again.')
     } finally {
-      setPrivateAiBusy(false)
+      if (isPause) setPrivateAiPauseBusy(false)
+      else setPrivateAiBusy(false)
     }
   }
 
@@ -323,7 +332,7 @@ export function Vault({
                     </button>
                   ) : null}
                   {privateAiStatus.state === 'downloading' ? (
-                    <button className="vault-button vault-button--secondary" type="button" disabled={privateAiBusy} onClick={() => void runPrivateAiAction('pause')}>
+                    <button className="vault-button vault-button--secondary" type="button" disabled={privateAiPauseBusy} onClick={() => void runPrivateAiAction('pause')}>
                       <Pause size={14} aria-hidden="true" /> Pause setup
                     </button>
                   ) : null}
@@ -340,6 +349,13 @@ export function Vault({
                 </div>
               </div>
 
+              {privateAiStatus.state === 'not_installed' && privateAiStatus.totalSizeBytes > 0 ? (
+                <>
+                  <span className="vault-ai__detail">One-time download · about {approximateMegabytes(privateAiStatus.totalSizeBytes)}</span>
+                  <span className="vault-ai__detail">Works offline after setup. You can pause and resume anytime.</span>
+                </>
+              ) : null}
+
               {privateAiProgress && (privateAiStatus.state === 'downloading' || privateAiStatus.state === 'verifying') ? (
                 <div className="vault-ai__progress" role="status" aria-live="polite">
                   <div className="vault-ai__progress-copy">
@@ -349,6 +365,9 @@ export function Vault({
                   <div className="vault-progress__meter" aria-hidden="true">
                     <span style={{ width: `${Math.max(0, Math.min(100, privateAiProgress.percent))}%` }} />
                   </div>
+                  {privateAiProgress.totalSizeBytes > 0 ? (
+                    <span className="vault-ai__detail">{formatBytes(privateAiProgress.bytesDownloaded)} of {formatBytes(privateAiProgress.totalSizeBytes)}</span>
+                  ) : null}
                 </div>
               ) : null}
 
