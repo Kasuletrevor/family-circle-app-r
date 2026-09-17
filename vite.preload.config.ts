@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   build: {
     outDir: resolve(__dirname, 'dist/preload'),
-    emptyOutDir: false,
+    emptyOutDir: true,
     sourcemap: true,
     minify: false,
     lib: {
