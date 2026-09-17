@@ -65,11 +65,13 @@ function setup(options: {
     ensureSharedUser: vi.fn(async () => ({ serverUserId: '88' })),
     createCircle: vi.fn(),
     inviteMember: vi.fn(async () => ({ outcome: 'already-pending' as const })),
+    getInvitationDelivery: vi.fn(async () => ({ temporaryPassword: 'test-temporary-password' })),
     cancelInvitation: vi.fn(async () => ({ success: true as const })),
     removeMember: vi.fn(async () => ({ success: true as const })),
     leaveCircle: vi.fn(async () => ({ success: true as const })),
   }
-  return { users, circle, service: new CircleService(sessions, users, circle) }
+  const mailer = { sendInvitation: vi.fn(async () => undefined) }
+  return { users, circle, mailer, service: new CircleService(sessions, users, circle, mailer) }
 }
 
 describe('CircleService management boundary', () => {
@@ -107,13 +109,19 @@ describe('CircleService management boundary', () => {
   })
 
   it('resends a pending invitation from authoritative tree email and role', async () => {
-    const { service, circle } = setup()
+    const { service, circle, mailer } = setup()
     await expect(service.resendInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ outcome: 'sent' })
     expect(circle.inviteMember).toHaveBeenCalledWith({
       serverUserId: '88',
       circleId: 'g-1',
       email: 'pending@example.test',
       role: 'Child',
+    })
+    expect(mailer.sendInvitation).toHaveBeenCalledWith({
+      to: 'pending@example.test',
+      circleName: 'Test Family',
+      role: 'Child',
+      temporaryPassword: 'test-temporary-password',
     })
   })
 
