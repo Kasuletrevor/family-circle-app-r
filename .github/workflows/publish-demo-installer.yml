@@ -1,0 +1,169 @@
+name: Publish Demo Installer
+
+on:
+  push:
+    branches:
+      - chore/publish-demo-installer
+    paths:
+      - .github/workflows/publish-demo-installer.yml
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Windows Package workflow run ID containing the verified installer artifact
+        required: true
+        default: "35261577742"
+      version:
+        description: Demo release version directory name, without the leading v
+        required: true
+        default: "0.1.0-demo-20260917"
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  ARTIFACT_NAME: family-circle-windows-installer
+  SOURCE_RUN_ID: ${{ inputs.run_id || '35261577742' }}
+  RELEASE_VERSION: ${{ inputs.version || '0.1.0-demo-20260917' }}
+  INSTALLER_NAME: Family-Circle-Setup-0.1.0.exe
+  STAGING_ROOT: /home/ooglobe/electron-release-staging
+  PUBLISH_ROOT: /var/www/family-circle/electron-releases/demo
+  PUBLIC_URL: https://familycircle.o2gventures.com/electron-releases/demo/latest/Family-Circle-Setup-0.1.0.exe
+
+jobs:
+  publish:
+    name: publish verified demo installer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify deployment secrets
+        env:
+          DEV_SERVER_IP: ${{ secrets.DEV_SERVER_IP }}
+          DEV_SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
+          DEV_SSH_PRIVATE_KEY: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          for name in DEV_SERVER_IP DEV_SERVER_USER DEV_SSH_PRIVATE_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required deployment secret: $name"
+              exit 1
+            fi
+          done
+          echo "Demo deployment secrets are configured"
+
+      - name: Download exact tested installer artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: installer
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+
+      - name: Verify installer and prepare release payload
+        run: |
+          set -euo pipefail
+          mapfile -t installers < <(find installer -maxdepth 2 -type f -name '*.exe' -print)
+          if [ "${#installers[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one Windows installer, found ${#installers[@]}"
+            printf '%s\n' "${installers[@]}"
+            exit 1
+          fi
+
+          mkdir -p publish
+          cp "${installers[0]}" "publish/$INSTALLER_NAME"
+          printf '%s\n' "$RELEASE_VERSION" > publish/VERSION
+          (
+            cd publish
+            sha256sum "$INSTALLER_NAME" > SHA256SUMS
+          )
+
+          INSTALLER_SHA256="$(cut -d' ' -f1 publish/SHA256SUMS)" node - <<'NODE'
+          const fs = require('node:fs')
+          const payload = {
+            channel: 'demo',
+            version: process.env.RELEASE_VERSION,
+            installer: process.env.INSTALLER_NAME,
+            sourceRunId: Number(process.env.SOURCE_RUN_ID),
+            sourceArtifact: process.env.ARTIFACT_NAME,
+            sha256: process.env.INSTALLER_SHA256,
+            publishedFromCommit: process.env.GITHUB_SHA,
+          }
+          fs.writeFileSync('publish/current.json', `${JSON.stringify(payload, null, 2)}\n`)
+          NODE
+
+          test -s "publish/$INSTALLER_NAME"
+          test -s publish/current.json
+          echo "Prepared demo release $RELEASE_VERSION from Windows Package run $SOURCE_RUN_ID"
+
+      - name: Copy payload to server staging
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEV_SERVER_IP }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+          port: 22
+          source: "publish/*"
+          target: "${{ env.STAGING_ROOT }}/${{ env.RELEASE_VERSION }}"
+          strip_components: 1
+          overwrite: true
+
+      - name: Publish staged installer and update demo latest
+        uses: appleboy/ssh-action@v1
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+          INSTALLER_NAME: ${{ env.INSTALLER_NAME }}
+          STAGING_ROOT: ${{ env.STAGING_ROOT }}
+          PUBLISH_ROOT: ${{ env.PUBLISH_ROOT }}
+        with:
+          host: ${{ secrets.DEV_SERVER_IP }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+          port: 22
+          envs: RELEASE_VERSION,INSTALLER_NAME,STAGING_ROOT,PUBLISH_ROOT
+          script: |
+            set -euo pipefail
+            stage="$STAGING_ROOT/$RELEASE_VERSION"
+            target="$PUBLISH_ROOT/v$RELEASE_VERSION"
+            pending="$PUBLISH_ROOT/.v$RELEASE_VERSION.pending"
+
+            test -s "$stage/$INSTALLER_NAME"
+            test -s "$stage/current.json"
+            mkdir -p "$PUBLISH_ROOT"
+            rm -rf "$pending"
+            mkdir -p "$pending"
+            cp -a "$stage/." "$pending/"
+
+            (
+              cd "$pending"
+              sha256sum -c SHA256SUMS
+            )
+
+            rm -rf "$target"
+            mv "$pending" "$target"
+            ln -sfn "v$RELEASE_VERSION" "$PUBLISH_ROOT/latest"
+            printf '%s\n' "$RELEASE_VERSION" > "$PUBLISH_ROOT/VERSION"
+            cp "$target/current.json" "$PUBLISH_ROOT/current.json"
+
+            test -s "$PUBLISH_ROOT/latest/$INSTALLER_NAME"
+            test "$(readlink "$PUBLISH_ROOT/latest")" = "v$RELEASE_VERSION"
+            echo "Published demo installer: $PUBLISH_ROOT/latest/$INSTALLER_NAME"
+
+      - name: Check public demo download URL
+        id: public_url
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          curl --fail --location --head --retry 3 --retry-delay 2 "$PUBLIC_URL"
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Family Circle demo installer"
+            echo
+            echo "- Version: \`$RELEASE_VERSION\`"
+            echo "- Source Windows Package run: \`$SOURCE_RUN_ID\`"
+            echo "- Server path: \`$PUBLISH_ROOT/latest/$INSTALLER_NAME\`"
+            echo "- Public URL: $PUBLIC_URL"
+            echo "- Public URL check: \`${{ steps.public_url.outcome }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
