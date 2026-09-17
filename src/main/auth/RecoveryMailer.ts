@@ -102,18 +102,12 @@ export function createRecoveryMailer(env: Environment = process.env): RecoveryMa
     },
 
     async sendChangedNotice({ to }) {
-      const transport = createTransport(env)
-      try {
-        await transport.sendMail({
-          from: sender(env),
-          to,
-          subject: 'Kin Keepers password changed',
-          text: 'Your Kin Keepers password was changed and existing sessions were invalidated.',
-          html: '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#EEF2F7;color:#0C2348;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:18px;padding:32px"><strong style="color:#0E9F9A">KIN-KEEPERS</strong><h1>Your password was changed</h1><p>Your Family Circle password was reset successfully. Existing sessions were invalidated; please sign in again.</p><p style="color:#667085">If you did not make this change, contact your Kin-Keepers administrator immediately.</p></div></body></html>',
-        })
-      } finally {
-        transport.close()
-      }
+      await postMail(env, {
+        to,
+        subject: 'Kin Keepers password changed',
+        body: 'Your Kin Keepers password was changed and existing sessions were invalidated.',
+        html: '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#EEF2F7;color:#0C2348;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:18px;padding:32px"><strong style="color:#0E9F9A">KIN-KEEPERS</strong><h1>Your password was changed</h1><p>Your Family Circle password was reset successfully. Existing sessions were invalidated; please sign in again.</p><p style="color:#667085">If you did not make this change, contact your Kin-Keepers administrator immediately.</p></div></body></html>',
+      })
     },
   }
 }
