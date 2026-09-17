@@ -39,6 +39,11 @@ describe('Windows packaging contract', () => {
     expect(pkg.build?.nsis?.deleteAppDataOnUninstall).toBe(false)
   })
 
+  it('builds renderer assets with relative URLs for Electron file loading', () => {
+    const viteConfig = readFileSync(resolve(root, 'vite.config.ts'), 'utf8')
+    expect(viteConfig).toMatch(/base:\s*['"]\.\/['"]/)
+  })
+
   it('does not package the obsolete SMTP transport or Nodemailer dependencies', () => {
     expect(pkg.dependencies?.nodemailer).toBeUndefined()
     expect(pkg.devDependencies?.['@types/nodemailer']).toBeUndefined()
