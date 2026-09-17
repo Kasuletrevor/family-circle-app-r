@@ -44,7 +44,7 @@ function apiConfig(env: Environment): { url: string; authorization: string } {
 
 async function postMail(env: Environment, input: { to: string; subject: string; body: string; html: string }): Promise<void> {
   const config = apiConfig(env)
-  await fetch(config.url, {
+  const response = await fetch(config.url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -52,6 +52,7 @@ async function postMail(env: Environment, input: { to: string; subject: string; 
     },
     body: JSON.stringify(input),
   })
+  if (!response.ok) throw new Error('Failed to send email')
 }
 
 function createTransport(env: Environment) {
