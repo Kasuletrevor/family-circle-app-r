@@ -166,17 +166,19 @@ describe('Vault Private AI setup and indexing UI', () => {
     const { rerender } = render(<AiVault client={vaultClient()} privateAiClient={ai} />)
 
     await screen.findByText('Downloading Private AI')
-    ;(listener as ((progress: PrivateAiProgress) => void) | null)?.({
-      state: 'downloading',
-      percent: 42,
-      fileIndex: 2,
-      fileCount: 3,
-      fileName: 'Private AI component 2 of 3',
-      bytesDownloaded: 420,
-      totalSizeBytes: 1000,
-      fileBytesDownloaded: 120,
-      fileSizeBytes: 300,
-      message: 'Downloading Private AI',
+    await act(async () => {
+      ;(listener as ((progress: PrivateAiProgress) => void) | null)?.({
+        state: 'downloading',
+        percent: 42,
+        fileIndex: 2,
+        fileCount: 3,
+        fileName: 'Private AI component 2 of 3',
+        bytesDownloaded: 420,
+        totalSizeBytes: 1000,
+        fileBytesDownloaded: 120,
+        fileSizeBytes: 300,
+        message: 'Downloading Private AI',
+      })
     })
     expect(await screen.findByText('42%')).toBeInTheDocument()
     expect(screen.getByText('420 B of 1000 B')).toBeInTheDocument()
@@ -189,6 +191,55 @@ describe('Vault Private AI setup and indexing UI', () => {
     expect(await screen.findByRole('button', { name: 'Continue setup' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Continue setup' }))
     await waitFor(() => expect(startSetup).toHaveBeenCalled())
+  })
+
+  it('shows live MB/s and estimated time remaining after progress establishes a transfer rate', async () => {
+    let listener: ((progress: PrivateAiProgress) => void) | null = null
+    const ai = privateAiClient(aiStatus('downloading'), {
+      onProgress: vi.fn((next) => {
+        listener = next
+        return () => undefined
+      }),
+    })
+    const now = vi.spyOn(Date, 'now')
+    render(<AiVault client={vaultClient()} privateAiClient={ai} />)
+    await screen.findByText('Downloading Private AI')
+
+    const mib = 1024 * 1024
+    now.mockReturnValue(1_000)
+    await act(async () => {
+      listener?.({
+        state: 'downloading',
+        percent: 10,
+        fileIndex: 2,
+        fileCount: 3,
+        fileName: 'Private AI model',
+        bytesDownloaded: 10 * mib,
+        totalSizeBytes: 100 * mib,
+        fileBytesDownloaded: 10 * mib,
+        fileSizeBytes: 80 * mib,
+        message: 'Downloading Private AI',
+      })
+    })
+
+    now.mockReturnValue(3_000)
+    await act(async () => {
+      listener?.({
+        state: 'downloading',
+        percent: 30,
+        fileIndex: 2,
+        fileCount: 3,
+        fileName: 'Private AI model',
+        bytesDownloaded: 30 * mib,
+        totalSizeBytes: 100 * mib,
+        fileBytesDownloaded: 30 * mib,
+        fileSizeBytes: 80 * mib,
+        message: 'Downloading Private AI',
+      })
+    })
+
+    expect(await screen.findByText('10.0 MB/s · about 7 sec left')).toBeInTheDocument()
+    now.mockRestore()
   })
 
   it('repairs repair-required and failed states through the safe repair action', async () => {

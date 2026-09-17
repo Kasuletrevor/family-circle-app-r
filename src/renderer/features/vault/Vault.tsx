@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BrainCircuit, ExternalLink, FileText, LockKeyhole, Pause, Play, RefreshCw, Trash2, Upload, Wrench } from 'lucide-react'
 import type { VaultDocumentSummary, VaultIndexStatus, VaultUploadProgress } from '../../../shared/desktopApi'
 import { DesktopPrivateAiClient } from '../../services/ai/DesktopPrivateAiClient'
@@ -11,11 +11,23 @@ import './Vault.privateAi.css'
 
 const defaultVaultClient = new DesktopVaultClient()
 const defaultPrivateAiClient = new DesktopPrivateAiClient()
+const TRANSFER_SAMPLE_WINDOW_MS = 8_000
+const TRANSFER_MIN_ELAPSED_MS = 500
 
 type LoadState =
   | { status: 'loading'; documents: VaultDocumentSummary[] }
   | { status: 'ready'; documents: VaultDocumentSummary[] }
   | { status: 'error'; documents: VaultDocumentSummary[] }
+
+type TransferSample = {
+  atMs: number
+  bytesDownloaded: number
+}
+
+type TransferTelemetry = {
+  bytesPerSecond: number
+  etaSeconds: number
+}
 
 function formatBytes(sizeBytes: number): string {
   if (sizeBytes < 1024) return `${sizeBytes} B`
@@ -25,6 +37,24 @@ function formatBytes(sizeBytes: number): string {
 
 function approximateMegabytes(sizeBytes: number): string {
   return `${Math.round(sizeBytes / (1024 * 1024))} MB`
+}
+
+function formatEta(seconds: number): string {
+  const totalSeconds = Math.max(1, Math.ceil(seconds))
+  if (totalSeconds < 60) return `${totalSeconds} sec`
+
+  const minutes = Math.floor(totalSeconds / 60)
+  const remainingSeconds = totalSeconds % 60
+  if (minutes < 60) return remainingSeconds === 0 ? `${minutes} min` : `${minutes} min ${remainingSeconds} sec`
+
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes === 0 ? `${hours} hr` : `${hours} hr ${remainingMinutes} min`
+}
+
+function formatTransferTelemetry(telemetry: TransferTelemetry): string {
+  const megabytesPerSecond = telemetry.bytesPerSecond / (1024 * 1024)
+  return `${megabytesPerSecond.toFixed(1)} MB/s · about ${formatEta(telemetry.etaSeconds)} left`
 }
 
 function wordLabel(wordCount: number): string {
@@ -115,9 +145,58 @@ export function Vault({
   const [error, setError] = useState<string | null>(null)
   const [privateAiStatus, setPrivateAiStatus] = useState<PrivateAiStatus | null>(null)
   const [privateAiProgress, setPrivateAiProgress] = useState<PrivateAiProgress | null>(null)
+  const [privateAiTransferTelemetry, setPrivateAiTransferTelemetry] = useState<TransferTelemetry | null>(null)
   const [privateAiBusy, setPrivateAiBusy] = useState(false)
   const [privateAiPauseBusy, setPrivateAiPauseBusy] = useState(false)
   const [privateAiError, setPrivateAiError] = useState<string | null>(null)
+  const privateAiTransferSamples = useRef<TransferSample[]>([])
+
+  function updatePrivateAiTransferTelemetry(progress: PrivateAiProgress): void {
+    if (progress.state !== 'downloading' || progress.totalSizeBytes <= 0 || progress.bytesDownloaded >= progress.totalSizeBytes) {
+      privateAiTransferSamples.current = []
+      setPrivateAiTransferTelemetry(null)
+      return
+    }
+
+    const now = Date.now()
+    const previousSamples = privateAiTransferSamples.current
+    const lastSample = previousSamples[previousSamples.length - 1]
+    if (lastSample && (progress.bytesDownloaded < lastSample.bytesDownloaded || now < lastSample.atMs)) {
+      privateAiTransferSamples.current = [{ atMs: now, bytesDownloaded: progress.bytesDownloaded }]
+      setPrivateAiTransferTelemetry(null)
+      return
+    }
+    if (lastSample?.bytesDownloaded === progress.bytesDownloaded) return
+
+    const samples = [...previousSamples, { atMs: now, bytesDownloaded: progress.bytesDownloaded }]
+      .filter((sample) => now - sample.atMs <= TRANSFER_SAMPLE_WINDOW_MS)
+    privateAiTransferSamples.current = samples
+
+    const firstSample = samples[0]
+    if (!firstSample) {
+      setPrivateAiTransferTelemetry(null)
+      return
+    }
+
+    const elapsedMs = now - firstSample.atMs
+    const transferredBytes = progress.bytesDownloaded - firstSample.bytesDownloaded
+    if (elapsedMs < TRANSFER_MIN_ELAPSED_MS || transferredBytes <= 0) {
+      setPrivateAiTransferTelemetry(null)
+      return
+    }
+
+    const bytesPerSecond = (transferredBytes * 1000) / elapsedMs
+    const remainingBytes = Math.max(0, progress.totalSizeBytes - progress.bytesDownloaded)
+    if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0 || remainingBytes <= 0) {
+      setPrivateAiTransferTelemetry(null)
+      return
+    }
+
+    setPrivateAiTransferTelemetry({
+      bytesPerSecond,
+      etaSeconds: remainingBytes / bytesPerSecond,
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -144,6 +223,8 @@ export function Vault({
   useEffect(() => {
     let cancelled = false
     let unsubscribe: () => void = () => undefined
+    privateAiTransferSamples.current = []
+    setPrivateAiTransferTelemetry(null)
 
     void privateAiClient.getStatus().then(
       (status) => {
@@ -157,6 +238,7 @@ export function Vault({
     try {
       unsubscribe = privateAiClient.onProgress((progress) => {
         if (cancelled) return
+        updatePrivateAiTransferTelemetry(progress)
         setPrivateAiProgress(progress)
         setPrivateAiStatus((current) => statusFromProgress(progress, current))
         if (progress.state === 'ready') setReloadVersion((value) => value + 1)
@@ -254,7 +336,11 @@ export function Vault({
           ? await privateAiClient.pauseSetup()
           : await privateAiClient.repair()
       setPrivateAiStatus(status)
-      if (status.state !== 'downloading' && status.state !== 'verifying') setPrivateAiProgress(null)
+      if (status.state !== 'downloading' && status.state !== 'verifying') {
+        setPrivateAiProgress(null)
+        privateAiTransferSamples.current = []
+        setPrivateAiTransferTelemetry(null)
+      }
       if (status.ready) setReloadVersion((value) => value + 1)
     } catch {
       setPrivateAiError('Private AI setup could not continue. Please try again.')
@@ -367,6 +453,9 @@ export function Vault({
                   </div>
                   {privateAiProgress.totalSizeBytes > 0 ? (
                     <span className="vault-ai__detail">{formatBytes(privateAiProgress.bytesDownloaded)} of {formatBytes(privateAiProgress.totalSizeBytes)}</span>
+                  ) : null}
+                  {privateAiStatus.state === 'downloading' && privateAiTransferTelemetry ? (
+                    <span className="vault-ai__detail">{formatTransferTelemetry(privateAiTransferTelemetry)}</span>
                   ) : null}
                 </div>
               ) : null}

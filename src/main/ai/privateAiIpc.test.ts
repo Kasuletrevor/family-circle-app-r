@@ -131,4 +131,51 @@ describe('registerPrivateAiIpc', () => {
       message: 'Private AI is ready',
     })
   })
+
+  it('throttles bursty downloading progress while forwarding state transitions immediately', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipc = {
+      handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),
+    }
+    let now = 1_000
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const progress = (state: string, bytesDownloaded: number) => ({
+      ...internalStatus(state),
+      state,
+      phase: state === 'downloading' ? 'downloading' : 'verifying',
+      percent: bytesDownloaded,
+      fileIndex: 2,
+      fileCount: 3,
+      bytesDownloaded,
+      totalBytes: 1_000,
+      fileBytesDownloaded: bytesDownloaded,
+      fileSizeBytes: 1_000,
+      message: state === 'downloading' ? 'Downloading Private AI' : 'Verifying Private AI',
+    })
+    const service = {
+      getStatus: vi.fn(async () => internalStatus('downloading')),
+      getVersion: vi.fn(async () => '1.2.0'),
+      startSetup: vi.fn(async (onProgress?: (value: unknown) => void) => {
+        onProgress?.(progress('downloading', 100))
+        now += 10
+        onProgress?.(progress('downloading', 200))
+        now += 10
+        onProgress?.(progress('downloading', 300))
+        now += 10
+        onProgress?.(progress('verifying', 1_000))
+        return internalStatus('ready')
+      }),
+      pauseSetup: vi.fn(() => internalStatus('paused')),
+      repair: vi.fn(async () => internalStatus('ready')),
+    }
+    registerPrivateAiIpc(ipc as never, service as never)
+
+    const send = vi.fn()
+    await handlers.get('private-ai:start-setup')?.({ sender: { send } })
+
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[0]?.[1]).toMatchObject({ state: 'downloading', bytesDownloaded: 100 })
+    expect(send.mock.calls[1]?.[1]).toMatchObject({ state: 'verifying', bytesDownloaded: 1_000 })
+    nowSpy.mockRestore()
+  })
 })

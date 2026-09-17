@@ -16,6 +16,8 @@ interface PrivateAiIpcEvent {
   }
 }
 
+const DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 100
+
 function safeState(value: unknown): PrivateAiState {
   return value === 'not_installed'
     || value === 'downloading'
@@ -70,7 +72,25 @@ export function registerPrivateAiIpc(
   }
   const progressFor = (event: unknown) => {
     const sender = (event as PrivateAiIpcEvent | null)?.sender
-    return (progress: PrivateAiProgress) => sender?.send('private-ai:progress', safeProgress(progress))
+    let lastState: PrivateAiState | null = null
+    let lastDownloadingSentAt = Number.NEGATIVE_INFINITY
+
+    return (progress: PrivateAiProgress) => {
+      const state = safeState(progress.state)
+      const now = Date.now()
+      const stateChanged = state !== lastState
+      if (
+        state === 'downloading'
+        && !stateChanged
+        && now - lastDownloadingSentAt < DOWNLOAD_PROGRESS_MIN_INTERVAL_MS
+      ) {
+        return
+      }
+
+      sender?.send('private-ai:progress', safeProgress(progress))
+      lastState = state
+      if (state === 'downloading') lastDownloadingSentAt = now
+    }
   }
 
   ipc.handle('private-ai:get-status', async () => publicStatus(await service.getStatus()))
