@@ -44,6 +44,23 @@ interface RegistrationResponse {
   user?: { id?: string | number | null; name?: string | null }
 }
 
+interface RawEmailPayload {
+  to?: unknown
+  groupName?: unknown
+  role?: unknown
+  tempPassword?: unknown
+}
+
+interface LegacyInviteStateResult {
+  outcome: InviteMemberResult['outcome']
+  delivery?: {
+    to: string
+    circleName: string
+    role: string
+    temporaryPassword: string
+  }
+}
+
 function stringOrNull(value: unknown): string | null {
   if (value == null) return null
   const normalized = String(value).trim()
@@ -60,6 +77,21 @@ function normalizePersonKind(value: unknown, id: string): CircleTreePersonIntern
   if (kind === 'placeholder') return 'placeholder'
   if (kind === 'invite' || id.startsWith('invite:')) return 'invite'
   return 'user'
+}
+
+function deliveryFromPayload(
+  payload: RawEmailPayload | null | undefined,
+  expectedEmail: string,
+  expectedRole: InvitationFamilyRole,
+): LegacyInviteStateResult['delivery'] {
+  if (!payload) return undefined
+  const to = normalizeEmail(String(payload.to ?? ''))
+  const circleName = String(payload.groupName ?? '').trim()
+  const role = String(payload.role ?? '').trim()
+  const temporaryPassword = String(payload.tempPassword ?? '').trim()
+  if (!to || !circleName || !role || !temporaryPassword) return undefined
+  if (to !== expectedEmail || role !== expectedRole) return undefined
+  return { to, circleName, role, temporaryPassword }
 }
 
 export class LegacyCircleAuthAdapter {
@@ -81,6 +113,13 @@ export class LegacyCircleAuthAdapter {
       groupName: raw.groupName ? String(raw.groupName) : null,
       role: raw.role ? String(raw.role) : null,
     }
+  }
+
+  async getInvitationDelivery(emailInput: string): Promise<{ temporaryPassword: string } | null> {
+    const raw = await this.fetchInvitation(normalizeEmail(emailInput))
+    if (!raw.hasPendingInvite) return null
+    const temporaryPassword = String(raw.tempPassword ?? '').trim()
+    return temporaryPassword ? { temporaryPassword } : null
   }
 
   async claimInvitation(input: { email: string; enteredPassword: string }): Promise<ClaimedInvitation> {
@@ -180,22 +219,28 @@ export class LegacyCircleAuthAdapter {
     circleId: string
     email: string
     role: InvitationFamilyRole
-  }): Promise<InviteMemberResult> {
+  }): Promise<LegacyInviteStateResult> {
+    const expectedEmail = normalizeEmail(input.email)
     const data = await this.postJson<{
       alreadyMember?: boolean
       alreadyPending?: boolean
       emailSent?: boolean
+      emailDeliveryRequired?: boolean
+      emailPayload?: RawEmailPayload | null
     }>('/api/group/invite-email', {
       fromUserId: String(input.serverUserId ?? '').trim(),
       groupId: String(input.circleId ?? '').trim(),
-      email: normalizeEmail(input.email),
+      email: expectedEmail,
       role: input.role,
     })
 
     if (data.alreadyMember) return { outcome: 'already-member' }
-    if (data.emailSent === false) return { outcome: 'delivery-failed' }
-    if (data.alreadyPending) return { outcome: 'already-pending' }
-    return { outcome: 'sent' }
+
+    const delivery = data.emailDeliveryRequired === true
+      ? deliveryFromPayload(data.emailPayload, expectedEmail, input.role)
+      : undefined
+    const outcome: InviteMemberResult['outcome'] = data.alreadyPending ? 'already-pending' : 'sent'
+    return delivery ? { outcome, delivery } : { outcome }
   }
 
   async cancelInvitation(input: {

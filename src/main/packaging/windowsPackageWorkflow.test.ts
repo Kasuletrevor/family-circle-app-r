@@ -61,6 +61,7 @@ describe('Windows packaging workflow', () => {
       "third_party/whisper.cpp-LICENSE.txt",
       "scripts/write-demo-mail-config.mjs",
       "src/main/auth/**",
+      "src/main/circle/**",
       "src/main/story/**",
       "src/main/voice/**",
       "src/renderer/features/story/**",

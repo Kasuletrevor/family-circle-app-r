@@ -67,6 +67,34 @@ describe('RecoveryMailer HTTP transport', () => {
     expect(payload.html).toContain('Your password was changed')
   })
 
+  it('sends Circle invitations with protected temporary access details through the same API', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const mailer = createRecoveryMailer({
+      SEND_EMAILS: 'true',
+      MAIL_API_URL: 'https://example.test/send-mail/',
+      MAIL_API_USER: 'test-api-user',
+      MAIL_API_PASSWORD: 'unit-test-password',
+    })
+
+    await mailer.sendInvitation({
+      to: 'relative@example.com',
+      circleName: 'Kasule & Family',
+      role: 'Sibling',
+      temporaryPassword: 'TEMP<2468>',
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const payload = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)) as Record<string, string>
+    expect(payload.to).toBe('relative@example.com')
+    expect(payload.subject).toContain('Kasule & Family')
+    expect(payload.body).toContain('TEMP<2468>')
+    expect(payload.body).toContain('Sibling')
+    expect(payload.html).toContain('TEMP&lt;2468&gt;')
+    expect(payload.html).toContain('Kasule &amp; Family')
+  })
+
   it('uses the Family Circle mail endpoint by default', async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

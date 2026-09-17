@@ -4,6 +4,12 @@ import { resolve } from 'node:path'
 export interface RecoveryMailer {
   sendCode(input: { to: string; code: string; expiresInMinutes: number }): Promise<void>
   sendChangedNotice(input: { to: string }): Promise<void>
+  sendInvitation(input: {
+    to: string
+    circleName: string
+    role: string
+    temporaryPassword: string
+  }): Promise<void>
 }
 
 type Environment = NodeJS.ProcessEnv
@@ -133,6 +139,7 @@ export function createRecoveryMailer(env: Environment = process.env): RecoveryMa
     return {
       async sendCode() {},
       async sendChangedNotice() {},
+      async sendInvitation() {},
     }
   }
 
@@ -153,6 +160,18 @@ export function createRecoveryMailer(env: Environment = process.env): RecoveryMa
         subject: 'Kin Keepers password changed',
         body: 'Your Kin Keepers password was changed and existing sessions were invalidated.',
         html: '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#EEF2F7;color:#0C2348;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:18px;padding:32px"><strong style="color:#0E9F9A">KIN-KEEPERS</strong><h1>Your password was changed</h1><p>Your Family Circle password was reset successfully. Existing sessions were invalidated; please sign in again.</p><p style="color:#667085">If you did not make this change, contact your Kin-Keepers administrator immediately.</p></div></body></html>',
+      })
+    },
+
+    async sendInvitation({ to, circleName, role, temporaryPassword }) {
+      const safeCircleName = escapeHtml(circleName)
+      const safeRole = escapeHtml(role)
+      const safeTemporaryPassword = escapeHtml(temporaryPassword)
+      await postMail(env, embedded, {
+        to,
+        subject: `You're invited to ${circleName} on Kin Keepers`,
+        body: `You have been invited to join ${circleName} on Kin Keepers as ${role}. Sign in to Family Circle with ${to} and temporary password ${temporaryPassword}. You will be asked to choose a new password after signing in.`,
+        html: `<!doctype html><html><body style="font-family:Arial,sans-serif;background:#EEF2F7;color:#0C2348;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:18px;padding:32px"><strong style="color:#0E9F9A">KIN-KEEPERS</strong><h1>You're invited to ${safeCircleName}</h1><p>You have been invited to join this Family Circle as <strong>${safeRole}</strong>.</p><p>Open Family Circle and sign in with <strong>${escapeHtml(to)}</strong> using this temporary password:</p><div style="font-family:monospace;font-size:24px;font-weight:700;background:#E9FBF6;padding:18px;border-radius:12px;text-align:center">${safeTemporaryPassword}</div><p>You will be asked to choose a new password after signing in.</p><p style="color:#667085">If you were not expecting this invitation, you can ignore this email.</p></div></body></html>`,
       })
     },
   }

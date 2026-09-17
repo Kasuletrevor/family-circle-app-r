@@ -18,6 +18,7 @@ async function createHarness() {
   const mailer: RecoveryMailer = {
     sendCode: vi.fn(async () => undefined),
     sendChangedNotice: vi.fn(async () => undefined),
+    sendInvitation: vi.fn(async () => undefined),
   }
   const service = new PasswordRecoveryService(db, users, mailer, {
     now: () => now,

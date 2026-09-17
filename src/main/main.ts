@@ -83,7 +83,8 @@ async function createAppServices(): Promise<AppServices> {
     createProtectedCrypto(safeStorage),
     createSessionFile(join(userDataPath, 'protected-session.bin')),
   )
-  const recovery = new PasswordRecoveryService(database, users, createRecoveryMailer())
+  const mailer = createRecoveryMailer()
+  const recovery = new PasswordRecoveryService(database, users, mailer)
   const circle = new LegacyCircleAuthAdapter({
     baseUrl: process.env.CIRCLE_API_URL || '',
     apiKey: process.env.CIRCLE_API_KEY || '',
@@ -168,7 +169,7 @@ async function createAppServices(): Promise<AppServices> {
 
   const services: AppServices = {
     authService: new AuthService(users, sessions, recovery, circle),
-    circleService: new CircleService(sessions, users, circle),
+    circleService: new CircleService(sessions, users, circle, mailer),
     vaultService,
     vaultQueryService,
     privateAiService,

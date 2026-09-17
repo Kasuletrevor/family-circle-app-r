@@ -111,11 +111,15 @@ function setup(options: {
           role: 'Circle owner',
         })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    getInvitationDelivery: vi.fn(async () => ({ temporaryPassword: 'test-temporary-password' })),
     cancelInvitation: vi.fn(async () => ({ success: true as const })),
     removeMember: vi.fn(async () => ({ success: true as const })),
     leaveCircle: vi.fn(async () => ({ success: true as const })),
   }
-  return { sessions, users, circle, service: new CircleService(sessions, users, circle) }
+  const mailer = {
+    sendInvitation: vi.fn(async () => undefined),
+  }
+  return { sessions, users, circle, mailer, service: new CircleService(sessions, users, circle, mailer) }
 }
 
 describe('CircleService', () => {
@@ -252,7 +256,7 @@ describe('CircleService', () => {
   })
 
   it('allows only the actual Circle owner to invite and validates the fixed family role at runtime', async () => {
-    const { service, circle } = setup({ activeCircleId: 'g-2' })
+    const { service, circle, mailer } = setup({ activeCircleId: 'g-2' })
 
     await expect(service.inviteMember({
       circleId: 'g-1',
@@ -279,5 +283,6 @@ describe('CircleService', () => {
       email: 'relative@example.test',
       role: 'Sibling',
     })
+    expect(mailer.sendInvitation).toHaveBeenCalledOnce()
   })
 })

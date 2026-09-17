@@ -31,6 +31,19 @@ describe('LegacyCircleAuthAdapter', () => {
     expect(JSON.stringify(await adapter.checkInvitation('trevor@example.com'))).not.toContain('invite-token')
   })
 
+  it('keeps temporary invitation credentials inside the main-process delivery boundary', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({
+      hasPendingInvite: true,
+      tempPassword: 'temporary secret',
+      token: 'invite-token',
+    }))
+    const adapter = new LegacyCircleAuthAdapter({ baseUrl: 'https://circle.example.test', apiKey: 'legacy-key' }, fetcher)
+
+    await expect(adapter.getInvitationDelivery(' Relative@Example.COM ')).resolves.toEqual({
+      temporaryPassword: 'temporary secret',
+    })
+  })
+
   it('rejects a wrong temporary invitation password before making claim writes', async () => {
     const fetcher = vi.fn(async () => jsonResponse({
       hasPendingInvite: true,
@@ -153,8 +166,8 @@ describe('LegacyCircleAuthAdapter', () => {
     [{ alreadyMember: true, tempPassword: 'secret', token: 'token' }, { outcome: 'already-member' }],
     [{ alreadyPending: true, emailRetried: true, tempPassword: 'secret', token: 'token' }, { outcome: 'already-pending' }],
     [{ success: true, invitation: { id: 'i-1', tempPassword: 'secret', token: 'token' }, emailSent: true }, { outcome: 'sent' }],
-    [{ success: true, invitation: { id: 'i-1', tempPassword: 'secret', token: 'token' }, emailSent: false, emailError: 'smtp' }, { outcome: 'delivery-failed' }],
-  ])('normalizes invite response %# without leaking credentials', async (response, expected) => {
+    [{ success: true, invitation: { id: 'i-1', tempPassword: 'secret', token: 'token' }, emailSent: false, emailError: 'smtp' }, { outcome: 'sent' }],
+  ])('normalizes invite state without trusting legacy email delivery %#', async (response, expected) => {
     const fetcher = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toEqual({
         fromUserId: '88',
