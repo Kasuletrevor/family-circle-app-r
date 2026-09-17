@@ -14,6 +14,18 @@ function tempReleaseDir(): string {
   return dir
 }
 
+function writeValidDemoMailConfig(releaseDir: string): void {
+  const resourcesDir = resolve(releaseDir, 'win-unpacked', 'resources')
+  mkdirSync(resourcesDir, { recursive: true })
+  writeFileSync(resolve(resourcesDir, 'demo-mail-config.json'), JSON.stringify({
+    enabled: true,
+    url: 'https://example.test/send-mail/',
+    timeoutMs: 45_000,
+    user: 'demo-user',
+    password: 'demo-password',
+  }))
+}
+
 function runVerifier(...args: string[]) {
   return spawnSync(process.execPath, [verifier, ...args], {
     cwd: root,
@@ -41,13 +53,23 @@ describe('Windows package verifier', () => {
     expect(source).toMatch(/whisper-cli|ggml-base|offline-voice\/runtime|offline-voice\/models/i)
   })
 
-  it('accepts exactly one expected Windows installer', () => {
+  it('accepts exactly one expected Windows installer with the generated demo mail resource', () => {
     const releaseDir = tempReleaseDir()
     writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+    writeValidDemoMailConfig(releaseDir)
 
     const result = runVerifier('--release-dir', releaseDir)
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Family-Circle-Setup-0.1.0.exe')
+  })
+
+  it('rejects an installer when the generated demo mail resource is missing', () => {
+    const releaseDir = tempReleaseDir()
+    writeFileSync(resolve(releaseDir, 'Family-Circle-Setup-0.1.0.exe'), 'fake installer')
+
+    const result = runVerifier('--release-dir', releaseDir)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Packaged demo mail config is missing')
   })
 
   it('fails when the Windows installer is missing or ambiguous', () => {
