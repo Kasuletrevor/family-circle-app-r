@@ -417,67 +417,98 @@ export class OfflineAiDownloader {
     if (ranges.length < 2) return this.downloadSequential(partPath, 0, context)
 
     const segmentPaths = ranges.map((_, index) => `${partPath}.range-${index}`)
-    await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+    const expectedSizes = ranges.map((range) => range.end - range.start + 1)
+    const existingByRange = await Promise.all(segmentPaths.map(async (path, index) => {
+      const size = (await this.fs.stat(path))?.size ?? 0
+      if (size > expectedSizes[index]!) {
+        await this.fs.remove(path)
+        return 0
+      }
+      return size
+    }))
 
-    const firstRange = ranges[0]!
-    const firstResponse = await this.http.request(context.file.url, {
-      headers: { Range: `bytes=${firstRange.start}-${firstRange.end}` },
+    const pending = ranges.flatMap((range, index) => {
+      const existingBytes = existingByRange[index]!
+      if (existingBytes >= expectedSizes[index]!) return []
+      return [{
+        index,
+        existingBytes,
+        requestRange: { start: range.start + existingBytes, end: range.end },
+      }]
     })
 
-    if (firstResponse.statusCode === 200) {
-      return this.downloadSequential(partPath, 0, context, firstResponse)
-    }
-    if (firstResponse.statusCode !== 206 || !contentRangeMatches(firstResponse, firstRange, context.file.sizeBytes)) {
-      throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
-    }
+    if (pending.length > 0) {
+      const firstPending = pending[0]!
+      const firstResponse = await this.http.request(context.file.url, {
+        headers: { Range: `bytes=${firstPending.requestRange.start}-${firstPending.requestRange.end}` },
+      })
 
-    const validator = headerValue(firstResponse.headers, 'etag') ?? headerValue(firstResponse.headers, 'last-modified')
-    const responses: OfflineAiHttpResponse[] = [firstResponse]
-    const remainingResponses = await Promise.all(ranges.slice(1).map(async (range) => {
-      const headers: Record<string, string> = { Range: `bytes=${range.start}-${range.end}` }
-      if (validator) headers['If-Range'] = validator
-      const response = await this.http.request(context.file.url, { headers })
-      if (response.statusCode !== 206 || !contentRangeMatches(response, range, context.file.sizeBytes)) {
+      if (firstResponse.statusCode === 200) {
+        await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+        return this.downloadSequential(partPath, 0, context, firstResponse)
+      }
+      if (firstResponse.statusCode !== 206 || !contentRangeMatches(firstResponse, firstPending.requestRange, context.file.sizeBytes)) {
         throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
       }
-      return response
-    }))
-    responses.push(...remainingResponses)
 
-    const downloadedByRange = ranges.map(() => 0)
-    await Promise.all(responses.map(async (response, rangeIndex) => {
-      const segmentPath = segmentPaths[rangeIndex]!
-      const writer = await this.fs.openWriter(segmentPath, 'truncate')
-      try {
-        for await (const chunk of response.body) {
-          await writer.write(chunk)
-          downloadedByRange[rangeIndex] = (downloadedByRange[rangeIndex] ?? 0) + chunk.byteLength
-          const fileBytes = downloadedByRange.reduce((sum, value) => sum + value, 0)
-          context.onProgress?.(this.progress({
-            state: 'downloading',
-            phase: 'downloading',
-            manifest: context.manifest,
-            file: context.file,
-            fileIndex: context.fileIndex,
-            fileCount: context.fileCount,
-            fileBytes,
-            completedBytes: context.completedBytes,
-            totalBytes: context.totalBytes,
-            message: 'Downloading Private AI',
-          }))
-          if (this.pauseRequested) return
+      const validator = headerValue(firstResponse.headers, 'etag') ?? headerValue(firstResponse.headers, 'last-modified')
+      const responseEntries: Array<{
+        index: number
+        existingBytes: number
+        response: OfflineAiHttpResponse
+      }> = [{
+        index: firstPending.index,
+        existingBytes: firstPending.existingBytes,
+        response: firstResponse,
+      }]
+
+      const remainingResponses = await Promise.all(pending.slice(1).map(async (item) => {
+        const headers: Record<string, string> = {
+          Range: `bytes=${item.requestRange.start}-${item.requestRange.end}`,
         }
-      } finally {
-        await writer.close()
-      }
-    }))
+        if (validator) headers['If-Range'] = validator
+        const response = await this.http.request(context.file.url, { headers })
+        if (response.statusCode !== 206 || !contentRangeMatches(response, item.requestRange, context.file.sizeBytes)) {
+          throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
+        }
+        return { index: item.index, existingBytes: item.existingBytes, response }
+      }))
+      responseEntries.push(...remainingResponses)
 
-    if (this.pauseRequested) return true
+      const downloadedByRange = [...existingByRange]
+      await Promise.all(responseEntries.map(async ({ index, existingBytes, response }) => {
+        const segmentPath = segmentPaths[index]!
+        const writer = await this.fs.openWriter(segmentPath, existingBytes > 0 ? 'append' : 'truncate')
+        try {
+          for await (const chunk of response.body) {
+            await writer.write(chunk)
+            downloadedByRange[index] = (downloadedByRange[index] ?? 0) + chunk.byteLength
+            const fileBytes = downloadedByRange.reduce((sum, value) => sum + value, 0)
+            context.onProgress?.(this.progress({
+              state: 'downloading',
+              phase: 'downloading',
+              manifest: context.manifest,
+              file: context.file,
+              fileIndex: context.fileIndex,
+              fileCount: context.fileCount,
+              fileBytes,
+              completedBytes: context.completedBytes,
+              totalBytes: context.totalBytes,
+              message: 'Downloading Private AI',
+            }))
+            if (this.pauseRequested) return
+          }
+        } finally {
+          await writer.close()
+        }
+      }))
+
+      if (this.pauseRequested) return true
+    }
 
     for (let index = 0; index < ranges.length; index += 1) {
-      const expectedSize = ranges[index]!.end - ranges[index]!.start + 1
       const actualSize = (await this.fs.stat(segmentPaths[index]!))?.size ?? -1
-      if (actualSize !== expectedSize) {
+      if (actualSize !== expectedSizes[index]) {
         throw new OfflineAiDownloadError('size-mismatch', 'Private AI range size verification failed')
       }
     }
