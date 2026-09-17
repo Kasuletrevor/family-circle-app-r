@@ -62,6 +62,21 @@ class MemoryFs {
     this.files.set(path, Buffer.concat([existing, Buffer.from(chunk)]))
   }
 
+  async openWriter(path: string, mode: 'append' | 'truncate') {
+    this.operations.push(`open-writer:${mode}:${path}`)
+    if (mode === 'truncate') this.files.set(path, Buffer.alloc(0))
+    return {
+      write: async (chunk: Uint8Array) => {
+        this.operations.push(`write:${path}:${chunk.byteLength}`)
+        const existing = this.files.get(path) ?? Buffer.alloc(0)
+        this.files.set(path, Buffer.concat([existing, Buffer.from(chunk)]))
+      },
+      close: async () => {
+        this.operations.push(`close-writer:${path}`)
+      },
+    }
+  }
+
   async *readChunks(path: string): AsyncIterable<Uint8Array> {
     this.operations.push(`read:${path}`)
     const value = this.files.get(path)
@@ -85,17 +100,20 @@ class MemoryFs {
   }
 }
 
-function response(statusCode: number, chunks: string[]) {
+function response(statusCode: number, chunks: string[], headers: Record<string, string> = {}) {
   return {
     statusCode,
-    headers: {},
+    headers,
     body: (async function* () {
       for (const chunk of chunks) yield Buffer.from(chunk)
     })(),
   }
 }
 
-function makeDownloader(httpResponse: ReturnType<typeof response>) {
+function makeDownloader(
+  httpResponse: ReturnType<typeof response>,
+  options: { parallelDownloadThresholdBytes?: number; maxParallelParts?: number } = {},
+) {
   const fs = new MemoryFs()
   const http = { request: vi.fn(async () => httpResponse) }
   const extractionOperations: string[] = []
@@ -104,7 +122,7 @@ function makeDownloader(httpResponse: ReturnType<typeof response>) {
       extractionOperations.push(`extract:${zipPath}->${destinationPath}`)
     }),
   }
-  const downloader = new OfflineAiDownloader({ fs, http, archive })
+  const downloader = new OfflineAiDownloader({ fs, http, archive, ...options } as never)
   return { downloader, fs, http, archive, extractionOperations }
 }
 
@@ -136,6 +154,79 @@ describe('OfflineAiDownloader', () => {
 
     expect(fs.operations).toContain(`truncate:${partPath}`)
     expect(fs.text(finalPath)).toBe('abcdef')
+  })
+
+  it('uses one persistent writer for a sequential response instead of reopening on every chunk', async () => {
+    const file = modelFile('abcdef')
+    const root = testRoot()
+    const { downloader, fs } = makeDownloader(response(200, ['ab', 'cd', 'ef']))
+
+    await downloader.downloadAll(manifest(file), root)
+
+    expect(fs.operations.filter((operation) => operation.startsWith('open-writer:'))).toHaveLength(1)
+    expect(fs.operations.filter((operation) => operation.startsWith('write:'))).toHaveLength(3)
+    expect(fs.operations.some((operation) => operation.startsWith('append:'))).toBe(false)
+  })
+
+  it('downloads a configured large asset in four bounded ranges and assembles it before verification', async () => {
+    const contents = 'abcdefghijklmnop'
+    const file = modelFile(contents, { name: 'AI answers', type: 'model' })
+    const root = testRoot()
+    const fs = new MemoryFs()
+    const requestedRanges: string[] = []
+    const http = {
+      request: vi.fn(async (_url: string, options: { headers: Record<string, string> }) => {
+        const range = options.headers.Range
+        if (!range) return response(200, [contents])
+        requestedRanges.push(range)
+        const match = /^bytes=(\d+)-(\d+)$/.exec(range)
+        if (!match) return response(416, [])
+        const start = Number(match[1])
+        const end = Number(match[2])
+        return response(206, [contents.slice(start, end + 1)], {
+          'content-range': `bytes ${start}-${end}/${contents.length}`,
+          etag: '"model-v1"',
+        })
+      }),
+    }
+    const downloader = new OfflineAiDownloader({
+      fs,
+      http,
+      archive: { extractZip: vi.fn() },
+      parallelDownloadThresholdBytes: 8,
+      maxParallelParts: 4,
+    } as never)
+
+    await downloader.downloadAll(manifest(file), root)
+
+    expect(requestedRanges).toEqual([
+      'bytes=0-3',
+      'bytes=4-7',
+      'bytes=8-11',
+      'bytes=12-15',
+    ])
+    expect(fs.text(join(root, 'models/model.gguf'))).toBe(contents)
+  })
+
+  it('falls back to the first full response when a server ignores a parallel Range request', async () => {
+    const contents = 'abcdefghijklmnop'
+    const file = modelFile(contents, { name: 'AI answers', type: 'model' })
+    const root = testRoot()
+    const fs = new MemoryFs()
+    const http = { request: vi.fn(async () => response(200, [contents])) }
+    const downloader = new OfflineAiDownloader({
+      fs,
+      http,
+      archive: { extractZip: vi.fn() },
+      parallelDownloadThresholdBytes: 8,
+      maxParallelParts: 4,
+    } as never)
+
+    await downloader.downloadAll(manifest(file), root)
+
+    expect(http.request).toHaveBeenCalledTimes(1)
+    expect(http.request.mock.calls[0]?.[1]).toMatchObject({ headers: { Range: 'bytes=0-3' } })
+    expect(fs.text(join(root, 'models/model.gguf'))).toBe(contents)
   })
 
   it('emits aggregate/per-file progress', async () => {
