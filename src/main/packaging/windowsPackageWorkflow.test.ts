@@ -16,6 +16,7 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('runs-on: windows-latest')
     expect(source).toContain('npm ci --no-audit')
     expect(source).toContain('npm run check')
+    expect(source).toContain('node scripts/write-demo-mail-config.mjs')
     expect(source).toContain('npm run package:win')
     expect(source).toContain('npm run verify:package')
     expect(source).toContain('Family-Circle-Setup-*.exe')
@@ -44,7 +45,7 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('actions/download-artifact@')
   })
 
-  it('keeps the approved push/tag/base trigger policy and adds Story/voice PR path filters', () => {
+  it('keeps the approved push/tag/base trigger policy and watches demo mail packaging inputs', () => {
     const source = workflow()
     const pushStart = source.indexOf('  push:\n')
     const pullStart = source.indexOf('  pull_request:\n')
@@ -58,6 +59,8 @@ describe('Windows packaging workflow', () => {
     for (const path of [
       "config/offline-voice-manifest.json",
       "third_party/whisper.cpp-LICENSE.txt",
+      "scripts/write-demo-mail-config.mjs",
+      "src/main/auth/**",
       "src/main/story/**",
       "src/main/voice/**",
       "src/renderer/features/story/**",
