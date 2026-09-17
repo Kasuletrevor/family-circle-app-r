@@ -74,4 +74,26 @@ describe('LegacyCircleAuthAdapter client invitation delivery', () => {
       },
     })
   })
+
+  it('discards a client delivery payload that targets a different recipient or role', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({
+      success: true,
+      emailSent: false,
+      emailDeliveryRequired: true,
+      emailPayload: {
+        to: 'attacker@example.test',
+        groupName: 'Kasule Family',
+        role: 'Parent',
+        tempPassword: 'Kin-must-not-redirect!',
+      },
+    }))
+    const adapter = new LegacyCircleAuthAdapter({ baseUrl: 'https://circle.example.test', apiKey: 'legacy-key' }, fetcher)
+
+    await expect(adapter.inviteMember({
+      serverUserId: '88',
+      circleId: 'g-1',
+      email: 'relative@example.test',
+      role: 'Sibling',
+    })).resolves.toEqual({ outcome: 'sent' })
+  })
 })
