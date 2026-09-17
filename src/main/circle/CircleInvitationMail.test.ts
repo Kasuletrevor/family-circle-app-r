@@ -81,7 +81,7 @@ describe('Circle invitation mail delivery', () => {
 
   it('uses the same mail API when resending and reports our delivery failure safely', async () => {
     const { service, circle, mailer } = setup()
-    circle.inviteMember.mockResolvedValue({ outcome: 'already-pending', delivery })
+    circle.inviteMember.mockResolvedValue({ outcome: 'already-pending', delivery } as never)
 
     await expect(service.resendInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ outcome: 'sent' })
     expect(circle.getInvitationDelivery).not.toHaveBeenCalled()
@@ -93,7 +93,7 @@ describe('Circle invitation mail delivery', () => {
 
   it('falls back to the protected invitation check for older compatibility servers', async () => {
     const { service, circle, mailer } = setup()
-    circle.inviteMember.mockResolvedValue({ outcome: 'sent' })
+    circle.inviteMember.mockResolvedValue({ outcome: 'sent' } as never)
 
     await expect(service.inviteMember({
       circleId: 'g-1',
