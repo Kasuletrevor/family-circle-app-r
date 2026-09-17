@@ -9,3 +9,4 @@ bin/
 *.gguf
 *.bin
 build/demo-mail-config.json
+build/demo-circle-config.json
