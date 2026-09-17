@@ -21,6 +21,7 @@ on:
       - 'scripts/verify-mail-api-config.mjs'
       - 'scripts/write-demo-mail-config.mjs'
       - 'src/main/auth/**'
+      - 'src/main/circle/**'
       - 'src/main/packaging/**'
       - 'src/main/story/**'
       - 'src/main/voice/**'
