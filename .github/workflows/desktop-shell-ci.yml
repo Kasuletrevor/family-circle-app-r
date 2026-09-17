@@ -32,6 +32,15 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit
+      - name: Verify mail API configuration
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
+        env:
+          SEND_EMAILS: ${{ vars.SEND_EMAILS }}
+          MAIL_API_URL: ${{ vars.MAIL_API_URL }}
+          MAIL_API_TIMEOUT_MS: ${{ vars.MAIL_API_TIMEOUT_MS }}
+          MAIL_API_USER: ${{ secrets.MAIL_API_USER }}
+          MAIL_API_PASSWORD: ${{ secrets.MAIL_API_PASSWORD }}
+        run: node scripts/verify-mail-api-config.mjs
       - name: Verify desktop shell
         run: npm run check
       - name: Audit dependencies
