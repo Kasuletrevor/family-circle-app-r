@@ -26,10 +26,8 @@ env:
   SOURCE_RUN_ID: ${{ inputs.run_id || '35261577742' }}
   RELEASE_VERSION: ${{ inputs.version || '0.1.0-demo-20260917' }}
   INSTALLER_NAME: Family-Circle-Setup-0.1.0.exe
-  SERVER_HOST: 184.168.29.119
-  SERVER_USER: ooglobe
   STAGING_ROOT: /home/ooglobe/electron-release-staging
-  PUBLISH_ROOT: /var/www/family-circle/electron-releases/demo
+  PUBLISH_ROOT: /var/www/family-circle-prod/electron-releases/demo
   PUBLIC_URL: https://familycircle.o2gventures.com/electron-releases/demo/latest/Family-Circle-Setup-0.1.0.exe
 
 jobs:
@@ -38,17 +36,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Verify deployment authentication
+      - name: Verify deployment configuration
         env:
-          DEV_SSH_PRIVATE_KEY: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+          DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          DEV_SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          DEV_SSH_PASSWORD: ${{ secrets.DEV_SSH_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${DEV_SSH_PRIVATE_KEY:-}" ] && [ -z "${PROD_SSH_PASSWORD:-}" ]; then
-            echo "::error::No server authentication secret is configured. Expected DEV_SSH_PRIVATE_KEY or PROD_SSH_PASSWORD."
-            exit 1
-          fi
-          echo "Demo deployment authentication is configured"
+          for name in DEV_SSH_HOST DEV_SSH_USER DEV_SSH_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required deployment secret: $name"
+              exit 1
+            fi
+          done
+          echo "Demo deployment configuration is available"
 
       - name: Download exact tested installer artifact
         uses: actions/download-artifact@v8
@@ -98,10 +99,9 @@ jobs:
       - name: Copy payload to server staging
         uses: appleboy/scp-action@v1
         with:
-          host: ${{ env.SERVER_HOST }}
-          username: ${{ env.SERVER_USER }}
-          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          password: ${{ secrets.PROD_SSH_PASSWORD }}
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           source: "publish/*"
           target: "${{ env.STAGING_ROOT }}/${{ env.RELEASE_VERSION }}"
@@ -116,10 +116,9 @@ jobs:
           STAGING_ROOT: ${{ env.STAGING_ROOT }}
           PUBLISH_ROOT: ${{ env.PUBLISH_ROOT }}
         with:
-          host: ${{ env.SERVER_HOST }}
-          username: ${{ env.SERVER_USER }}
-          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          password: ${{ secrets.PROD_SSH_PASSWORD }}
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           envs: RELEASE_VERSION,INSTALLER_NAME,STAGING_ROOT,PUBLISH_ROOT
           script: |
