@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { resolveCircleApiConfig } from './CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './LegacyCircleAuthAdapter'
 
 function jsonResponse(value: unknown, status = 200): Response {
@@ -54,7 +55,7 @@ describe('LegacyCircleAuthAdapter', () => {
         expect(new Headers(init?.headers).get('X-Kin-Keepers-Key')).toBe('packaged-circle-key')
         return jsonResponse({ hasPendingInvite: false })
       })
-      const adapter = new LegacyCircleAuthAdapter({ baseUrl: '', apiKey: '' }, fetcher)
+      const adapter = new LegacyCircleAuthAdapter(resolveCircleApiConfig({}), fetcher)
 
       await expect(adapter.checkInvitation('trevor@example.com')).resolves.toEqual({
         hasPendingInvite: false,
