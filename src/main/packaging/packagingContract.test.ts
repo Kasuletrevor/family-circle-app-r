@@ -10,6 +10,7 @@ interface PackageJson {
     appId?: string
     productName?: string
     files?: string[]
+    extraResources?: Array<{ from?: string; to?: string }>
     directories?: { output?: string }
     win?: { target?: Array<{ target?: string; arch?: string[] }>; icon?: string }
     nsis?: {
@@ -47,13 +48,17 @@ describe('Windows packaging contract', () => {
     expect(mailerSource).not.toMatch(/nodemailer|SMTP_HOST|SMTP_PORT|SMTP_SECURE|MAIL_HOST/)
   })
 
-  it('packages compiled code plus manifests/licenses, but no secret, runtime, or model payloads', () => {
+  it('packages compiled code, approved manifests/licenses, and the generated demo mail resource', () => {
     const files = pkg.build?.files ?? []
     expect(files).toContain('dist/**/*')
     expect(files).toContain('config/offline-ai-manifest.json')
     expect(files).toContain('config/offline-voice-manifest.json')
     expect(files).toContain('third_party/whisper.cpp-LICENSE.txt')
     expect(files.join('\n')).not.toMatch(/\.env|\.gguf|models\/|bin\/|whisper-cli\.exe|ggml-base\.bin|whisper-bin/i)
+    expect(pkg.build?.extraResources).toContainEqual({
+      from: 'build/demo-mail-config.json',
+      to: 'demo-mail-config.json',
+    })
     expect(existsSync(resolve(root, 'config/offline-voice-manifest.json'))).toBe(true)
     expect(existsSync(resolve(root, 'third_party/whisper.cpp-LICENSE.txt'))).toBe(true)
   })
