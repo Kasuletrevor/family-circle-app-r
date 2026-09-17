@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { LegacyCircleAuthAdapter } from './LegacyCircleAuthAdapter'
 
@@ -29,6 +32,43 @@ describe('LegacyCircleAuthAdapter', () => {
     })
     expect(JSON.stringify(await adapter.checkInvitation('trevor@example.com'))).not.toContain('temporary secret')
     expect(JSON.stringify(await adapter.checkInvitation('trevor@example.com'))).not.toContain('invite-token')
+  })
+
+  it('uses the packaged demo Circle config when runtime configuration is absent', async () => {
+    const resourcesPath = mkdtempSync(join(tmpdir(), 'family-circle-demo-circle-'))
+    const processWithResources = process as NodeJS.Process & { resourcesPath?: string }
+    const originalResourcesPath = Object.getOwnPropertyDescriptor(processWithResources, 'resourcesPath')
+
+    try {
+      writeFileSync(join(resourcesPath, 'demo-circle-config.json'), JSON.stringify({
+        baseUrl: 'https://circle.demo.test',
+        apiKey: 'packaged-circle-key',
+      }))
+      Object.defineProperty(processWithResources, 'resourcesPath', {
+        configurable: true,
+        value: resourcesPath,
+      })
+
+      const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        expect(String(input)).toBe('https://circle.demo.test/api/invitation-check?email=trevor%40example.com')
+        expect(new Headers(init?.headers).get('X-Kin-Keepers-Key')).toBe('packaged-circle-key')
+        return jsonResponse({ hasPendingInvite: false })
+      })
+      const adapter = new LegacyCircleAuthAdapter({ baseUrl: '', apiKey: '' }, fetcher)
+
+      await expect(adapter.checkInvitation('trevor@example.com')).resolves.toEqual({
+        hasPendingInvite: false,
+        groupName: null,
+        role: null,
+      })
+    } finally {
+      if (originalResourcesPath) {
+        Object.defineProperty(processWithResources, 'resourcesPath', originalResourcesPath)
+      } else {
+        delete processWithResources.resourcesPath
+      }
+      rmSync(resourcesPath, { recursive: true, force: true })
+    }
   })
 
   it('keeps temporary invitation credentials inside the main-process delivery boundary', async () => {
