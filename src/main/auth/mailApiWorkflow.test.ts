@@ -18,10 +18,13 @@ const expectedMailEnv = [
   'MAIL_API_PASSWORD: ${{ secrets.MAIL_API_PASSWORD }}',
 ]
 
+const trustedSecretGuard = "if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')"
+
 describe('mail API CI configuration', () => {
   it('verifies configured repository secrets and variables in desktop CI', () => {
     const workflow = source('.github/workflows/desktop-shell-ci.yml')
     expect(workflow).toContain('name: Verify mail API configuration')
+    expect(workflow).toContain(trustedSecretGuard)
     expect(workflow).toContain('node scripts/verify-mail-api-config.mjs')
     for (const entry of expectedMailEnv) expect(workflow).toContain(entry)
   })
@@ -29,6 +32,7 @@ describe('mail API CI configuration', () => {
   it('verifies the same mail configuration before Windows packaging without exposing it to build steps', () => {
     const workflow = source('.github/workflows/windows-package.yml')
     expect(workflow).toContain('name: Verify mail API configuration')
+    expect(workflow).toContain(trustedSecretGuard)
     expect(workflow).toContain('node scripts/verify-mail-api-config.mjs')
     for (const entry of expectedMailEnv) expect(workflow).toContain(entry)
 
