@@ -31,6 +31,7 @@ export interface OfflineAiHttpResponse {
   statusCode: number
   headers: Record<string, string | string[] | undefined>
   body: AsyncIterable<Uint8Array>
+  cancel?(): void
 }
 
 export interface OfflineAiHttpPort {
@@ -131,6 +132,7 @@ class NodeHttpPort implements OfflineAiHttpPort {
           statusCode,
           headers: response.headers as Record<string, string | string[] | undefined>,
           body: response,
+          cancel: () => response.destroy(),
         })
       })
       req.on('error', reject)
@@ -448,6 +450,7 @@ export class OfflineAiDownloader {
         return this.downloadSequential(partPath, 0, context, firstResponse)
       }
       if (firstResponse.statusCode !== 206 || !contentRangeMatches(firstResponse, firstPending.requestRange, context.file.sizeBytes)) {
+        firstResponse.cancel?.()
         throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
       }
 
@@ -455,10 +458,12 @@ export class OfflineAiDownloader {
       const responseEntries: Array<{
         index: number
         existingBytes: number
+        requestRange: ByteRange
         response: OfflineAiHttpResponse
       }> = [{
         index: firstPending.index,
         existingBytes: firstPending.existingBytes,
+        requestRange: firstPending.requestRange,
         response: firstResponse,
       }]
 
@@ -468,12 +473,32 @@ export class OfflineAiDownloader {
         }
         if (validator) headers['If-Range'] = validator
         const response = await this.http.request(context.file.url, { headers })
-        if (response.statusCode !== 206 || !contentRangeMatches(response, item.requestRange, context.file.sizeBytes)) {
-          throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
+        return {
+          index: item.index,
+          existingBytes: item.existingBytes,
+          requestRange: item.requestRange,
+          response,
         }
-        return { index: item.index, existingBytes: item.existingBytes, response }
       }))
       responseEntries.push(...remainingResponses)
+
+      const fullResponseEntry = responseEntries.find(({ response }) => response.statusCode === 200)
+      if (fullResponseEntry) {
+        for (const entry of responseEntries) {
+          if (entry !== fullResponseEntry) entry.response.cancel?.()
+        }
+        await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+        return this.downloadSequential(partPath, 0, context, fullResponseEntry.response)
+      }
+
+      const invalidResponse = responseEntries.find(({ requestRange, response }) => (
+        response.statusCode !== 206
+        || !contentRangeMatches(response, requestRange, context.file.sizeBytes)
+      ))
+      if (invalidResponse) {
+        for (const entry of responseEntries) entry.response.cancel?.()
+        throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
+      }
 
       const downloadedByRange = [...existingByRange]
       await Promise.all(responseEntries.map(async ({ index, existingBytes, response }) => {
