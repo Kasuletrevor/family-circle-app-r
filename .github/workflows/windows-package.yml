@@ -20,6 +20,7 @@ on:
       - 'scripts/verify-package.mjs'
       - 'scripts/verify-mail-api-config.mjs'
       - 'scripts/write-demo-mail-config.mjs'
+      - 'scripts/write-demo-circle-config.mjs'
       - 'src/main/auth/**'
       - 'src/main/circle/**'
       - 'src/main/packaging/**'
@@ -74,8 +75,12 @@ jobs:
           MAIL_API_TIMEOUT_MS: ${{ vars.MAIL_API_TIMEOUT_MS }}
           MAIL_API_USER: ${{ secrets.MAIL_API_USER }}
           MAIL_API_PASSWORD: ${{ secrets.MAIL_API_PASSWORD }}
+          CIRCLE_API_URL: ${{ vars.CIRCLE_API_URL }}
+          CIRCLE_API_KEY: ${{ secrets.CIRCLE_API_KEY }}
         run: |
           node scripts/write-demo-mail-config.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/write-demo-circle-config.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run package:win
 
