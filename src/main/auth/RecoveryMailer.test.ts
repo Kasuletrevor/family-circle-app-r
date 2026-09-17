@@ -63,4 +63,20 @@ describe('RecoveryMailer HTTP transport', () => {
     expect(payload.body).toContain('existing sessions were invalidated')
     expect(payload.html).toContain('Your password was changed')
   })
+
+  it('uses the Family Circle mail endpoint by default', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const mailer = createRecoveryMailer({
+      SEND_EMAILS: 'true',
+      MAIL_API_USER: 'test-api-user',
+      MAIL_API_PASSWORD: 'unit-test-password',
+    })
+
+    await mailer.sendChangedNotice({ to: 'person@example.com' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://elderchatgpt.com/memorytest/api/send-mail/')
+  })
 })
