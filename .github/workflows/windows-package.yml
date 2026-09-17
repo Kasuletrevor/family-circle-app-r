@@ -18,6 +18,7 @@ on:
       - 'config/offline-voice-manifest.json'
       - 'third_party/whisper.cpp-LICENSE.txt'
       - 'scripts/verify-package.mjs'
+      - 'scripts/verify-mail-api-config.mjs'
       - 'src/main/packaging/**'
       - 'src/main/story/**'
       - 'src/main/voice/**'
@@ -49,6 +50,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --no-audit
+
+      - name: Verify mail API configuration
+        env:
+          SEND_EMAILS: ${{ vars.SEND_EMAILS }}
+          MAIL_API_URL: ${{ vars.MAIL_API_URL }}
+          MAIL_API_TIMEOUT_MS: ${{ vars.MAIL_API_TIMEOUT_MS }}
+          MAIL_API_USER: ${{ secrets.MAIL_API_USER }}
+          MAIL_API_PASSWORD: ${{ secrets.MAIL_API_PASSWORD }}
+        run: node scripts/verify-mail-api-config.mjs
 
       - name: Verify application
         run: npm run check
