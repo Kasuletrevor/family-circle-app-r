@@ -45,6 +45,15 @@ export interface CircleUserSource {
   setActiveCircleId(userId: number, circleId: string | null): Promise<void>
 }
 
+export interface CircleInvitationMailer {
+  sendInvitation(input: {
+    to: string
+    circleName: string
+    role: string
+    temporaryPassword: string
+  }): Promise<void>
+}
+
 export interface CirclePort {
   listGroups(serverUserId: string): Promise<CircleGroupInternal[]>
   getTree(groupId: string, serverUserId: string): Promise<CircleTreeInternal>
@@ -57,6 +66,7 @@ export interface CirclePort {
     email: string
     role: InvitationFamilyRole
   }): Promise<InviteMemberResult>
+  getInvitationDelivery(email: string): Promise<{ temporaryPassword: string } | null>
   cancelInvitation(input: {
     serverUserId: string
     circleId: string
@@ -133,6 +143,7 @@ export class CircleService {
     private readonly sessions: CircleSessionSource,
     private readonly users: CircleUserSource,
     private readonly circle: CirclePort,
+    private readonly mailer: CircleInvitationMailer,
   ) {}
 
   async getOverview(): Promise<CircleOverview> {
@@ -301,27 +312,44 @@ export class CircleService {
       throw new Error('Only the Circle owner can invite members')
     }
 
-    return this.circle.inviteMember({
+    const result = await this.circle.inviteMember({
       serverUserId,
       circleId,
       email,
       role: input.role,
     })
+    if (result.outcome === 'already-member') return result
+
+    const delivered = await this.deliverInvitation({
+      email,
+      circleName: group.name,
+      role: input.role,
+    })
+    if (!delivered) return { outcome: 'delivery-failed' }
+    return { outcome: result.outcome === 'already-pending' ? 'already-pending' : 'sent' }
   }
 
   async resendInvitation(input: { personId: string }): Promise<ResendInvitationResult> {
     const context = await this.requireActiveCircleContext()
     this.requireOwner(context, 'Only the Circle owner can manage invitations')
     const invitation = this.requirePendingInvitation(context, input.personId)
+    const email = String(invitation.email)
+    const role = invitation.role as InvitationFamilyRole
 
     const result = await this.circle.inviteMember({
       serverUserId: context.serverUserId,
       circleId: context.group.id,
-      email: String(invitation.email),
-      role: invitation.role as InvitationFamilyRole,
+      email,
+      role,
     })
     if (result.outcome === 'already-member') throw new Error('That invitation is no longer pending')
-    return { outcome: result.outcome === 'delivery-failed' ? 'delivery-failed' : 'sent' }
+
+    const delivered = await this.deliverInvitation({
+      email,
+      circleName: context.group.name,
+      role,
+    })
+    return { outcome: delivered ? 'sent' : 'delivery-failed' }
   }
 
   async cancelInvitation(input: { personId: string }): Promise<{ success: true }> {
@@ -368,6 +396,28 @@ export class CircleService {
     const remaining = await this.circle.listGroups(context.serverUserId)
     await this.users.setActiveCircleId(context.record.user.id, remaining[0]?.id ?? null)
     return { success: true }
+  }
+
+  private async deliverInvitation(input: {
+    email: string
+    circleName: string
+    role: string
+  }): Promise<boolean> {
+    try {
+      const delivery = await this.circle.getInvitationDelivery(input.email)
+      const temporaryPassword = String(delivery?.temporaryPassword ?? '').trim()
+      if (!temporaryPassword) return false
+
+      await this.mailer.sendInvitation({
+        to: input.email,
+        circleName: input.circleName,
+        role: input.role,
+        temporaryPassword,
+      })
+      return true
+    } catch {
+      return false
+    }
   }
 
   private async requireCurrentRecord(): Promise<UserRecord> {
