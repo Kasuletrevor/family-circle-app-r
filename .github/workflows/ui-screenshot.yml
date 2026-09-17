@@ -46,6 +46,8 @@ jobs:
             --no-sandbox \
             --disable-gpu \
             --hide-scrollbars \
+            --run-all-compositor-stages-before-draw \
+            --virtual-time-budget=5000 \
             --force-device-scale-factor=1 \
             --window-size=1600,1100 \
             --screenshot=family-circle-current-home.png \
