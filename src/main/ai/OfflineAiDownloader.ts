@@ -179,6 +179,13 @@ interface ByteRange {
   end: number
 }
 
+interface ParallelResponseEntry {
+  index: number
+  existingBytes: number
+  requestRange: ByteRange
+  response: OfflineAiHttpResponse
+}
+
 const DEFAULT_PARALLEL_DOWNLOAD_THRESHOLD_BYTES = 128 * 1024 * 1024
 const DEFAULT_MAX_PARALLEL_PARTS = 4
 
@@ -206,6 +213,10 @@ function headerValue(headers: OfflineAiHttpResponse['headers'], name: string): s
   const value = headers[name.toLowerCase()] ?? headers[name]
   if (Array.isArray(value)) return value[0] ?? null
   return value ?? null
+}
+
+function responseValidator(response: OfflineAiHttpResponse): string | null {
+  return headerValue(response.headers, 'etag') ?? headerValue(response.headers, 'last-modified')
 }
 
 function planByteRanges(sizeBytes: number, partCount: number): ByteRange[] {
@@ -419,8 +430,9 @@ export class OfflineAiDownloader {
     if (ranges.length < 2) return this.downloadSequential(partPath, 0, context)
 
     const segmentPaths = ranges.map((_, index) => `${partPath}.range-${index}`)
+    const validatorPath = `${partPath}.range-validator`
     const expectedSizes = ranges.map((range) => range.end - range.start + 1)
-    const existingByRange = await Promise.all(segmentPaths.map(async (path, index) => {
+    let existingByRange = await Promise.all(segmentPaths.map(async (path, index) => {
       const size = (await this.fs.stat(path))?.size ?? 0
       if (size > expectedSizes[index]!) {
         await this.fs.remove(path)
@@ -428,6 +440,16 @@ export class OfflineAiDownloader {
       }
       return size
     }))
+
+    let storedValidator = await this.readRangeValidator(validatorPath)
+    const hasExistingSegments = existingByRange.some((size) => size > 0)
+    if (hasExistingSegments && !storedValidator) {
+      await this.clearParallelState(segmentPaths, validatorPath)
+      existingByRange = existingByRange.map(() => 0)
+    } else if (!hasExistingSegments && storedValidator) {
+      await this.fs.remove(validatorPath)
+      storedValidator = null
+    }
 
     const pending = ranges.flatMap((range, index) => {
       const existingBytes = existingByRange[index]!
@@ -441,33 +463,43 @@ export class OfflineAiDownloader {
 
     if (pending.length > 0) {
       const firstPending = pending[0]!
-      const firstResponse = await this.http.request(context.file.url, {
-        headers: { Range: `bytes=${firstPending.requestRange.start}-${firstPending.requestRange.end}` },
-      })
+      const firstHeaders: Record<string, string> = {
+        Range: `bytes=${firstPending.requestRange.start}-${firstPending.requestRange.end}`,
+      }
+      if (storedValidator) firstHeaders['If-Range'] = storedValidator
+      const firstResponse = await this.http.request(context.file.url, { headers: firstHeaders })
 
       if (firstResponse.statusCode === 200) {
-        await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+        await this.clearParallelState(segmentPaths, validatorPath)
         return this.downloadSequential(partPath, 0, context, firstResponse)
       }
       if (firstResponse.statusCode !== 206 || !contentRangeMatches(firstResponse, firstPending.requestRange, context.file.sizeBytes)) {
         firstResponse.cancel?.()
+        await this.clearParallelState(segmentPaths, validatorPath)
         throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
       }
 
-      const validator = headerValue(firstResponse.headers, 'etag') ?? headerValue(firstResponse.headers, 'last-modified')
-      const responseEntries: Array<{
-        index: number
-        existingBytes: number
-        requestRange: ByteRange
-        response: OfflineAiHttpResponse
-      }> = [{
+      const firstValidator = responseValidator(firstResponse)
+      if (storedValidator && firstValidator && firstValidator !== storedValidator) {
+        firstResponse.cancel?.()
+        await this.clearParallelState(segmentPaths, validatorPath)
+        return this.downloadParallel(partPath, context)
+      }
+
+      const validator = storedValidator ?? firstValidator
+      if (!storedValidator && validator) {
+        await this.writeRangeValidator(validatorPath, validator)
+        storedValidator = validator
+      }
+
+      const responseEntries: ParallelResponseEntry[] = [{
         index: firstPending.index,
         existingBytes: firstPending.existingBytes,
         requestRange: firstPending.requestRange,
         response: firstResponse,
       }]
 
-      const remainingResponses = await Promise.all(pending.slice(1).map(async (item) => {
+      const remainingSettled = await Promise.allSettled(pending.slice(1).map(async (item): Promise<ParallelResponseEntry> => {
         const headers: Record<string, string> = {
           Range: `bytes=${item.requestRange.start}-${item.requestRange.end}`,
         }
@@ -480,28 +512,37 @@ export class OfflineAiDownloader {
           response,
         }
       }))
-      responseEntries.push(...remainingResponses)
+
+      const requestFailure = remainingSettled.find((result) => result.status === 'rejected')
+      const fulfilledResponses = remainingSettled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+      responseEntries.push(...fulfilledResponses)
+      if (requestFailure?.status === 'rejected') {
+        for (const entry of responseEntries) entry.response.cancel?.()
+        throw requestFailure.reason
+      }
 
       const fullResponseEntry = responseEntries.find(({ response }) => response.statusCode === 200)
       if (fullResponseEntry) {
         for (const entry of responseEntries) {
           if (entry !== fullResponseEntry) entry.response.cancel?.()
         }
-        await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+        await this.clearParallelState(segmentPaths, validatorPath)
         return this.downloadSequential(partPath, 0, context, fullResponseEntry.response)
       }
 
       const invalidResponse = responseEntries.find(({ requestRange, response }) => (
         response.statusCode !== 206
         || !contentRangeMatches(response, requestRange, context.file.sizeBytes)
+        || (validator !== null && responseValidator(response) !== null && responseValidator(response) !== validator)
       ))
       if (invalidResponse) {
         for (const entry of responseEntries) entry.response.cancel?.()
+        await this.clearParallelState(segmentPaths, validatorPath)
         throw new OfflineAiDownloadError('http-error', 'Private AI server returned an invalid byte range')
       }
 
       const downloadedByRange = [...existingByRange]
-      await Promise.all(responseEntries.map(async ({ index, existingBytes, response }) => {
+      const rangeTasks = responseEntries.map(async ({ index, existingBytes, response }) => {
         const segmentPath = segmentPaths[index]!
         const writer = await this.fs.openWriter(segmentPath, existingBytes > 0 ? 'append' : 'truncate')
         try {
@@ -526,7 +567,15 @@ export class OfflineAiDownloader {
         } finally {
           await writer.close()
         }
-      }))
+      })
+
+      try {
+        await Promise.all(rangeTasks)
+      } catch (error) {
+        for (const entry of responseEntries) entry.response.cancel?.()
+        await Promise.allSettled(rangeTasks)
+        throw error
+      }
 
       if (this.pauseRequested) return true
     }
@@ -546,8 +595,29 @@ export class OfflineAiDownloader {
     } finally {
       await writer.close()
     }
-    await Promise.all(segmentPaths.map((path) => this.fs.remove(path)))
+    await this.clearParallelState(segmentPaths, validatorPath)
     return false
+  }
+
+  private async readRangeValidator(path: string): Promise<string | null> {
+    if (!(await this.fs.stat(path))) return null
+    const chunks: Buffer[] = []
+    for await (const chunk of this.fs.readChunks(path)) chunks.push(Buffer.from(chunk))
+    const value = Buffer.concat(chunks).toString('utf8').trim()
+    return value.length > 0 ? value : null
+  }
+
+  private async writeRangeValidator(path: string, value: string): Promise<void> {
+    const writer = await this.fs.openWriter(path, 'truncate')
+    try {
+      await writer.write(Buffer.from(value, 'utf8'))
+    } finally {
+      await writer.close()
+    }
+  }
+
+  private async clearParallelState(segmentPaths: string[], validatorPath: string): Promise<void> {
+    await Promise.all([...segmentPaths, validatorPath].map((path) => this.fs.remove(path)))
   }
 
   private progress(input: {
