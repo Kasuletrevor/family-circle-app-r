@@ -42,8 +42,16 @@ When neither runtime mail configuration nor the temporary packaged demo configur
 
 ## Circle invitation delivery
 
-The shared Circle service remains the source of truth for invitation state. The desktop still uses the compatibility invitation operation to create or reuse the pending invitation, then retrieves the temporary invitation password inside the main process and sends the user-facing invitation through this HTTP mail transport. The temporary password and invitation token never cross IPC into the renderer.
+The shared Circle service remains the source of truth for invitation state. Its `/api/group/invite-email` compatibility operation creates or reuses the pending invitation and generates the one-time temporary password.
 
-The desktop now treats this mail API as authoritative for its `sent` / `delivery-failed` result. The current legacy compatibility operation is still `/api/group/invite-email`; because the repository does not document a create-only or suppress-email variant of that endpoint, the legacy server may still attempt its own delivery until that backend exposes such a mode. The desktop does not trust the legacy `emailSent` result anymore.
+The shared Circle server supports `EMAIL_DELIVERY_MODE=client`. In that mode it does **not** send the invitation itself. Instead it returns `emailDeliveryRequired: true` with a protected `emailPayload`. The Electron main process normalizes that payload to the invitee email, Circle name, role, and temporary password, strips the invitation token, and sends the user-facing invitation through this HTTP mail transport. None of those protected delivery values cross IPC into the renderer.
+
+For older compatibility servers that do not return the client-delivery payload, the desktop can retrieve the pending temporary password through the protected invitation-check path and still send through this mail API. For a deployment where the Kin-Keepers mail API must be the **only** invitation sender, configure the shared Circle server with:
+
+```text
+EMAIL_DELIVERY_MODE=client
+```
+
+The desktop mail API is authoritative for the UI's `sent` / `delivery-failed` result; the legacy `emailSent` flag is not used to decide desktop delivery success.
 
 Do not commit mail credentials to source or a renderer-accessible `.env` file. After the demo, remove the packaged credential path and rotate/retire the test-server credential.
