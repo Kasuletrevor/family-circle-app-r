@@ -17,9 +17,20 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('npm ci --no-audit')
     expect(source).toContain('npm run check')
     expect(source).toContain('node scripts/write-demo-mail-config.mjs')
+    expect(source).toContain('node scripts/write-demo-circle-config.mjs')
     expect(source).toContain('npm run package:win')
     expect(source).toContain('npm run verify:package')
     expect(source).toContain('Family-Circle-Setup-*.exe')
+  })
+
+  it('passes Circle API URL/key into the trusted demo packaging step', () => {
+    const source = workflow()
+    const buildStart = source.indexOf('- name: Build Windows installer')
+    expect(buildStart).toBeGreaterThanOrEqual(0)
+    const buildBlock = source.slice(buildStart, source.indexOf('- name:', buildStart + 1))
+    expect(buildBlock).toContain('CIRCLE_API_URL: ${{ vars.CIRCLE_API_URL }}')
+    expect(buildBlock).toContain('CIRCLE_API_KEY: ${{ secrets.CIRCLE_API_KEY }}')
+    expect(buildBlock).toContain('node scripts/write-demo-circle-config.mjs')
   })
 
   it('publishes every successful installer as an Actions artifact', () => {
@@ -45,7 +56,7 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('actions/download-artifact@')
   })
 
-  it('keeps the approved push/tag/base trigger policy and watches demo mail packaging inputs', () => {
+  it('keeps the approved push/tag/base trigger policy and watches demo packaging inputs', () => {
     const source = workflow()
     const pushStart = source.indexOf('  push:\n')
     const pullStart = source.indexOf('  pull_request:\n')
@@ -60,6 +71,7 @@ describe('Windows packaging workflow', () => {
       "config/offline-voice-manifest.json",
       "third_party/whisper.cpp-LICENSE.txt",
       "scripts/write-demo-mail-config.mjs",
+      "scripts/write-demo-circle-config.mjs",
       "src/main/auth/**",
       "src/main/circle/**",
       "src/main/story/**",
