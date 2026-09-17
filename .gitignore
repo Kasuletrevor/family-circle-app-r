@@ -8,3 +8,4 @@ models/
 bin/
 *.gguf
 *.bin
+build/demo-mail-config.json

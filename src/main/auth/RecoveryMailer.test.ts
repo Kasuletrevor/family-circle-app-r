@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createRecoveryMailer } from './RecoveryMailer'
 
@@ -78,5 +81,46 @@ describe('RecoveryMailer HTTP transport', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]![0]).toBe('https://elderchatgpt.com/memorytest/api/send-mail/')
+  })
+
+  it('uses the temporary embedded demo transport when the packaged app has no mail environment', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const resourcesPath = mkdtempSync(join(tmpdir(), 'family-circle-mail-'))
+    const processWithResources = process as NodeJS.Process & { resourcesPath?: string }
+    const originalResourcesPath = Object.getOwnPropertyDescriptor(processWithResources, 'resourcesPath')
+
+    try {
+      writeFileSync(join(resourcesPath, 'demo-mail-config.json'), JSON.stringify({
+        enabled: true,
+        url: 'https://elderchatgpt.com/memorytest/api/send-mail/',
+        timeoutMs: 45_000,
+        user: 'embedded-demo-user',
+        password: 'embedded-demo-password',
+      }))
+      Object.defineProperty(processWithResources, 'resourcesPath', {
+        configurable: true,
+        value: resourcesPath,
+      })
+
+      const mailer = createRecoveryMailer({})
+      await mailer.sendChangedNotice({ to: 'demo@example.com' })
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toBe('https://elderchatgpt.com/memorytest/api/send-mail/')
+      expect(init?.headers).toMatchObject({
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${Buffer.from('embedded-demo-user:embedded-demo-password').toString('base64')}`,
+      })
+    } finally {
+      if (originalResourcesPath) {
+        Object.defineProperty(processWithResources, 'resourcesPath', originalResourcesPath)
+      } else {
+        delete processWithResources.resourcesPath
+      }
+      rmSync(resourcesPath, { recursive: true, force: true })
+    }
   })
 })

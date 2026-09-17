@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 export interface RecoveryMailer {
   sendCode(input: { to: string; code: string; expiresInMinutes: number }): Promise<void>
   sendChangedNotice(input: { to: string }): Promise<void>
@@ -5,8 +8,17 @@ export interface RecoveryMailer {
 
 type Environment = NodeJS.ProcessEnv
 
+type EmbeddedMailConfig = {
+  enabled: boolean
+  url: string
+  user: string
+  password: string
+  timeoutMs: number
+}
+
 const DEFAULT_MAIL_API_URL = 'https://elderchatgpt.com/memorytest/api/send-mail/'
 const DEFAULT_MAIL_API_TIMEOUT_MS = 45_000
+const DEMO_MAIL_CONFIG_FILENAME = 'demo-mail-config.json'
 
 function envValue(env: Environment, ...names: string[]): string {
   for (const name of names) {
@@ -16,8 +28,41 @@ function envValue(env: Environment, ...names: string[]): string {
   return ''
 }
 
-function emailEnabled(env: Environment): boolean {
-  return String(env.SEND_EMAILS ?? '').trim().toLowerCase() === 'true'
+function embeddedDemoMailConfig(): EmbeddedMailConfig | null {
+  const resourcesPath = String((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ?? '').trim()
+  if (!resourcesPath) return null
+
+  const configPath = resolve(resourcesPath, DEMO_MAIL_CONFIG_FILENAME)
+  if (!existsSync(configPath)) return null
+
+  try {
+    const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as Partial<EmbeddedMailConfig>
+    const user = String(parsed.user ?? '').trim()
+    const password = String(parsed.password ?? '').trim()
+    const url = String(parsed.url ?? '').trim() || DEFAULT_MAIL_API_URL
+    const configuredTimeout = Number(parsed.timeoutMs ?? DEFAULT_MAIL_API_TIMEOUT_MS)
+    const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+      ? configuredTimeout
+      : DEFAULT_MAIL_API_TIMEOUT_MS
+
+    if (parsed.enabled !== true || !user || !password) return null
+
+    return {
+      enabled: true,
+      url,
+      user,
+      password,
+      timeoutMs,
+    }
+  } catch {
+    return null
+  }
+}
+
+function emailEnabled(env: Environment, embedded: EmbeddedMailConfig | null): boolean {
+  const configured = String(env.SEND_EMAILS ?? '').trim().toLowerCase()
+  if (configured) return configured === 'true'
+  return embedded?.enabled === true
 }
 
 function escapeHtml(value: string): string {
@@ -30,13 +75,18 @@ function escapeHtml(value: string): string {
   })[character] ?? character)
 }
 
-function apiConfig(env: Environment): { url: string; authorization: string; timeoutMs: number } {
-  const url = envValue(env, 'MAIL_API_URL') || DEFAULT_MAIL_API_URL
-  const user = envValue(env, 'MAIL_API_USER')
-  const password = envValue(env, 'MAIL_API_PASSWORD')
+function apiConfig(
+  env: Environment,
+  embedded: EmbeddedMailConfig | null,
+): { url: string; authorization: string; timeoutMs: number } {
+  const url = envValue(env, 'MAIL_API_URL') || embedded?.url || DEFAULT_MAIL_API_URL
+  const user = envValue(env, 'MAIL_API_USER') || embedded?.user || ''
+  const password = envValue(env, 'MAIL_API_PASSWORD') || embedded?.password || ''
   if (!user || !password) throw new Error('Mail API configuration is incomplete')
 
-  const configuredTimeout = Number(envValue(env, 'MAIL_API_TIMEOUT_MS') || DEFAULT_MAIL_API_TIMEOUT_MS)
+  const configuredTimeout = Number(
+    envValue(env, 'MAIL_API_TIMEOUT_MS') || embedded?.timeoutMs || DEFAULT_MAIL_API_TIMEOUT_MS,
+  )
   const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
     ? configuredTimeout
     : DEFAULT_MAIL_API_TIMEOUT_MS
@@ -48,8 +98,12 @@ function apiConfig(env: Environment): { url: string; authorization: string; time
   }
 }
 
-async function postMail(env: Environment, input: { to: string; subject: string; body: string; html: string }): Promise<void> {
-  const config = apiConfig(env)
+async function postMail(
+  env: Environment,
+  embedded: EmbeddedMailConfig | null,
+  input: { to: string; subject: string; body: string; html: string },
+): Promise<void> {
+  const config = apiConfig(env, embedded)
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs)
 
@@ -73,7 +127,9 @@ async function postMail(env: Environment, input: { to: string; subject: string; 
 }
 
 export function createRecoveryMailer(env: Environment = process.env): RecoveryMailer {
-  if (!emailEnabled(env)) {
+  const embedded = embeddedDemoMailConfig()
+
+  if (!emailEnabled(env, embedded)) {
     return {
       async sendCode() {},
       async sendChangedNotice() {},
@@ -83,7 +139,7 @@ export function createRecoveryMailer(env: Environment = process.env): RecoveryMa
   return {
     async sendCode({ to, code, expiresInMinutes }) {
       const safeCode = escapeHtml(code)
-      await postMail(env, {
+      await postMail(env, embedded, {
         to,
         subject: 'Your Kin Keepers recovery code',
         body: `Your Kin Keepers recovery code is ${code}. It expires in ${expiresInMinutes} minutes.`,
@@ -92,7 +148,7 @@ export function createRecoveryMailer(env: Environment = process.env): RecoveryMa
     },
 
     async sendChangedNotice({ to }) {
-      await postMail(env, {
+      await postMail(env, embedded, {
         to,
         subject: 'Kin Keepers password changed',
         body: 'Your Kin Keepers password was changed and existing sessions were invalidated.',

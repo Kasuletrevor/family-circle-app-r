@@ -51,6 +51,12 @@
       "config/offline-voice-manifest.json",
       "third_party/whisper.cpp-LICENSE.txt"
     ],
+    "extraResources": [
+      {
+        "from": "build/demo-mail-config.json",
+        "to": "demo-mail-config.json"
+      }
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build"

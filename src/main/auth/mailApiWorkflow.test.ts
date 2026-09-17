@@ -29,22 +29,21 @@ describe('mail API CI configuration', () => {
     for (const entry of expectedMailEnv) expect(workflow).toContain(entry)
   })
 
-  it('verifies the same mail configuration before Windows packaging without exposing it to build steps', () => {
+  it('generates the temporary demo mail resource from GitHub configuration during Windows packaging', () => {
     const workflow = source('.github/workflows/windows-package.yml')
     expect(workflow).toContain('name: Verify mail API configuration')
     expect(workflow).toContain(trustedSecretGuard)
     expect(workflow).toContain('node scripts/verify-mail-api-config.mjs')
-    for (const entry of expectedMailEnv) expect(workflow).toContain(entry)
 
     const buildStart = workflow.indexOf('- name: Build Windows installer')
-    const verifyStart = workflow.indexOf('- name: Verify mail API configuration')
-    expect(verifyStart).toBeGreaterThanOrEqual(0)
-    expect(buildStart).toBeGreaterThan(verifyStart)
+    expect(buildStart).toBeGreaterThanOrEqual(0)
     const buildBlock = workflow.slice(buildStart, workflow.indexOf('- name:', buildStart + 1))
-    expect(buildBlock).not.toMatch(/MAIL_API_|SEND_EMAILS|secrets\./)
+    expect(buildBlock).toContain('node scripts/write-demo-mail-config.mjs')
+    expect(buildBlock).toContain('npm run package:win')
+    for (const entry of expectedMailEnv) expect(buildBlock).toContain(entry)
   })
 
-  it('keeps the mail verifier secret-safe and rejects incomplete configuration', () => {
+  it('keeps both mail configuration scripts secret-safe', () => {
     const verifier = source('scripts/verify-mail-api-config.mjs')
     expect(verifier).toContain('MAIL_API_USER')
     expect(verifier).toContain('MAIL_API_PASSWORD')
@@ -52,5 +51,11 @@ describe('mail API CI configuration', () => {
     expect(verifier).toContain('MAIL_API_TIMEOUT_MS')
     expect(verifier).not.toMatch(/console\.log\([^)]*(MAIL_API_PASSWORD|MAIL_API_USER)/)
     expect(verifier).toContain('process.exitCode = 1')
+
+    const generator = source('scripts/write-demo-mail-config.mjs')
+    expect(generator).toContain("'demo-mail-config.json'")
+    expect(generator).toContain("required('MAIL_API_USER')")
+    expect(generator).toContain("required('MAIL_API_PASSWORD')")
+    expect(generator).not.toMatch(/console\.log\([^)]*(MAIL_API_PASSWORD|MAIL_API_USER|password|user)/i)
   })
 })

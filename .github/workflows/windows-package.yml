@@ -19,6 +19,8 @@ on:
       - 'third_party/whisper.cpp-LICENSE.txt'
       - 'scripts/verify-package.mjs'
       - 'scripts/verify-mail-api-config.mjs'
+      - 'scripts/write-demo-mail-config.mjs'
+      - 'src/main/auth/**'
       - 'src/main/packaging/**'
       - 'src/main/story/**'
       - 'src/main/voice/**'
@@ -65,7 +67,16 @@ jobs:
         run: npm run check
 
       - name: Build Windows installer
-        run: npm run package:win
+        env:
+          SEND_EMAILS: ${{ vars.SEND_EMAILS }}
+          MAIL_API_URL: ${{ vars.MAIL_API_URL }}
+          MAIL_API_TIMEOUT_MS: ${{ vars.MAIL_API_TIMEOUT_MS }}
+          MAIL_API_USER: ${{ secrets.MAIL_API_USER }}
+          MAIL_API_PASSWORD: ${{ secrets.MAIL_API_PASSWORD }}
+        run: |
+          node scripts/write-demo-mail-config.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run package:win
 
       - name: Verify packaged installer
         run: npm run verify:package
