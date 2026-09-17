@@ -1,5 +1,3 @@
-import nodemailer from 'nodemailer'
-
 export interface RecoveryMailer {
   sendCode(input: { to: string; code: string; expiresInMinutes: number }): Promise<void>
   sendChangedNotice(input: { to: string }): Promise<void>
@@ -8,6 +6,7 @@ export interface RecoveryMailer {
 type Environment = NodeJS.ProcessEnv
 
 const DEFAULT_MAIL_API_URL = 'https://elderchatgpt.com/memorytest/api/send-mail/'
+const DEFAULT_MAIL_API_TIMEOUT_MS = 45_000
 
 function envValue(env: Environment, ...names: string[]): string {
   for (const name of names) {
@@ -31,58 +30,46 @@ function escapeHtml(value: string): string {
   })[character] ?? character)
 }
 
-function apiConfig(env: Environment): { url: string; authorization: string } {
+function apiConfig(env: Environment): { url: string; authorization: string; timeoutMs: number } {
   const url = envValue(env, 'MAIL_API_URL') || DEFAULT_MAIL_API_URL
   const user = envValue(env, 'MAIL_API_USER')
   const password = envValue(env, 'MAIL_API_PASSWORD')
   if (!user || !password) throw new Error('Mail API configuration is incomplete')
+
+  const configuredTimeout = Number(envValue(env, 'MAIL_API_TIMEOUT_MS') || DEFAULT_MAIL_API_TIMEOUT_MS)
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : DEFAULT_MAIL_API_TIMEOUT_MS
+
   return {
     url,
     authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`,
+    timeoutMs,
   }
 }
 
 async function postMail(env: Environment, input: { to: string; subject: string; body: string; html: string }): Promise<void> {
   const config = apiConfig(env)
-  const response = await fetch(config.url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: config.authorization,
-    },
-    body: JSON.stringify(input),
-  })
-  if (!response.ok) throw new Error('Failed to send email')
-}
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs)
 
-function createTransport(env: Environment) {
-  const host = envValue(env, 'SMTP_HOST', 'MAIL_HOST')
-  const port = Number(envValue(env, 'SMTP_PORT', 'EMAIL_PORT') || 587)
-  const user = envValue(env, 'MAIL_USER', 'EMAIL_USER')
-  const pass = envValue(env, 'EMAIL_PASS', 'MAIL_PASS')
-  if (!host || !user || !pass) throw new Error('SMTP configuration is incomplete')
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('SMTP port is invalid')
+  try {
+    const response = await fetch(config.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: config.authorization,
+      },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    })
 
-  const secureSetting = envValue(env, 'SMTP_SECURE', 'EMAIL_SECURE').toLowerCase()
-  const secure = secureSetting ? secureSetting === 'true' : port === 465
-  const timeout = Number(envValue(env, 'SMTP_TIMEOUT_MS', 'EMAIL_TIMEOUT_MS') || 45_000)
-  const timeoutMs = Number.isFinite(timeout) && timeout > 0 ? timeout : 45_000
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    requireTLS: !secure,
-    auth: { user, pass },
-    tls: { minVersion: 'TLSv1.2' },
-    connectionTimeout: timeoutMs,
-    greetingTimeout: timeoutMs,
-    socketTimeout: timeoutMs,
-  })
-}
-
-function sender(env: Environment): string {
-  return env.FROM_EMAIL || `Kin Keepers <${envValue(env, 'MAIL_USER', 'EMAIL_USER')}>`
+    if (!response.ok) throw new Error('Mail API request failed')
+  } catch {
+    throw new Error('Failed to send email')
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export function createRecoveryMailer(env: Environment = process.env): RecoveryMailer {
