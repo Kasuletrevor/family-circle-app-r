@@ -15,8 +15,8 @@ const baseAiStatus: PrivateAiStatus = {
   state: 'not_installed',
   ready: false,
   repairRequired: false,
-  totalSizeBytes: 2_000_000_000,
-  version: '2026.09.04',
+  totalSizeBytes: 703_592_545,
+  version: '1.2.0',
   message: 'Private AI is optional',
 }
 
@@ -71,7 +71,7 @@ function vaultClient(documents: VaultDocumentSummary[] = [], overrides: Partial<
 }
 
 describe('Vault Private AI setup and indexing UI', () => {
-  it('shows the approved optional setup copy and starts setup without blocking uploads', async () => {
+  it('shows the one-time download size and offline setup promise before setup starts', async () => {
     const ai = privateAiClient(aiStatus('not_installed'))
     render(<AiVault client={vaultClient()} privateAiClient={ai} />)
 
@@ -79,6 +79,8 @@ describe('Vault Private AI setup and indexing UI', () => {
     expect(screen.getByText(
       'Your documents are already stored privately. Set up Private AI to search them semantically and ask questions without sending them online.',
     )).toBeInTheDocument()
+    expect(screen.getByText('One-time download · about 671 MB')).toBeInTheDocument()
+    expect(screen.getByText('Works offline after setup. You can pause and resume anytime.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Set up Private AI' }))
@@ -101,7 +103,7 @@ describe('Vault Private AI setup and indexing UI', () => {
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
   })
 
-  it('shows safe download progress, pauses, and resumes through the Private AI client only', async () => {
+  it('shows transferred bytes with progress, pauses, and resumes through the Private AI client only', async () => {
     let listener: ((progress: PrivateAiProgress) => void) | null = null
     const pauseSetup = vi.fn(async () => aiStatus('paused'))
     const startSetup = vi.fn(async () => aiStatus('downloading'))
@@ -129,6 +131,7 @@ describe('Vault Private AI setup and indexing UI', () => {
       message: 'Downloading Private AI',
     })
     expect(await screen.findByText('42%')).toBeInTheDocument()
+    expect(screen.getByText('420 B of 1000 B')).toBeInTheDocument()
     expect(screen.getByText('Private AI component 2 of 3')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause setup' }))
