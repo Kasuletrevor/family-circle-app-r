@@ -17,11 +17,11 @@ async function makeFixture() {
   tempRoots.push(root)
   const userDataPath = join(root, 'user-data')
   const manifestPath = join(root, 'offline-ai-manifest.json')
-  const graniteBytes = 'granite-test-bytes'
+  const qwenBytes = 'qwen-test-bytes'
   const nomicBytes = 'nomic-test-bytes'
   const runtimeZipBytes = 'runtime-zip-test-bytes'
   const manifest: OfflineAiManifest = {
-    version: 'test-1',
+    version: 'test-2',
     files: [
       {
         name: 'AI engine',
@@ -34,12 +34,12 @@ async function makeFixture() {
         required: true,
       },
       {
-        name: 'AI knowledge',
+        name: 'AI answers',
         type: 'model',
-        url: 'https://example.invalid/granite.gguf',
-        targetPath: 'models/granite.gguf',
-        sha256: sha256(graniteBytes),
-        sizeBytes: Buffer.byteLength(graniteBytes),
+        url: 'https://example.invalid/qwen.gguf',
+        targetPath: 'models/qwen.gguf',
+        sha256: sha256(qwenBytes),
+        sizeBytes: Buffer.byteLength(qwenBytes),
         extract: false,
         required: true,
       },
@@ -76,7 +76,7 @@ async function makeFixture() {
 
   async function writeValidInstalledAssets() {
     await write('bin/runtime/llama-server.exe', 'fake executable')
-    await write('models/granite.gguf', graniteBytes)
+    await write('models/qwen.gguf', qwenBytes)
     await write('models/nomic.gguf', nomicBytes)
     await writeMarker()
   }
@@ -97,7 +97,7 @@ describe('OfflineAiAssetService installed asset state', () => {
 
   it('never considers .part ready', async () => {
     const { service, manifest, write } = await makeFixture()
-    await write(`.staging/${manifest.version}/models/granite.gguf.part`, 'granite-test-bytes')
+    await write(`.staging/${manifest.version}/models/qwen.gguf.part`, 'qwen-test-bytes')
 
     const status = await service.getStatus()
     expect(status.state).not.toBe('ready')
@@ -112,7 +112,7 @@ describe('OfflineAiAssetService installed asset state', () => {
     await expect(service.getInstalledPaths()).resolves.toBeNull()
   })
 
-  it('reports ready only after all required assets verify', async () => {
+  it('reports ready only after Qwen, Nomic, and the runtime verify', async () => {
     const { service, offlineAiRoot, writeValidInstalledAssets } = await makeFixture()
     await writeValidInstalledAssets()
 
@@ -120,7 +120,7 @@ describe('OfflineAiAssetService installed asset state', () => {
     await expect(service.getInstalledPaths()).resolves.toEqual({
       llamaDir: join(offlineAiRoot, 'bin/runtime'),
       serverExe: join(offlineAiRoot, 'bin/runtime/llama-server.exe'),
-      graniteModel: join(offlineAiRoot, 'models/granite.gguf'),
+      generationModel: join(offlineAiRoot, 'models/qwen.gguf'),
       nomicModel: join(offlineAiRoot, 'models/nomic.gguf'),
     })
   })

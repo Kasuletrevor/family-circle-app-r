@@ -85,4 +85,17 @@ describe('createStoryServices', () => {
     expect(mainSource).toMatch(/registerStoryIpc\(ipcMain,\s*\{[\s\S]*?story:/)
     expect(mainSource.match(/retryPendingPrivateIndexes\(/g)?.length).toBeGreaterThanOrEqual(2)
   })
+
+  it('constructs one shared private archive query engine and routes existing Vault IPC through its facade', () => {
+    const mainSource = readFileSync(resolve(__dirname, '../main.ts'), 'utf8')
+
+    expect(mainSource).toContain("import { PrivateArchiveQueryService } from './ai/PrivateArchiveQueryService'")
+    expect(mainSource).toContain("import { QwenClient } from './ai/QwenClient'")
+    expect(mainSource).not.toMatch(/FastGraniteClient|GraniteClient/)
+    expect(mainSource).toContain("import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'")
+    expect(mainSource.match(/new PrivateArchiveQueryService\(/g)).toHaveLength(1)
+    expect(mainSource.match(/new QwenClient\(/g)).toHaveLength(1)
+    expect(mainSource).toMatch(/new VaultQueryService\(privateArchiveQueryService\)/)
+    expect(mainSource).toContain('registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)')
+  })
 })

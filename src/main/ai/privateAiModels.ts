@@ -53,7 +53,7 @@ export interface PrivateAiStatus extends PrivateAiProgress {}
 export interface InstalledAiPaths {
   llamaDir: string
   serverExe: string
-  graniteModel: string
+  generationModel: string
   nomicModel: string
 }
 

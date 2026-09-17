@@ -5,9 +5,18 @@ import type { InstalledAiPaths } from './privateAiModels'
 const INSTALLED: InstalledAiPaths = {
   llamaDir: 'C:/FamilyCircle/offline-ai/bin/runtime',
   serverExe: 'C:/FamilyCircle/offline-ai/bin/runtime/llama-server.exe',
-  graniteModel: 'C:/FamilyCircle/offline-ai/models/granite.gguf',
+  generationModel: 'C:/FamilyCircle/offline-ai/models/Qwen_Qwen3.5-0.8B-Q4_K_M.gguf',
   nomicModel: 'C:/FamilyCircle/offline-ai/models/nomic.gguf',
 }
+
+const QWEN_ARGS = [
+  '--model', INSTALLED.generationModel,
+  '--host', '127.0.0.1',
+  '--port', '8080',
+  '--threads', '4',
+  '--ctx-size', '4096',
+  '--reasoning', 'off',
+]
 
 class FakeChild {
   killed = false
@@ -51,7 +60,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn).not.toHaveBeenCalled()
   })
 
-  it('starts only Nomic for embedding request', async () => {
+  it('starts only Nomic for embedding request and explicitly binds it to loopback', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureEmbeddingRuntime()).resolves.toBe(true)
@@ -60,6 +69,7 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[0]).toBe(INSTALLED.serverExe)
     expect(process.spawn.mock.calls[0]?.[1]).toEqual([
       '--model', INSTALLED.nomicModel,
+      '--host', '127.0.0.1',
       '--port', '8081',
       '--threads', '4',
       '--ctx-size', '2048',
@@ -69,18 +79,23 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(process.spawn.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true })
   })
 
-  it('starts only Granite for generation request', async () => {
+  it('starts Qwen for generation request with reasoning disabled and loopback-only binding', async () => {
     const { manager, process } = makeHarness()
 
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(true)
 
     expect(process.spawn).toHaveBeenCalledTimes(1)
-    expect(process.spawn.mock.calls[0]?.[1]).toEqual([
-      '--model', INSTALLED.graniteModel,
-      '--port', '8080',
-      '--threads', '4',
-      '--ctx-size', '4096',
-    ])
+    expect(process.spawn.mock.calls[0]?.[1]).toEqual(QWEN_ARGS)
+  })
+
+  it('maps the fast generation request onto the same non-reasoning Qwen runtime', async () => {
+    const { manager, process } = makeHarness({ health: [true, true] })
+
+    await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(true)
+    await expect(manager.ensureGenerationRuntime()).resolves.toBe(true)
+
+    expect(process.spawn).toHaveBeenCalledTimes(1)
+    expect(process.spawn.mock.calls[0]?.[1]).toEqual(QWEN_ARGS)
   })
 
   it('reuses healthy managed process', async () => {
@@ -108,13 +123,15 @@ describe('AiRuntimeManager lazy split runtimes', () => {
 
     await expect(manager.ensureEmbeddingRuntime()).resolves.toBe(false)
     await expect(manager.ensureGenerationRuntime()).resolves.toBe(false)
+    await expect(manager.ensureFastGenerationRuntime()).resolves.toBe(false)
     expect(process.spawn).not.toHaveBeenCalled()
   })
 
-  it('stops both managed children', async () => {
-    const { manager, children } = makeHarness({ health: [true, true, true, true] })
+  it('stops the embedding and shared Qwen children', async () => {
+    const { manager, children } = makeHarness({ health: [true, true, true, true, true, true] })
     await manager.ensureEmbeddingRuntime()
     await manager.ensureGenerationRuntime()
+    await manager.ensureFastGenerationRuntime()
 
     manager.stopAll()
 

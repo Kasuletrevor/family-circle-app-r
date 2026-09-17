@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.2.0",
   "files": [
     {
       "name": "AI engine",
@@ -12,12 +12,12 @@
       "required": true
     },
     {
-      "name": "AI knowledge",
+      "name": "AI answers",
       "type": "model",
-      "url": "https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF/resolve/main/granite-4.0-h-micro-Q4_K_M.gguf?download=true",
-      "targetPath": "models/granite-4.0-h-micro-Q4_K_M.gguf",
-      "sha256": "BCC78B9B25450101D1AD90D4B9A264E1BAC892F534DFB76066F4EEC792FDF023",
-      "sizeBytes": 1942564512,
+      "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-0.8B-GGUF/resolve/main/Qwen_Qwen3.5-0.8B-Q4_K_M.gguf?download=true",
+      "targetPath": "models/Qwen_Qwen3.5-0.8B-Q4_K_M.gguf",
+      "sha256": "FB044E93939A70469C905781334F5DE1E6C8B608CED6CBC8C9249BD4127D9526",
+      "sizeBytes": 579615840,
       "extract": false,
       "required": true
     },

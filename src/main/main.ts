@@ -2,10 +2,11 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
-import { GraniteClient } from './ai/GraniteClient'
 import { NomicClient } from './ai/NomicClient'
 import { OfflineAiAssetService } from './ai/OfflineAiAssetService'
+import { PrivateArchiveQueryService } from './ai/PrivateArchiveQueryService'
 import { registerPrivateAiIpc } from './ai/privateAiIpc'
+import { QwenClient } from './ai/QwenClient'
 import { AuthService } from './auth/AuthService'
 import { registerAuthIpc } from './auth/authIpc'
 import { PasswordRecoveryService } from './auth/PasswordRecoveryService'
@@ -17,6 +18,10 @@ import { CircleService } from './circle/CircleService'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
+import { StoryChunkRepository } from './story/StoryChunkRepository'
+import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'
+import { StoryHistoryRepository } from './story/StoryHistoryRepository'
+import { StoryRepository } from './story/StoryRepository'
 import { registerStoryIpc } from './story/storyIpc'
 import { DocumentExtractor } from './vault/DocumentExtractor'
 import { VaultChunkRepository } from './vault/VaultChunkRepository'
@@ -102,14 +107,6 @@ async function createAppServices(): Promise<AppServices> {
     nomic: nomicClient,
     assets: privateAiService,
   })
-  const vaultQueryService = new VaultQueryService({
-    session: sessions,
-    documents: vaultRepository,
-    chunks: vaultChunkRepository,
-    runtime: aiRuntimeManager,
-    nomic: nomicClient,
-    granite: new GraniteClient(),
-  })
   const vaultService = new VaultService({
     session: sessions,
     repository: vaultRepository,
@@ -153,6 +150,21 @@ async function createAppServices(): Promise<AppServices> {
       openPath: (absolutePath) => shell.openPath(absolutePath),
     },
   })
+
+  const storyQueryHistory = new StoryHistoryRepository(database)
+  const storyQueryRepository = new StoryRepository(database, storyQueryHistory)
+  const storyQueryChunks = new StoryChunkRepository(database)
+  const privateArchiveQueryService = new PrivateArchiveQueryService({
+    session: sessions,
+    documents: vaultRepository,
+    vaultChunks: vaultChunkRepository,
+    storyChunks: storyQueryChunks,
+    runtime: aiRuntimeManager,
+    nomic: nomicClient,
+    qwen: new QwenClient(),
+    direct: new StoryDirectAnswerService(storyQueryRepository),
+  })
+  const vaultQueryService = new VaultQueryService(privateArchiveQueryService)
 
   const services: AppServices = {
     authService: new AuthService(users, sessions, recovery, circle),
