@@ -28,8 +28,11 @@ const buildExitCode = await new Promise((resolve) => build.on('exit', resolve))
 if (buildExitCode !== 0) process.exit(buildExitCode ?? 1)
 
 const children = []
-const electronWatch = run(npxCommand, ['tsc', '-p', 'tsconfig.electron.json', '--watch', '--preserveWatchOutput'])
+const electronWatch = run(npxCommand, ['tsc', '-p', 'tsconfig.main.json', '--watch', '--preserveWatchOutput'])
 children.push(electronWatch)
+
+const preloadWatch = run(npxCommand, ['vite', 'build', '--config', 'vite.preload.config.ts', '--watch'])
+children.push(preloadWatch)
 
 const vite = run(npxCommand, ['vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'])
 children.push(vite)
