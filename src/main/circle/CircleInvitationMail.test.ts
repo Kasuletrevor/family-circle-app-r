@@ -11,6 +11,13 @@ const owner: AuthUser = {
   onboardingCompleted: true,
 }
 
+const delivery = {
+  to: 'relative@example.test',
+  circleName: 'Kasule Family',
+  role: 'Sibling',
+  temporaryPassword: 'TEMP-2468',
+}
+
 function setup() {
   const sessions = { restore: vi.fn(async () => owner) }
   const users = {
@@ -41,8 +48,8 @@ function setup() {
     getNotifications: vi.fn(async () => []),
     ensureSharedUser: vi.fn(async () => ({ serverUserId: '88' })),
     createCircle: vi.fn(),
-    inviteMember: vi.fn(async () => ({ outcome: 'delivery-failed' as const })),
-    getInvitationDelivery: vi.fn(async () => ({ temporaryPassword: 'TEMP-2468' })),
+    inviteMember: vi.fn(async () => ({ outcome: 'sent' as const, delivery })),
+    getInvitationDelivery: vi.fn(async () => ({ temporaryPassword: 'FALLBACK-PASSWORD' })),
     cancelInvitation: vi.fn(async () => ({ success: true as const })),
     removeMember: vi.fn(async () => ({ success: true as const })),
     leaveCircle: vi.fn(async () => ({ success: true as const })),
@@ -59,8 +66,34 @@ function setup() {
 }
 
 describe('Circle invitation mail delivery', () => {
-  it('uses the desktop mail API after the shared invitation record is created', async () => {
+  it('uses client-mode delivery material returned with the shared invitation record', async () => {
     const { service, circle, mailer } = setup()
+
+    await expect(service.inviteMember({
+      circleId: 'g-1',
+      email: 'relative@example.test',
+      role: 'Sibling',
+    })).resolves.toEqual({ outcome: 'sent' })
+
+    expect(circle.getInvitationDelivery).not.toHaveBeenCalled()
+    expect(mailer.sendInvitation).toHaveBeenCalledWith(delivery)
+  })
+
+  it('uses the same mail API when resending and reports our delivery failure safely', async () => {
+    const { service, circle, mailer } = setup()
+    circle.inviteMember.mockResolvedValue({ outcome: 'already-pending', delivery })
+
+    await expect(service.resendInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ outcome: 'sent' })
+    expect(circle.getInvitationDelivery).not.toHaveBeenCalled()
+    expect(mailer.sendInvitation).toHaveBeenCalledTimes(1)
+
+    mailer.sendInvitation.mockRejectedValueOnce(new Error('provider details must stay private'))
+    await expect(service.resendInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ outcome: 'delivery-failed' })
+  })
+
+  it('falls back to the protected invitation check for older compatibility servers', async () => {
+    const { service, circle, mailer } = setup()
+    circle.inviteMember.mockResolvedValue({ outcome: 'sent' })
 
     await expect(service.inviteMember({
       circleId: 'g-1',
@@ -73,18 +106,7 @@ describe('Circle invitation mail delivery', () => {
       to: 'relative@example.test',
       circleName: 'Kasule Family',
       role: 'Sibling',
-      temporaryPassword: 'TEMP-2468',
+      temporaryPassword: 'FALLBACK-PASSWORD',
     })
-  })
-
-  it('uses the same mail API when resending and reports our delivery failure safely', async () => {
-    const { service, circle, mailer } = setup()
-    circle.inviteMember.mockResolvedValue({ outcome: 'already-pending' })
-
-    await expect(service.resendInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ outcome: 'sent' })
-    expect(mailer.sendInvitation).toHaveBeenCalledTimes(1)
-
-    mailer.sendInvitation.mockRejectedValueOnce(new Error('provider details must stay private'))
-    await expect(service.resendInvitation({ personId: 'invite:inv-1' })).resolves.toEqual({ outcome: 'delivery-failed' })
   })
 })
