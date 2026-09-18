@@ -166,6 +166,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: package
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
 
     steps:
       - name: Checkout repository
@@ -316,4 +319,28 @@ jobs:
 
           echo "Public demo verified: $PUBLIC_URL"
           echo "SHA256: $EXPECTED_SHA256"
+
+      - name: Report demo deployment status
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Demo server deployment verified"
+          else
+            state="failure"
+            description="Demo server deployment failed"
+          fi
+
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" \
+            -f context="demo-server-deploy" \
+            -f description="$description"
 
