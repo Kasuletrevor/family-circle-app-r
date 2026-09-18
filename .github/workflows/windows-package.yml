@@ -4,9 +4,22 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - feature/windows-packaging-release
     tags:
       - 'v*'
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'build/**'
+      - 'config/**'
+      - 'third_party/**'
+      - 'scripts/**'
+      - 'vite*.ts'
+      - 'tsconfig*.json'
+      - '.github/workflows/windows-package.yml'
   pull_request:
     branches:
       - main
@@ -147,3 +160,147 @@ jobs:
           $installer = (Get-ChildItem -Path release -Filter 'Family-Circle-Setup-*.exe' -File | Select-Object -First 1).FullName
           gh release upload $tag $installer --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+
+  deploy-demo:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Download verified Windows installer
+        uses: actions/download-artifact@v8
+        with:
+          name: family-circle-windows-installer
+          path: release
+
+      - name: Prepare demo release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          count="$(find release -maxdepth 1 -type f -name 'Family-Circle-Setup-*.exe' | wc -l | tr -d ' ')"
+          if [[ "$count" != "1" ]]; then
+            echo "Expected exactly one Windows installer, found $count" >&2
+            exit 1
+          fi
+
+          package_version="$(node -p "require('./package.json').version")"
+          installer="$(find release -maxdepth 1 -type f -name 'Family-Circle-Setup-*.exe' -printf '%f\n')"
+          sha256="$(sha256sum "release/$installer" | awk '{print $1}')"
+          stamp="$(date -u +'%Y%m%d-%H%M%S')"
+          demo_version="${package_version}-demo-${stamp}-${GITHUB_SHA:0:7}"
+          published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          public_path="/electron-releases/demo/latest/$installer"
+          public_url="https://familycircle.o2gventures.com$public_path"
+
+          echo "package_version=$package_version" >> "$GITHUB_OUTPUT"
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          echo "demo_version=$demo_version" >> "$GITHUB_OUTPUT"
+          echo "published_at=$published_at" >> "$GITHUB_OUTPUT"
+          echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
+          echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
+
+      - name: Validate demo deployment credentials
+        shell: bash
+        env:
+          DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          DEV_SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          DEV_SSH_PASSWORD: ${{ secrets.DEV_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEV_SSH_HOST" ]] || { echo "DEV_SSH_HOST is not configured" >&2; exit 1; }
+          [[ -n "$DEV_SSH_USER" ]] || { echo "DEV_SSH_USER is not configured" >&2; exit 1; }
+          [[ -n "$DEV_SSH_PASSWORD" ]] || { echo "DEV_SSH_PASSWORD is not configured" >&2; exit 1; }
+
+      - name: Install SSH tooling
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client sshpass
+
+      - name: Stage verified installer on demo server
+        shell: bash
+        env:
+          DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          DEV_SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          DEV_SSH_PASSWORD: ${{ secrets.DEV_SSH_PASSWORD }}
+          DEMO_VERSION: ${{ steps.meta.outputs.demo_version }}
+          INSTALLER: ${{ steps.meta.outputs.installer }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$DEV_SSH_PASSWORD"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keyscan -H "$DEV_SSH_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null
+
+          remote_stage="electron-release-staging/$DEMO_VERSION"
+          sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" "mkdir -p '$remote_stage'"
+          sshpass -e scp "release/$INSTALLER" scripts/publish-demo-release.sh "$DEV_SSH_USER@$DEV_SSH_HOST:$remote_stage/"
+
+      - name: Publish demo release atomically
+        shell: bash
+        env:
+          DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          DEV_SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          DEV_SSH_PASSWORD: ${{ secrets.DEV_SSH_PASSWORD }}
+          DEMO_VERSION: ${{ steps.meta.outputs.demo_version }}
+          INSTALLER: ${{ steps.meta.outputs.installer }}
+          INSTALLER_SHA256: ${{ steps.meta.outputs.sha256 }}
+          PUBLISHED_AT: ${{ steps.meta.outputs.published_at }}
+          PUBLIC_PATH: ${{ steps.meta.outputs.public_path }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$DEV_SSH_PASSWORD"
+          remote_stage="electron-release-staging/$DEMO_VERSION"
+          sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" \
+            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_PATH'"
+
+      - name: Verify public demo installer
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.meta.outputs.demo_version }}
+          EXPECTED_SHA256: ${{ steps.meta.outputs.sha256 }}
+          PUBLIC_URL: ${{ steps.meta.outputs.public_url }}
+        run: |
+          set -euo pipefail
+
+          cache_buster="${GITHUB_SHA:0:12}"
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' "${PUBLIC_URL}?build=${cache_buster}" \
+            -o /tmp/family-circle-public.exe
+
+          actual_sha256="$(sha256sum /tmp/family-circle-public.exe | awk '{print $1}')"
+          if [[ "$actual_sha256" != "$EXPECTED_SHA256" ]]; then
+            echo "Public installer checksum mismatch" >&2
+            exit 1
+          fi
+
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' \
+            "https://familycircle.o2gventures.com/electron-releases/demo/current.json?build=${cache_buster}" \
+            -o /tmp/current.json
+
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const current = JSON.parse(fs.readFileSync('/tmp/current.json', 'utf8'))
+          if (current.version !== process.env.EXPECTED_VERSION) {
+            throw new Error(`Unexpected public demo version: ${current.version}`)
+          }
+          if (current.sha256 !== process.env.EXPECTED_SHA256) {
+            throw new Error('Public demo metadata checksum mismatch')
+          }
+          NODE
+
+          echo "Public demo verified: $PUBLIC_URL"
+          echo "SHA256: $EXPECTED_SHA256"
