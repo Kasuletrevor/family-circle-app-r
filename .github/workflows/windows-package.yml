@@ -239,12 +239,22 @@ jobs:
           DEV_SSH_PASSWORD: ${{ secrets.DEV_SSH_PASSWORD }}
           DEMO_VERSION: ${{ steps.meta.outputs.demo_version }}
           INSTALLER: ${{ steps.meta.outputs.installer }}
+          EXPECTED_DEV_SSH_ED25519_FINGERPRINT: SHA256:i5zZS4Ydc4iAFzY8xpI0Md/bi/sCzzwcGMf9P6n06Dc
         run: |
           set -euo pipefail
           export SSHPASS="$DEV_SSH_PASSWORD"
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          ssh-keyscan -H "$DEV_SSH_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null
+
+          scan="$(ssh-keyscan -T 10 -t ed25519 "$DEV_SSH_HOST" 2>/dev/null)"
+          [[ -n "$scan" ]] || { echo "Could not retrieve demo SSH host key" >&2; exit 1; }
+          fingerprint="$(printf '%s\n' "$scan" | ssh-keygen -lf - | awk '{print $2}' | head -n 1)"
+          if [[ "$fingerprint" != "$EXPECTED_DEV_SSH_ED25519_FINGERPRINT" ]]; then
+            echo "Demo SSH host fingerprint mismatch" >&2
+            exit 1
+          fi
+          printf '%s\n' "$scan" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
 
           remote_stage="electron-release-staging/$DEMO_VERSION"
           sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" "mkdir -p '$remote_stage'"
@@ -307,25 +317,3 @@ jobs:
           echo "Public demo verified: $PUBLIC_URL"
           echo "SHA256: $EXPECTED_SHA256"
 
-
-  probe-demo-host-key:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Probe demo SSH ED25519 fingerprint without authenticating
-        shell: bash
-        env:
-          DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
-        run: |
-          set -euo pipefail
-          [[ -n "$DEV_SSH_HOST" ]] || { echo "DEV_SSH_HOST is not configured" >&2; exit 1; }
-          sudo apt-get update >/dev/null
-          sudo apt-get install -y openssh-client >/dev/null
-
-          scan="$(ssh-keyscan -T 10 -t ed25519 "$DEV_SSH_HOST" 2>/dev/null)"
-          [[ -n "$scan" ]] || { echo "Could not retrieve demo SSH host key" >&2; exit 1; }
-          fingerprint="$(printf '%s\n' "$scan" | ssh-keygen -lf - | awk '{print $2}' | head -n 1)"
-          [[ -n "$fingerprint" ]] || { echo "Could not derive demo SSH fingerprint" >&2; exit 1; }
-
-          echo "Demo SSH ED25519 fingerprint: $fingerprint"
