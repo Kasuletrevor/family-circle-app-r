@@ -78,6 +78,8 @@ describe('Windows packaging workflow', () => {
       "src/main/voice/**",
       "src/renderer/features/story/**",
       "src/renderer/services/story/**",
+      "src/renderer/design-system/**",
+      "src/renderer/assets/**",
       "src/shared/story.ts",
     ]) {
       expect(source).toContain(`- '${path}'`)
