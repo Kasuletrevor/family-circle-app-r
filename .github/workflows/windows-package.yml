@@ -200,7 +200,8 @@ jobs:
           stamp="$(date -u +'%Y%m%d-%H%M%S')"
           demo_version="${package_version}-demo-${stamp}-${GITHUB_SHA:0:7}"
           published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          public_path="/electron-releases/demo/latest/$installer"
+          public_base_path="/electron-releases/demo"
+          public_path="$public_base_path/latest/$installer"
           public_url="https://familycircle.o2gventures.com$public_path"
 
           echo "package_version=$package_version" >> "$GITHUB_OUTPUT"
@@ -208,6 +209,7 @@ jobs:
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
           echo "demo_version=$demo_version" >> "$GITHUB_OUTPUT"
           echo "published_at=$published_at" >> "$GITHUB_OUTPUT"
+          echo "public_base_path=$public_base_path" >> "$GITHUB_OUTPUT"
           echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
           echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
 
@@ -258,13 +260,13 @@ jobs:
           INSTALLER: ${{ steps.meta.outputs.installer }}
           INSTALLER_SHA256: ${{ steps.meta.outputs.sha256 }}
           PUBLISHED_AT: ${{ steps.meta.outputs.published_at }}
-          PUBLIC_PATH: ${{ steps.meta.outputs.public_path }}
+          PUBLIC_BASE_PATH: ${{ steps.meta.outputs.public_base_path }}
         run: |
           set -euo pipefail
           export SSHPASS="$DEV_SSH_PASSWORD"
           remote_stage="electron-release-staging/$DEMO_VERSION"
           sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" \
-            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_PATH'"
+            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_BASE_PATH'"
 
       - name: Verify public demo installer
         shell: bash
@@ -304,3 +306,26 @@ jobs:
 
           echo "Public demo verified: $PUBLIC_URL"
           echo "SHA256: $EXPECTED_SHA256"
+
+
+  probe-demo-host-key:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Probe demo SSH ED25519 fingerprint without authenticating
+        shell: bash
+        env:
+          DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEV_SSH_HOST" ]] || { echo "DEV_SSH_HOST is not configured" >&2; exit 1; }
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y openssh-client >/dev/null
+
+          scan="$(ssh-keyscan -T 10 -t ed25519 "$DEV_SSH_HOST" 2>/dev/null)"
+          [[ -n "$scan" ]] || { echo "Could not retrieve demo SSH host key" >&2; exit 1; }
+          fingerprint="$(printf '%s\n' "$scan" | ssh-keygen -lf - | awk '{print $2}' | head -n 1)"
+          [[ -n "$fingerprint" ]] || { echo "Could not derive demo SSH fingerprint" >&2; exit 1; }
+
+          echo "Demo SSH ED25519 fingerprint: $fingerprint"
