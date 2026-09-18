@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "$#" -ne 7 ]]; then
-  echo "usage: publish-demo-release.sh <root> <version> <installer> <sha256> <published_at> <commit> <public_path>" >&2
+  echo "usage: publish-demo-release.sh <root> <version> <installer> <sha256> <published_at> <commit> <public_base_path>" >&2
   exit 64
 fi
 
@@ -12,7 +12,7 @@ INSTALLER="$3"
 EXPECTED_SHA="$4"
 PUBLISHED_AT="$5"
 COMMIT_SHA="$6"
-PUBLIC_PATH="$7"
+PUBLIC_BASE_PATH="$7"
 STAGE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SOURCE="$STAGE_DIR/$INSTALLER"
 
@@ -38,21 +38,37 @@ fi
 mkdir -p "$ROOT"
 TMP_DIR="$ROOT/.publish-$VERSION-$$"
 DEST_DIR="$ROOT/$VERSION"
+IMMUTABLE_PATH="$PUBLIC_BASE_PATH/$VERSION/$INSTALLER"
+LATEST_PATH="$PUBLIC_BASE_PATH/latest/$INSTALLER"
+
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 
 install -m 0644 "$SOURCE" "$TMP_DIR/$INSTALLER"
 printf '%s  %s\n' "$EXPECTED_SHA" "$INSTALLER" > "$TMP_DIR/$INSTALLER.sha256"
+printf '%s\n' "$VERSION" > "$TMP_DIR/VERSION"
+
 cat > "$TMP_DIR/release.json" <<EOF
 {
   "version": "$VERSION",
   "commit": "$COMMIT_SHA",
   "published_at": "$PUBLISHED_AT",
-  "installer": "$PUBLIC_PATH",
+  "installer": "$IMMUTABLE_PATH",
   "sha256": "$EXPECTED_SHA"
 }
 EOF
-chmod 0644 "$TMP_DIR/release.json" "$TMP_DIR/$INSTALLER.sha256"
+
+cat > "$TMP_DIR/current.json" <<EOF
+{
+  "version": "$VERSION",
+  "commit": "$COMMIT_SHA",
+  "published_at": "$PUBLISHED_AT",
+  "installer": "$LATEST_PATH",
+  "sha256": "$EXPECTED_SHA"
+}
+EOF
+
+chmod 0644   "$TMP_DIR/release.json"   "$TMP_DIR/current.json"   "$TMP_DIR/VERSION"   "$TMP_DIR/$INSTALLER.sha256"
 
 if [[ -e "$DEST_DIR" ]]; then
   echo "Release destination already exists: $DEST_DIR" >&2
@@ -61,26 +77,6 @@ if [[ -e "$DEST_DIR" ]]; then
 fi
 
 mv "$TMP_DIR" "$DEST_DIR"
-
-NEXT_LINK="$ROOT/.latest-$VERSION"
-rm -f "$NEXT_LINK"
-ln -s "$VERSION" "$NEXT_LINK"
-mv -Tf "$NEXT_LINK" "$ROOT/latest"
-
-printf '%s\n' "$VERSION" > "$ROOT/.VERSION.tmp"
-mv -f "$ROOT/.VERSION.tmp" "$ROOT/VERSION"
-
-cat > "$ROOT/.current.json.tmp" <<EOF
-{
-  "version": "$VERSION",
-  "commit": "$COMMIT_SHA",
-  "published_at": "$PUBLISHED_AT",
-  "installer": "$PUBLIC_PATH",
-  "sha256": "$EXPECTED_SHA"
-}
-EOF
-mv -f "$ROOT/.current.json.tmp" "$ROOT/current.json"
-chmod 0644 "$ROOT/VERSION" "$ROOT/current.json"
 
 python3 - "$ROOT" "$ROOT/.versions.json.tmp" <<'PY'
 import json
@@ -103,6 +99,23 @@ with open(output, "w", encoding="utf-8") as handle:
 PY
 mv -f "$ROOT/.versions.json.tmp" "$ROOT/versions.json"
 chmod 0644 "$ROOT/versions.json"
+
+# Root compatibility endpoints resolve through latest so installer bytes and
+# current metadata switch together when the single latest pointer is replaced.
+CURRENT_LINK="$ROOT/.current-$VERSION"
+VERSION_LINK="$ROOT/.version-$VERSION"
+NEXT_LINK="$ROOT/.latest-$VERSION"
+rm -f "$CURRENT_LINK" "$VERSION_LINK" "$NEXT_LINK"
+ln -s "latest/current.json" "$CURRENT_LINK"
+ln -s "latest/VERSION" "$VERSION_LINK"
+ln -s "$VERSION" "$NEXT_LINK"
+
+mv -Tf "$CURRENT_LINK" "$ROOT/current.json"
+mv -Tf "$VERSION_LINK" "$ROOT/VERSION"
+
+# This is the publication point. Everything visible through latest/current.json,
+# root current.json, root VERSION, and latest/<installer> changes together.
+mv -Tf "$NEXT_LINK" "$ROOT/latest"
 
 rm -rf "$STAGE_DIR"
 
