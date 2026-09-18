@@ -74,7 +74,7 @@
           ]
         }
       ],
-      "icon": "build/family-circle.ico"
+      "icon": "build/family-circle.svg"
     },
     "nsis": {
       "artifactName": "Family-Circle-Setup-${version}.exe",
