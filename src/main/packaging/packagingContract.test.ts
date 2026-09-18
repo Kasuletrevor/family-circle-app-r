@@ -53,7 +53,7 @@ describe('Windows packaging contract', () => {
     expect(mailerSource).not.toMatch(/nodemailer|SMTP_HOST|SMTP_PORT|SMTP_SECURE|MAIL_HOST/)
   })
 
-  it('packages compiled code, approved manifests/licenses, and the generated demo mail resource', () => {
+  it('packages compiled code, approved manifests/licenses, and generated demo resources', () => {
     const files = pkg.build?.files ?? []
     expect(files).toContain('dist/**/*')
     expect(files).toContain('config/offline-ai-manifest.json')
@@ -63,6 +63,10 @@ describe('Windows packaging contract', () => {
     expect(pkg.build?.extraResources).toContainEqual({
       from: 'build/demo-mail-config.json',
       to: 'demo-mail-config.json',
+    })
+    expect(pkg.build?.extraResources).toContainEqual({
+      from: 'build/demo-circle-config.json',
+      to: 'demo-circle-config.json',
     })
     expect(existsSync(resolve(root, 'config/offline-voice-manifest.json'))).toBe(true)
     expect(existsSync(resolve(root, 'third_party/whisper.cpp-LICENSE.txt'))).toBe(true)

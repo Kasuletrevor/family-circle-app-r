@@ -58,6 +58,10 @@ function verifyConfig() {
     'Temporary demo mail config is not packaged as an extra resource',
   )
   assert(
+    extraResources.some((entry) => entry?.from === 'build/demo-circle-config.json' && entry?.to === 'demo-circle-config.json'),
+    'Temporary demo Circle config is not packaged as an extra resource',
+  )
+  assert(
     !/\.env|\.gguf|models\/|bin\/|whisper-cli\.exe|ggml-base\.bin|whisper-bin/i.test(files.join('\n')),
     'Packaging allowlist contains forbidden secret/runtime/model inputs',
   )
@@ -133,6 +137,21 @@ function verifyDemoMailResource(releaseDir) {
   assert(Number.isInteger(config?.timeoutMs) && config.timeoutMs > 0, 'Packaged demo mail timeout is invalid')
 }
 
+function verifyDemoCircleResource(releaseDir) {
+  const configPath = resolve(releaseDir, 'win-unpacked', 'resources', 'demo-circle-config.json')
+  assert(existsSync(configPath), 'Packaged demo Circle config is missing')
+
+  let config
+  try {
+    config = JSON.parse(readFileSync(configPath, 'utf8'))
+  } catch {
+    throw new Error('Packaged demo Circle config is invalid JSON')
+  }
+
+  assert(typeof config?.baseUrl === 'string' && config.baseUrl.startsWith('https://'), 'Packaged demo Circle URL is invalid')
+  assert(typeof config?.apiKey === 'string' && config.apiKey.length > 0, 'Packaged demo Circle API key is missing')
+}
+
 function verifyRelease(releaseDir) {
   assert(existsSync(releaseDir), `Release directory does not exist: ${releaseDir}`)
   const installers = readdirSync(releaseDir, { withFileTypes: true })
@@ -150,6 +169,7 @@ function verifyRelease(releaseDir) {
   assert(statSync(installerPath).size > 0, `Windows installer is empty: ${basename(installerPath)}`)
   verifyNoForbiddenLooseResources(releaseDir)
   verifyDemoMailResource(releaseDir)
+  verifyDemoCircleResource(releaseDir)
   console.log(`Windows installer verified: ${expectedInstaller}`)
 }
 

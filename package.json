@@ -55,6 +55,10 @@
       {
         "from": "build/demo-mail-config.json",
         "to": "demo-mail-config.json"
+      },
+      {
+        "from": "build/demo-circle-config.json",
+        "to": "demo-circle-config.json"
       }
     ],
     "directories": {

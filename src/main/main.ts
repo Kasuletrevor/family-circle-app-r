@@ -15,6 +15,7 @@ import { createProtectedCrypto, createSessionFile, SessionStore } from './auth/S
 import { UserRepository } from './auth/UserRepository'
 import { registerCircleIpc } from './circle/circleIpc'
 import { CircleService } from './circle/CircleService'
+import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
@@ -85,10 +86,7 @@ async function createAppServices(): Promise<AppServices> {
   )
   const mailer = createRecoveryMailer()
   const recovery = new PasswordRecoveryService(database, users, mailer)
-  const circle = new LegacyCircleAuthAdapter({
-    baseUrl: process.env.CIRCLE_API_URL || '',
-    apiKey: process.env.CIRCLE_API_KEY || '',
-  })
+  const circle = new LegacyCircleAuthAdapter(resolveCircleApiConfig())
 
   const privateAiService = new OfflineAiAssetService({
     userDataPath,
