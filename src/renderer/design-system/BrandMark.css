@@ -1,20 +1,47 @@
 .brand-mark {
   display: inline-flex;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+}
+
+.brand-mark__logo-frame {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(230, 173, 105, 0.5);
+  border-radius: 12px;
+  background: var(--kk-navy);
 }
 
 .brand-mark__logo {
   display: block;
-  width: 180px;
-  max-width: 100%;
-  height: auto;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.brand-mark__tagline {
+.brand-mark__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.brand-mark__name {
+  overflow: hidden;
+  color: var(--kk-gold);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-mark__copy span {
   color: rgba(255, 255, 255, 0.72);
   font-size: 11px;
   font-weight: 500;
@@ -22,9 +49,16 @@
 }
 
 .brand-mark--compact {
-  gap: 0;
+  gap: 8px;
 }
 
-.brand-mark--compact .brand-mark__logo {
-  width: 145px;
+.brand-mark--compact .brand-mark__logo-frame {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 9px;
+}
+
+.brand-mark--compact .brand-mark__name {
+  font-size: 15px;
 }
