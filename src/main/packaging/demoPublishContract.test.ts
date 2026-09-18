@@ -23,6 +23,10 @@ describe('demo server publish contract', () => {
   it('checks the staged installer and updates the stable release atomically', () => {
     expect(publisher).toContain('sha256sum "$SOURCE"')
     expect(publisher).toContain('Staged installer checksum mismatch')
+    expect(publisher).toContain('IMMUTABLE_PATH="$PUBLIC_BASE_PATH/$VERSION/$INSTALLER"')
+    expect(publisher).toContain('LATEST_PATH="$PUBLIC_BASE_PATH/latest/$INSTALLER"')
+    expect(publisher).toContain('ln -s "latest/current.json"')
+    expect(publisher).toContain('ln -s "latest/VERSION"')
     expect(publisher).toContain('mv -Tf "$NEXT_LINK" "$ROOT/latest"')
     expect(publisher).toContain('"sha256": "$EXPECTED_SHA"')
     expect(publisher).toContain('versions.json')
