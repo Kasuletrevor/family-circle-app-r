@@ -72,9 +72,17 @@ describe('Windows packaging contract', () => {
     expect(existsSync(resolve(root, 'third_party/whisper.cpp-LICENSE.txt'))).toBe(true)
   })
 
-  it('has a real Windows icon', () => {
-    const icon = resolve(root, 'build/family-circle.ico')
+  it('uses the official Kin-Keepers branding for the Windows app icon', () => {
+    expect(pkg.build?.win?.icon).toBe('build/family-circle.svg')
+
+    const icon = resolve(root, pkg.build?.win?.icon ?? '')
     expect(existsSync(icon)).toBe(true)
     expect(statSync(icon).size).toBeGreaterThan(10_000)
+
+    const iconSource = readFileSync(icon, 'utf8')
+    expect(iconSource).toContain('data:image/jpeg;base64,')
+    expect(iconSource).toContain('#0C2348')
+    expect(iconSource).toContain('#E6AD69')
+    expect(existsSync(resolve(root, 'build/family-circle.ico'))).toBe(false)
   })
 })

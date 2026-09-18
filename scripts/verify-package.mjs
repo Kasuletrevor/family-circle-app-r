@@ -67,8 +67,12 @@ function verifyConfig() {
   )
 
   const iconPath = resolve(root, build.win?.icon ?? '')
-  assert(build.win?.icon === 'build/family-circle.ico', 'Unexpected Windows icon path')
+  assert(build.win?.icon === 'build/family-circle.svg', 'Unexpected Windows icon path')
   assert(existsSync(iconPath) && statSync(iconPath).size > 10_000, 'Windows icon is missing or invalid')
+  const iconSource = readFileSync(iconPath, 'utf8')
+  assert(iconSource.includes('data:image/jpeg;base64,'), 'Windows icon must embed the official Kin-Keepers logo')
+  assert(iconSource.includes('#0C2348') && iconSource.includes('#E6AD69'), 'Windows icon must use Kin-Keepers brand colors')
+  assert(!existsSync(resolve(root, 'build/family-circle.ico')), 'Legacy K Windows icon must not remain in build resources')
   assert(existsSync(resolve(root, 'config/offline-ai-manifest.json')), 'Private AI manifest file is missing')
   assert(existsSync(resolve(root, 'config/offline-voice-manifest.json')), 'Offline voice manifest file is missing')
   assert(existsSync(resolve(root, 'third_party/whisper.cpp-LICENSE.txt')), 'whisper.cpp license file is missing')
