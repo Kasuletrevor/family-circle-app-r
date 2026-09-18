@@ -40,12 +40,18 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('release/Family-Circle-Setup-*.exe')
   })
 
-  it('publishes version tags to a GitHub Release without server secrets', () => {
+  it('publishes version tags to a GitHub Release without coupling that job to server secrets', () => {
     const source = workflow()
-    expect(source).toContain("startsWith(github.ref, 'refs/tags/v')")
-    expect(source).toContain('contents: write')
-    expect(source).toContain('gh release')
-    expect(source).not.toMatch(/SERVER_IP|SSH_|scp-action|ssh-action/i)
+    const releaseStart = source.indexOf('  release:\n')
+    const deployStart = source.indexOf('  deploy-demo:\n')
+    expect(releaseStart).toBeGreaterThanOrEqual(0)
+    expect(deployStart).toBeGreaterThan(releaseStart)
+    const releaseBlock = source.slice(releaseStart, deployStart)
+
+    expect(releaseBlock).toContain("startsWith(github.ref, 'refs/tags/v')")
+    expect(releaseBlock).toContain('contents: write')
+    expect(releaseBlock).toContain('gh release')
+    expect(releaseBlock).not.toMatch(/DEV_SSH_|SERVER_IP|scp-action|ssh-action/i)
   })
 
   it('keeps packaging read-only and grants write permission only to the tag release job', () => {
@@ -56,17 +62,21 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('actions/download-artifact@')
   })
 
-  it('keeps the approved push/tag/base trigger policy and watches demo packaging inputs', () => {
+  it('packages relevant main pushes for demo deployment while preserving tag and PR triggers', () => {
     const source = workflow()
     const pushStart = source.indexOf('  push:\n')
     const pullStart = source.indexOf('  pull_request:\n')
     expect(pushStart).toBeGreaterThanOrEqual(0)
     expect(pullStart).toBeGreaterThan(pushStart)
     const pushBlock = source.slice(pushStart, pullStart)
-    expect(pushBlock).toContain('branches:\n      - feature/windows-packaging-release')
+
+    expect(pushBlock).toContain('branches:\n      - main\n      - feature/windows-packaging-release')
     expect(pushBlock).toContain("tags:\n      - 'v*'")
-    expect(pushBlock).not.toContain('- main')
+    expect(pushBlock).toContain("      - 'src/**'")
+    expect(pushBlock).toContain("      - 'public/**'")
+    expect(pushBlock).toContain("      - 'scripts/**'")
     expect(source).toMatch(/pull_request:\n\s+branches:\n\s+- main/)
+
     for (const path of [
       "config/offline-voice-manifest.json",
       "third_party/whisper.cpp-LICENSE.txt",
