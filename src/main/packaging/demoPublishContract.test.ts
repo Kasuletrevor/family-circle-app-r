@@ -19,7 +19,8 @@ describe('demo server publish contract', () => {
     expect(workflow).toContain('/var/www/family-circle-prod/electron-releases/demo')
     expect(workflow).toContain('scripts/publish-demo-release.sh')
     expect(workflow).toContain('https://familycircle.o2gventures.com')
-    expect(workflow).toContain('/electron-releases/demo/latest/')
+    expect(workflow).toContain('public_base_path="/electron-releases/demo"')
+    expect(workflow).toContain('public_path="$public_base_path/latest/$installer"')
   })
 
   it('checks the staged installer and updates the stable release atomically', () => {
