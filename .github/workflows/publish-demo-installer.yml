@@ -11,11 +11,11 @@ on:
       run_id:
         description: Windows Package workflow run ID containing the verified installer artifact
         required: true
-        default: "35279993361"
+        default: "35348438252"
       version:
         description: Demo release version directory name, without the leading v
         required: true
-        default: "0.1.0-demo-20260918-circleauth"
+        default: "0.1.0-demo-20260918-branding"
 
 permissions:
   contents: read
@@ -23,8 +23,8 @@ permissions:
 
 env:
   ARTIFACT_NAME: family-circle-windows-installer
-  SOURCE_RUN_ID: ${{ inputs.run_id || '35279993361' }}
-  RELEASE_VERSION: ${{ inputs.version || '0.1.0-demo-20260918-circleauth' }}
+  SOURCE_RUN_ID: ${{ inputs.run_id || '35348438252' }}
+  RELEASE_VERSION: ${{ inputs.version || '0.1.0-demo-20260918-branding' }}
   INSTALLER_NAME: Family-Circle-Setup-0.1.0.exe
   STAGING_ROOT: /home/ooglobe/electron-release-staging
   PUBLISH_ROOT: /var/www/family-circle-prod/electron-releases/demo
