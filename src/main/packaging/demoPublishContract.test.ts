@@ -32,6 +32,11 @@ describe('demo server publish contract', () => {
     expect(workflow).toContain('Demo server deployment verified')
     expect(workflow).toContain('Demo server deployment was skipped')
     expect(workflow).toContain('Demo server deployment failed')
+    expect(workflow).toContain('context="demo-deploy-stage:$stage"')
+    expect(workflow).toContain('stage="credentials-failed"')
+    expect(workflow).toContain('stage="ssh-stage-failed"')
+    expect(workflow).toContain('stage="publish-failed"')
+    expect(workflow).toContain('stage="public-verify-failed"')
   })
 
   it('checks the staged installer and updates the stable release atomically', () => {
