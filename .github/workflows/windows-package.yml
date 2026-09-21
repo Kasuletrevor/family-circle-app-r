@@ -168,7 +168,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      statuses: write
 
     steps:
       - name: Checkout repository
@@ -320,18 +319,41 @@ jobs:
           echo "Public demo verified: $PUBLIC_URL"
           echo "SHA256: $EXPECTED_SHA256"
 
+
+
+
+  report-demo-status:
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs:
+      - package
+      - deploy-demo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+
+    steps:
       - name: Report demo deployment status
-        if: always()
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+          DEPLOY_RESULT: ${{ needs.deploy-demo.result }}
         run: |
           set -euo pipefail
 
-          if [[ "$JOB_STATUS" == "success" ]]; then
+          if [[ "$PACKAGE_RESULT" != "success" ]]; then
+            state="failure"
+            description="Windows package failed; demo not deployed"
+          elif [[ "$DEPLOY_RESULT" == "success" ]]; then
             state="success"
             description="Demo server deployment verified"
+          elif [[ "$DEPLOY_RESULT" == "skipped" ]]; then
+            state="failure"
+            description="Demo server deployment was skipped"
+          elif [[ "$DEPLOY_RESULT" == "cancelled" ]]; then
+            state="failure"
+            description="Demo server deployment was cancelled"
           else
             state="failure"
             description="Demo server deployment failed"
@@ -344,3 +366,5 @@ jobs:
             -f context="demo-server-deploy" \
             -f description="$description"
 
+          echo "demo-server-deploy: $state"
+          echo "package=$PACKAGE_RESULT deploy=$DEPLOY_RESULT"
