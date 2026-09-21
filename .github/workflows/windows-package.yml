@@ -168,17 +168,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      statuses: write
 
     steps:
       - name: Checkout repository
+        id: checkout
+        continue-on-error: true
         uses: actions/checkout@v7
 
       - name: Setup Node
+        id: setup_node
+        if: steps.checkout.outcome == 'success'
+        continue-on-error: true
         uses: actions/setup-node@v7
         with:
           node-version: 24
 
       - name: Download verified Windows installer
+        id: download
+        if: steps.setup_node.outcome == 'success'
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: family-circle-windows-installer
@@ -186,6 +195,8 @@ jobs:
 
       - name: Prepare demo release metadata
         id: meta
+        if: steps.download.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -216,6 +227,9 @@ jobs:
           echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
 
       - name: Validate demo deployment credentials
+        id: credentials
+        if: steps.meta.outcome == 'success'
+        continue-on-error: true
         shell: bash
         env:
           DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
@@ -228,12 +242,18 @@ jobs:
           [[ -n "$DEV_SSH_PASSWORD" ]] || { echo "DEV_SSH_PASSWORD is not configured" >&2; exit 1; }
 
       - name: Install SSH tooling
+        id: tooling
+        if: steps.credentials.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y openssh-client sshpass
 
       - name: Stage verified installer on demo server
+        id: stage
+        if: steps.tooling.outcome == 'success'
+        continue-on-error: true
         shell: bash
         env:
           DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
@@ -263,6 +283,9 @@ jobs:
           sshpass -e scp "release/$INSTALLER" scripts/publish-demo-release.sh "$DEV_SSH_USER@$DEV_SSH_HOST:$remote_stage/"
 
       - name: Publish demo release atomically
+        id: publish
+        if: steps.stage.outcome == 'success'
+        continue-on-error: true
         shell: bash
         env:
           DEV_SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
@@ -281,6 +304,9 @@ jobs:
             "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_BASE_PATH'"
 
       - name: Verify public demo installer
+        id: verify_public
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
         shell: bash
         env:
           EXPECTED_VERSION: ${{ steps.meta.outputs.demo_version }}
@@ -319,7 +345,62 @@ jobs:
           echo "Public demo verified: $PUBLIC_URL"
           echo "SHA256: $EXPECTED_SHA256"
 
+      - name: Report deploy stage
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          SETUP_NODE_OUTCOME: ${{ steps.setup_node.outcome }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+          META_OUTCOME: ${{ steps.meta.outcome }}
+          CREDENTIALS_OUTCOME: ${{ steps.credentials.outcome }}
+          TOOLING_OUTCOME: ${{ steps.tooling.outcome }}
+          STAGE_OUTCOME: ${{ steps.stage.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify_public.outcome }}
+        run: |
+          set -euo pipefail
 
+          stage="verified"
+          if [[ "$CHECKOUT_OUTCOME" != "success" ]]; then
+            stage="checkout-failed"
+          elif [[ "$SETUP_NODE_OUTCOME" != "success" ]]; then
+            stage="setup-node-failed"
+          elif [[ "$DOWNLOAD_OUTCOME" != "success" ]]; then
+            stage="artifact-download-failed"
+          elif [[ "$META_OUTCOME" != "success" ]]; then
+            stage="metadata-failed"
+          elif [[ "$CREDENTIALS_OUTCOME" != "success" ]]; then
+            stage="credentials-failed"
+          elif [[ "$TOOLING_OUTCOME" != "success" ]]; then
+            stage="ssh-tooling-failed"
+          elif [[ "$STAGE_OUTCOME" != "success" ]]; then
+            stage="ssh-stage-failed"
+          elif [[ "$PUBLISH_OUTCOME" != "success" ]]; then
+            stage="publish-failed"
+          elif [[ "$VERIFY_OUTCOME" != "success" ]]; then
+            stage="public-verify-failed"
+          fi
+
+          if [[ "$stage" == "verified" ]]; then
+            state="success"
+          else
+            state="failure"
+          fi
+
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" \
+            -f context="demo-deploy-stage:$stage" \
+            -f description="Demo deploy stage: $stage"
+
+          echo "demo deploy stage: $stage"
+
+          if [[ "$stage" != "verified" ]]; then
+            exit 1
+          fi
 
 
   report-demo-status:

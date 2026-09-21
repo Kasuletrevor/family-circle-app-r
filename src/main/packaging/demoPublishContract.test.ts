@@ -3,8 +3,8 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = resolve(__dirname, '../../..')
-const workflow = readFileSync(resolve(root, '.github/workflows/windows-package.yml'), 'utf8')
-const publisher = readFileSync(resolve(root, 'scripts/publish-demo-release.sh'), 'utf8')
+const workflow = readFileSync(resolve(root, '.github/workflows/windows-package.yml'), 'utf8').replace(/\r\n/g, '\n')
+const publisher = readFileSync(resolve(root, 'scripts/publish-demo-release.sh'), 'utf8').replace(/\r\n/g, '\n')
 
 describe('demo server publish contract', () => {
   it('publishes verified main builds to the existing demo release root', () => {
@@ -32,6 +32,11 @@ describe('demo server publish contract', () => {
     expect(workflow).toContain('Demo server deployment verified')
     expect(workflow).toContain('Demo server deployment was skipped')
     expect(workflow).toContain('Demo server deployment failed')
+    expect(workflow).toContain('context="demo-deploy-stage:$stage"')
+    expect(workflow).toContain('stage="credentials-failed"')
+    expect(workflow).toContain('stage="ssh-stage-failed"')
+    expect(workflow).toContain('stage="publish-failed"')
+    expect(workflow).toContain('stage="public-verify-failed"')
   })
 
   it('checks the staged installer and updates the stable release atomically', () => {
