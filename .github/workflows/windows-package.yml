@@ -56,21 +56,28 @@ concurrency:
 jobs:
   package:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      statuses: write
 
     steps:
       - name: Checkout repository
+        id: package_checkout
         uses: actions/checkout@v7
 
       - name: Setup Node
+        id: package_setup_node
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
+        id: package_install
         run: npm ci --no-audit
 
       - name: Verify mail API configuration
+        id: package_verify_mail
         if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
         env:
           SEND_EMAILS: ${{ vars.SEND_EMAILS }}
@@ -81,9 +88,11 @@ jobs:
         run: node scripts/verify-mail-api-config.mjs
 
       - name: Verify application
+        id: package_verify_application
         run: npm run check
 
       - name: Build Windows installer
+        id: package_build_installer
         env:
           SEND_EMAILS: ${{ vars.SEND_EMAILS }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL }}
@@ -100,9 +109,11 @@ jobs:
           npm run package:win
 
       - name: Verify packaged installer
+        id: package_verify_installer
         run: npm run verify:package
 
       - name: Assert exactly one Windows installer
+        id: package_assert_installer
         shell: pwsh
         run: |
           $installers = @(Get-ChildItem -Path release -Filter 'Family-Circle-Setup-*.exe' -File)
@@ -114,12 +125,63 @@ jobs:
           Write-Host "Verified installer: $($installers[0].Name)"
 
       - name: Upload Windows installer artifact
+        id: package_upload
         uses: actions/upload-artifact@v6
         with:
           name: family-circle-windows-installer
           path: release/Family-Circle-Setup-*.exe
           if-no-files-found: error
           retention-days: 30
+
+      - name: Report Windows package stage
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKOUT_OUTCOME: ${{ steps.package_checkout.outcome }}
+          SETUP_NODE_OUTCOME: ${{ steps.package_setup_node.outcome }}
+          INSTALL_OUTCOME: ${{ steps.package_install.outcome }}
+          VERIFY_MAIL_OUTCOME: ${{ steps.package_verify_mail.outcome }}
+          VERIFY_APP_OUTCOME: ${{ steps.package_verify_application.outcome }}
+          BUILD_OUTCOME: ${{ steps.package_build_installer.outcome }}
+          VERIFY_INSTALLER_OUTCOME: ${{ steps.package_verify_installer.outcome }}
+          ASSERT_INSTALLER_OUTCOME: ${{ steps.package_assert_installer.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.package_upload.outcome }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $stage = 'verified'
+          if ($env:CHECKOUT_OUTCOME -ne 'success') {
+            $stage = 'checkout-failed'
+          } elseif ($env:SETUP_NODE_OUTCOME -ne 'success') {
+            $stage = 'setup-node-failed'
+          } elseif ($env:INSTALL_OUTCOME -ne 'success') {
+            $stage = 'install-dependencies-failed'
+          } elseif ($env:VERIFY_MAIL_OUTCOME -ne 'success') {
+            $stage = 'mail-config-failed'
+          } elseif ($env:VERIFY_APP_OUTCOME -ne 'success') {
+            $stage = 'verify-application-failed'
+          } elseif ($env:BUILD_OUTCOME -ne 'success') {
+            $stage = 'build-installer-failed'
+          } elseif ($env:VERIFY_INSTALLER_OUTCOME -ne 'success') {
+            $stage = 'verify-package-failed'
+          } elseif ($env:ASSERT_INSTALLER_OUTCOME -ne 'success') {
+            $stage = 'assert-installer-failed'
+          } elseif ($env:UPLOAD_OUTCOME -ne 'success') {
+            $stage = 'artifact-upload-failed'
+          }
+
+          $state = if ($stage -eq 'verified') { 'success' } else { 'failure' }
+
+          gh api `
+            --method POST `
+            "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" `
+            -f "state=$state" `
+            -f "context=demo-package-stage:$stage" `
+            -f "description=Windows package stage: $stage"
+
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "demo package stage: $stage"
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
