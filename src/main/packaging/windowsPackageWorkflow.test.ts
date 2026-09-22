@@ -23,14 +23,20 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('Family-Circle-Setup-*.exe')
   })
 
-  it('passes Circle API URL/key into the trusted demo packaging step', () => {
+  it('generates Circle config in a dedicated secret-bearing step before packaging', () => {
     const source = workflow()
+    const circleStart = source.indexOf('- name: Generate demo Circle config')
+    expect(circleStart).toBeGreaterThanOrEqual(0)
+    const circleBlock = source.slice(circleStart, source.indexOf('- name:', circleStart + 1))
+    expect(circleBlock).toContain('CIRCLE_API_URL: ${{ vars.CIRCLE_API_URL }}')
+    expect(circleBlock).toContain('CIRCLE_API_KEY: ${{ secrets.CIRCLE_API_KEY }}')
+    expect(circleBlock).toContain('node scripts/write-demo-circle-config.mjs')
+
     const buildStart = source.indexOf('- name: Build Windows installer')
     expect(buildStart).toBeGreaterThanOrEqual(0)
     const buildBlock = source.slice(buildStart, source.indexOf('- name:', buildStart + 1))
-    expect(buildBlock).toContain('CIRCLE_API_URL: ${{ vars.CIRCLE_API_URL }}')
-    expect(buildBlock).toContain('CIRCLE_API_KEY: ${{ secrets.CIRCLE_API_KEY }}')
-    expect(buildBlock).toContain('node scripts/write-demo-circle-config.mjs')
+    expect(buildBlock).toContain('npm run package:win')
+    expect(buildBlock).not.toContain('CIRCLE_API_KEY')
   })
 
   it('publishes every successful installer as an Actions artifact', () => {
