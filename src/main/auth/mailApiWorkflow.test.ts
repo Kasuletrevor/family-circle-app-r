@@ -35,12 +35,17 @@ describe('mail API CI configuration', () => {
     expect(workflow).toContain(trustedSecretGuard)
     expect(workflow).toContain('node scripts/verify-mail-api-config.mjs')
 
+    const mailStart = workflow.indexOf('- name: Generate demo mail config')
+    expect(mailStart).toBeGreaterThanOrEqual(0)
+    const mailBlock = workflow.slice(mailStart, workflow.indexOf('- name:', mailStart + 1))
+    expect(mailBlock).toContain('node scripts/write-demo-mail-config.mjs')
+    for (const entry of expectedMailEnv) expect(mailBlock).toContain(entry)
+
     const buildStart = workflow.indexOf('- name: Build Windows installer')
     expect(buildStart).toBeGreaterThanOrEqual(0)
     const buildBlock = workflow.slice(buildStart, workflow.indexOf('- name:', buildStart + 1))
-    expect(buildBlock).toContain('node scripts/write-demo-mail-config.mjs')
     expect(buildBlock).toContain('npm run package:win')
-    for (const entry of expectedMailEnv) expect(buildBlock).toContain(entry)
+    expect(buildBlock).not.toContain('MAIL_API_PASSWORD')
   })
 
   it('keeps both mail configuration scripts secret-safe', () => {

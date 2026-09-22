@@ -91,22 +91,26 @@ jobs:
         id: package_verify_application
         run: npm run check
 
-      - name: Build Windows installer
-        id: package_build_installer
+      - name: Generate demo mail config
+        id: package_write_mail
         env:
           SEND_EMAILS: ${{ vars.SEND_EMAILS }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL }}
           MAIL_API_TIMEOUT_MS: ${{ vars.MAIL_API_TIMEOUT_MS }}
           MAIL_API_USER: ${{ secrets.MAIL_API_USER }}
           MAIL_API_PASSWORD: ${{ secrets.MAIL_API_PASSWORD }}
+        run: node scripts/write-demo-mail-config.mjs
+
+      - name: Generate demo Circle config
+        id: package_write_circle
+        env:
           CIRCLE_API_URL: ${{ vars.CIRCLE_API_URL }}
           CIRCLE_API_KEY: ${{ secrets.CIRCLE_API_KEY }}
-        run: |
-          node scripts/write-demo-mail-config.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/write-demo-circle-config.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run package:win
+        run: node scripts/write-demo-circle-config.mjs
+
+      - name: Build Windows installer
+        id: package_build_installer
+        run: npm run package:win
 
       - name: Verify packaged installer
         id: package_verify_installer
@@ -143,6 +147,8 @@ jobs:
           INSTALL_OUTCOME: ${{ steps.package_install.outcome }}
           VERIFY_MAIL_OUTCOME: ${{ steps.package_verify_mail.outcome }}
           VERIFY_APP_OUTCOME: ${{ steps.package_verify_application.outcome }}
+          WRITE_MAIL_OUTCOME: ${{ steps.package_write_mail.outcome }}
+          WRITE_CIRCLE_OUTCOME: ${{ steps.package_write_circle.outcome }}
           BUILD_OUTCOME: ${{ steps.package_build_installer.outcome }}
           VERIFY_INSTALLER_OUTCOME: ${{ steps.package_verify_installer.outcome }}
           ASSERT_INSTALLER_OUTCOME: ${{ steps.package_assert_installer.outcome }}
@@ -161,6 +167,10 @@ jobs:
             $stage = 'mail-config-failed'
           } elseif ($env:VERIFY_APP_OUTCOME -ne 'success') {
             $stage = 'verify-application-failed'
+          } elseif ($env:WRITE_MAIL_OUTCOME -ne 'success') {
+            $stage = 'write-mail-config-failed'
+          } elseif ($env:WRITE_CIRCLE_OUTCOME -ne 'success') {
+            $stage = 'write-circle-config-failed'
           } elseif ($env:BUILD_OUTCOME -ne 'success') {
             $stage = 'build-installer-failed'
           } elseif ($env:VERIFY_INSTALLER_OUTCOME -ne 'success') {
@@ -178,7 +188,8 @@ jobs:
             "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" `
             -f "state=$state" `
             -f "context=demo-package-stage:$stage" `
-            -f "description=Windows package stage: $stage"
+            -f "description=Windows package stage: $stage" `
+            -f "target_url=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "demo package stage: $stage"
