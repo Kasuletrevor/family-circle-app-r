@@ -35,8 +35,8 @@ function verifyConfig() {
 
   assert(pkg.devDependencies?.['electron-builder'] === '26.15.3', 'electron-builder must be locked as a development dependency')
   assert(
-    pkg.scripts?.['package:win'] === 'npm run build && electron-builder --win nsis --x64',
-    'package:win must invoke the locked electron-builder dependency',
+    pkg.scripts?.['package:win'] === 'npm run build && electron-builder --win nsis --x64 --publish never',
+    'package:win must invoke the locked electron-builder dependency without implicit publishing',
   )
   assert(build.appId === 'com.kinkeepers.familycircle', 'Unexpected Electron appId')
   assert(build.productName === 'Family Circle', 'Unexpected Electron productName')
