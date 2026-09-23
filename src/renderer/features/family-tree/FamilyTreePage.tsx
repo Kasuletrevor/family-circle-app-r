@@ -423,7 +423,7 @@ export function FamilyTreePage({ circle: injectedCircle }: { circle?: CircleClie
           layout={layout}
           paths={paths}
           viewerPersonId={overview.viewerPersonId}
-          viewerIsOwner={overview.viewerIsOwner}
+          viewerIsOwner={Boolean(overview.viewerIsOwner)}
           selection={selection}
           onSelectionChange={handleSelectionChange}
           onPositionChange={handlePositionChange}
