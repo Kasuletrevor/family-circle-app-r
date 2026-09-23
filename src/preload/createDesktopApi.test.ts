@@ -19,6 +19,7 @@ describe('createDesktopApi', () => {
         circles: [],
         activeCircleId: null,
         viewerPersonId: null,
+        viewerIsOwner: false,
         tree: null,
         notifications: [],
       }
@@ -27,7 +28,13 @@ describe('createDesktopApi', () => {
       if (channel === 'circle:select') return { success: true }
       if (channel === 'circle:create') return { circleId: 'g-2' }
       if (channel === 'circle:invite-member' || channel === 'circle:resend-invitation') return { outcome: 'sent' }
-      if (channel === 'circle:cancel-invitation' || channel === 'circle:remove-member' || channel === 'circle:leave') return { success: true }
+      if (channel === 'circle:add-tree-relation'
+        || channel === 'circle:delete-tree-relation'
+        || channel === 'circle:save-tree-position'
+        || channel === 'circle:mark-notifications-read'
+        || channel === 'circle:cancel-invitation'
+        || channel === 'circle:remove-member'
+        || channel === 'circle:leave') return { success: true }
       if (channel === 'vault:list') return [{
         id: 5, fileName: 'Family History.pdf', fileType: 'pdf', sizeBytes: 1234,
         extractionStatus: 'ready', indexStatus: 'waiting_for_ai', wordCount: 88,
@@ -64,7 +71,7 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
-    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
+    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
 
@@ -97,6 +104,14 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('circle:create', { name: 'Kasule Family' })
     await api.circle.inviteMember({ circleId: 'g-1', email: 'relative@example.test', role: 'Sibling' })
     expect(invoke).toHaveBeenCalledWith('circle:invite-member', { circleId: 'g-1', email: 'relative@example.test', role: 'Sibling' })
+    await api.circle.addTreeRelation({ kind: 'sibling', aPersonId: 'user:1', bPersonId: 'user:2' })
+    expect(invoke).toHaveBeenCalledWith('circle:add-tree-relation', { kind: 'sibling', aPersonId: 'user:1', bPersonId: 'user:2' })
+    await api.circle.deleteTreeRelation({ relationId: 'r-1' })
+    expect(invoke).toHaveBeenCalledWith('circle:delete-tree-relation', { relationId: 'r-1' })
+    await api.circle.saveTreePosition({ personId: 'user:1', x: 10, y: 20 })
+    expect(invoke).toHaveBeenCalledWith('circle:save-tree-position', { personId: 'user:1', x: 10, y: 20 })
+    await api.circle.markNotificationsRead()
+    expect(invoke).toHaveBeenCalledWith('circle:mark-notifications-read')
     await api.circle.resendInvitation({ personId: 'invite:1' })
     expect(invoke).toHaveBeenCalledWith('circle:resend-invitation', { personId: 'invite:1' })
     await api.circle.cancelInvitation({ personId: 'invite:1' })

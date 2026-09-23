@@ -9,6 +9,7 @@ import { AppServicesProvider } from './services'
 const navigationLabels = [
   'Home',
   'My Circles',
+  'Family Tree',
   'Members',
   'Invitations',
   'Stories',
@@ -72,11 +73,11 @@ describe('App shell', () => {
 
     expect(await screen.findByRole('button', { name: 'Choose active family circle' })).toHaveTextContent('Kasule Family')
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Family Tree' })).toBeNull()
+    expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Memories' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
     expect(screen.queryByRole('searchbox', { name: /search family circle/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /notifications/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }))
     expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument()
@@ -85,6 +86,10 @@ describe('App shell', () => {
     expect(onSignOut).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Ready (Offline)')).toBeInTheDocument()
     expect(primaryNavigation.getByRole('link', { name: 'Invitations' }).querySelector('.sidebar-link__badge')).toBeNull()
+
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Family Tree' }))
+    expect(await screen.findByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Interactive family tree')).toBeInTheDocument()
 
     fireEvent.click(primaryNavigation.getByRole('link', { name: 'Members' }))
     expect(await screen.findByRole('heading', { name: 'Kasule Family' })).toBeInTheDocument()

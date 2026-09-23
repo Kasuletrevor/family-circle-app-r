@@ -1,0 +1,168 @@
+.family-tree-canvas {
+  display: grid;
+  gap: 10px;
+}
+
+.family-tree-canvas__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.family-tree-canvas__toolbar button {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--kk-border);
+  border-radius: 9px;
+  color: var(--kk-navy);
+  background: var(--kk-card);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.family-tree-canvas__toolbar button:hover,
+.family-tree-canvas__toolbar button:focus-visible {
+  border-color: var(--kk-teal);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 159, 154, 0.12);
+}
+
+.family-tree-canvas__stage {
+  overflow: hidden;
+  border: 1px solid var(--kk-border);
+  border-radius: var(--kk-radius-md);
+  background:
+    radial-gradient(circle at 1px 1px, rgba(90, 107, 132, 0.11) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--kk-card);
+}
+
+.family-tree-canvas__svg {
+  display: block;
+  width: 100%;
+  min-height: 520px;
+  height: min(62vh, 620px);
+  touch-action: none;
+  user-select: none;
+}
+
+.family-tree-canvas__relationship {
+  fill: none;
+  stroke: #aeb9c8;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.family-tree-canvas__relationship--selected {
+  stroke: var(--kk-teal-dark);
+  stroke-width: 3;
+}
+
+.family-tree-canvas__relationship-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  cursor: pointer;
+  vector-effect: non-scaling-stroke;
+}
+
+.family-tree-canvas__relationship-hit:focus {
+  outline: none;
+  stroke: rgba(14, 159, 154, 0.16);
+}
+
+.family-tree-canvas__node {
+  cursor: pointer;
+}
+
+.family-tree-canvas__node--draggable {
+  cursor: grab;
+}
+
+.family-tree-canvas__node--draggable:active {
+  cursor: grabbing;
+}
+
+.family-tree-canvas__node-card {
+  fill: #fff;
+  stroke: #dfe5ed;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 3px 7px rgba(24, 46, 75, 0.08));
+}
+
+.family-tree-canvas__node--selected .family-tree-canvas__node-card {
+  stroke: var(--kk-teal-dark);
+  stroke-width: 2.5;
+}
+
+.family-tree-canvas__node--placeholder .family-tree-canvas__node-card {
+  fill: #f8fafc;
+  stroke-dasharray: 6 4;
+  filter: none;
+}
+
+.family-tree-canvas__node-name {
+  fill: var(--kk-navy);
+  font-size: 14px;
+  font-weight: 750;
+  pointer-events: none;
+}
+
+.family-tree-canvas__node-role {
+  fill: var(--kk-text-muted);
+  font-size: 10.5px;
+  pointer-events: none;
+}
+
+.family-tree-canvas__badge {
+  fill: var(--kk-teal-dark);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.family-tree-canvas__badge--record {
+  fill: #778396;
+}
+
+.family-tree-canvas__error {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #f0caca;
+  border-radius: 9px;
+  color: #8b2f2f;
+  background: #fff8f8;
+  font-size: 12px;
+}
+
+.family-tree-canvas__summary {
+  padding: 10px 12px;
+  border: 1px solid var(--kk-border);
+  border-radius: 10px;
+  background: var(--kk-card);
+}
+
+.family-tree-canvas__summary h3 {
+  margin: 0 0 6px;
+  color: var(--kk-navy);
+  font-size: 11px;
+}
+
+.family-tree-canvas__summary ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.family-tree-canvas__summary li,
+.family-tree-canvas__summary p {
+  margin: 0;
+  color: var(--kk-text-muted);
+  font-size: 10.5px;
+}
