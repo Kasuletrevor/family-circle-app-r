@@ -1,4 +1,5 @@
 import type {
+  AddTreeRelationInput,
   AuthState,
   CircleContext,
   CircleDetails,
@@ -15,6 +16,7 @@ import type {
   PrivateAiPublicState,
   PrivateAiPublicStatus,
   RegisterInput,
+  SaveTreePositionInput,
   ResendInvitationResult,
   ResetPasswordInput,
   SignInInput,
@@ -58,6 +60,10 @@ type DesktopChannel =
   | 'circle:select'
   | 'circle:create'
   | 'circle:invite-member'
+  | 'circle:add-tree-relation'
+  | 'circle:delete-tree-relation'
+  | 'circle:save-tree-position'
+  | 'circle:mark-notifications-read'
   | 'circle:resend-invitation'
   | 'circle:cancel-invitation'
   | 'circle:remove-member'
@@ -425,6 +431,18 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       inviteMember(input: InviteMemberInput) {
         return invoke('circle:invite-member', input) as Promise<InviteMemberResult>
+      },
+      addTreeRelation(input: AddTreeRelationInput) {
+        return invoke('circle:add-tree-relation', input) as Promise<{ success: true }>
+      },
+      deleteTreeRelation(input: { relationId: string }) {
+        return invoke('circle:delete-tree-relation', input) as Promise<{ success: true }>
+      },
+      saveTreePosition(input: SaveTreePositionInput) {
+        return invoke('circle:save-tree-position', input) as Promise<{ success: true }>
+      },
+      markNotificationsRead() {
+        return invoke('circle:mark-notifications-read') as Promise<{ success: true }>
       },
       resendInvitation(input: { personId: string }) {
         return invoke('circle:resend-invitation', input) as Promise<ResendInvitationResult>
