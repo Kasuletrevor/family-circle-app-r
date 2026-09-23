@@ -41,6 +41,8 @@ on:
       - 'src/main/voice/**'
       - 'src/renderer/features/story/**'
       - 'src/renderer/services/story/**'
+      - 'src/renderer/app/**'
+      - 'src/renderer/main.tsx'
       - 'src/renderer/design-system/**'
       - 'src/renderer/assets/**'
       - 'src/shared/story.ts'
