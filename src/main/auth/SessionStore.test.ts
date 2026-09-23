@@ -52,20 +52,24 @@ function createHarness(options: {
 }
 
 describe('SessionStore', () => {
-  it('saves and restores a protected 30-day session without exposing the password hash', async () => {
+  it('saves and restores a protected 1-day session without exposing the password hash', async () => {
     const harness = createHarness()
     await harness.store.save(user.id)
+
+    const encrypted = harness.getStored()!
+    const payload = JSON.parse(encrypted.toString('utf8').slice('encrypted:'.length))
+    expect(payload.expiresAt).toBe(1_000_000 + 24 * 60 * 60 * 1000)
 
     expect(harness.getStored()?.toString('utf8')).toContain('encrypted:')
     expect(harness.getStored()?.toString('utf8')).not.toContain('password')
     await expect(harness.store.restore()).resolves.toEqual(user)
   })
 
-  it('expires sessions after 30 days and removes them', async () => {
+  it('expires sessions after 1 day and removes them', async () => {
     const start = 1_000_000
     const harness = createHarness({ now: start })
     await harness.store.save(user.id)
-    harness.setNow(start + 30 * 24 * 60 * 60 * 1000 + 1)
+    harness.setNow(start + 24 * 60 * 60 * 1000 + 1)
 
     await expect(harness.store.restore()).resolves.toBeNull()
     expect(harness.remove).toHaveBeenCalled()
