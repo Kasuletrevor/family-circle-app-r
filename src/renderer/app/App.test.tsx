@@ -70,7 +70,7 @@ describe('App shell', () => {
       expect(primaryNavigation.getByRole('link', { name: label })).toBeInTheDocument()
     }
 
-    expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Choose active family circle' })).toHaveTextContent('Kasule Family')
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Family Tree' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Memories' })).toBeNull()
