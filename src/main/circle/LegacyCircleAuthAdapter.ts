@@ -1,5 +1,6 @@
 import type {
   CircleNotificationRecord,
+  FamilyRelationshipKind,
   InvitationCheckResult,
   InvitationFamilyRole,
   InviteMemberResult,
@@ -243,6 +244,50 @@ export class LegacyCircleAuthAdapter {
     return delivery ? { outcome, delivery } : { outcome }
   }
 
+  async addTreeRelation(input: {
+    serverUserId: string
+    circleId: string
+    kind: FamilyRelationshipKind
+    aPersonId: string
+    bPersonId: string
+  }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/relation/add`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      kind: input.kind,
+      aPersonId: String(input.aPersonId ?? '').trim(),
+      bPersonId: String(input.bPersonId ?? '').trim(),
+    })
+    return { success: true }
+  }
+
+  async deleteTreeRelation(input: {
+    serverUserId: string
+    circleId: string
+    relationId: string
+  }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/relation/delete`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      relationId: String(input.relationId ?? '').trim(),
+    })
+    return { success: true }
+  }
+
+  async saveTreePosition(input: {
+    serverUserId: string
+    circleId: string
+    personId: string
+    x: number
+    y: number
+  }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/node/pos`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      personId: String(input.personId ?? '').trim(),
+      x: input.x,
+      y: input.y,
+    })
+    return { success: true }
+  }
+
   async cancelInvitation(input: {
     serverUserId: string
     circleId: string
@@ -375,6 +420,11 @@ export class LegacyCircleAuthAdapter {
           read: Boolean(notification.read ?? notification.read_at),
         })).filter((notification) => Boolean(notification.id))
       : []
+  }
+
+  async markNotificationsRead(serverUserId: string): Promise<{ success: true }> {
+    await this.postJson(`/api/me/${encodeURIComponent(String(serverUserId ?? '').trim())}/notifications/read`, {})
+    return { success: true }
   }
 
   private fetchInvitation(email: string): Promise<RawInvitation> {
