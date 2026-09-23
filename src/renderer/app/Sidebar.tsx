@@ -58,7 +58,7 @@ export function Sidebar() {
         if (active) setAiState('unavailable')
       })
 
-    let unsubscribe = () => undefined
+    let unsubscribe: () => void = () => {}
     try {
       unsubscribe = privateAi.onProgress((progress) => {
         if (active) setAiState(progress.state)
