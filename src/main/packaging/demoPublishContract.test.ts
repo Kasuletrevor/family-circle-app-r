@@ -28,7 +28,7 @@ describe('demo server publish contract', () => {
     expect(workflow).toContain('PACKAGE_RESULT: ${{ needs.package.result }}')
     expect(workflow).toContain('DEPLOY_RESULT: ${{ needs.deploy-demo.result }}')
     expect(workflow).toContain('context="demo-server-deploy"')
-    expect(workflow).toContain('Windows package failed; demo not deployed')
+    expect(workflow).toContain('Windows package failed; server release not published')
     expect(workflow).toContain('Demo server deployment verified')
     expect(workflow).toContain('Demo server deployment was skipped')
     expect(workflow).toContain('Demo server deployment failed')
