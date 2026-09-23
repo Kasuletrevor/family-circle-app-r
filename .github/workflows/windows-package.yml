@@ -340,8 +340,9 @@ jobs:
           published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           release_title="$(git log -1 --format=%s "$GITHUB_SHA")"
           release_type="change"
-          if [[ "$release_title" =~ ^([[:alpha:]][[:alnum:]_-]*)(\([^)]*\))?(!)?:[[:space:]]+ ]]; then
-            release_type="${BASH_REMATCH[1],,}"
+          release_prefix="$(printf '%s' "$release_title" | sed -nE 's/^([[:alpha:]][[:alnum:]_-]*)(\([^)]*\))?!?:[[:space:]]+.*/\1/p')"
+          if [[ -n "$release_prefix" ]]; then
+            release_type="${release_prefix,,}"
           fi
           release_title_b64="$(printf '%s' "$release_title" | base64 -w0)"
           public_base_path="/electron-releases/demo"
