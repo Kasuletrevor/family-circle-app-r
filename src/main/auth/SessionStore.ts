@@ -3,7 +3,7 @@ import { dirname } from 'node:path'
 import type { AuthUser } from '../../shared/desktopApi'
 import type { UserRecord } from './UserRepository'
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
 export interface ProtectedCrypto {
   isAvailable(): boolean
@@ -93,7 +93,7 @@ export class SessionStore {
     const envelope: SessionEnvelope = {
       userId,
       sessionVersion,
-      expiresAt: this.now() + THIRTY_DAYS_MS,
+      expiresAt: this.now() + ONE_DAY_MS,
     }
     const protectedBytes = this.crypto.encrypt(JSON.stringify(envelope))
     await this.file.write(protectedBytes)
