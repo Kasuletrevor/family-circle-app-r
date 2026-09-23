@@ -7,6 +7,7 @@ import {
   Home,
   LockKeyhole,
   MailPlus,
+  Network,
   UsersRound,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -23,6 +24,7 @@ export type NavigationItem = {
 export const navigationItems: NavigationItem[] = [
   { label: 'Home', to: '/', icon: Home },
   { label: 'My Circles', to: '/circles', icon: CircleUserRound },
+  { label: 'Family Tree', to: '/family-tree', icon: Network },
   { label: 'Members', to: '/members', icon: UsersRound },
   { label: 'Invitations', to: '/invitations', icon: MailPlus },
   { label: 'Stories', to: '/stories', icon: BookOpen },
