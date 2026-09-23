@@ -56,8 +56,25 @@ describe('Windows packaging workflow', () => {
 
     expect(releaseBlock).toContain("startsWith(github.ref, 'refs/tags/v')")
     expect(releaseBlock).toContain('contents: write')
-    expect(releaseBlock).toContain('gh release')
+    expect(releaseBlock).toContain('gh release create $tag --verify-tag')
+    expect(releaseBlock).toContain('Get-FileHash -Path $installer -Algorithm SHA256')
+    expect(releaseBlock).toContain('$checksumPath = "$installer.sha256"')
+    expect(releaseBlock).toContain('gh release upload $tag $installer $checksumPath --clobber')
     expect(releaseBlock).not.toMatch(/DEV_SSH_|SERVER_IP|scp-action|ssh-action/i)
+  })
+
+  it('rejects unsafe or mismatched release tags before packaging', () => {
+    const source = workflow()
+    const validateStart = source.indexOf('- name: Validate release tag')
+    expect(validateStart).toBeGreaterThanOrEqual(0)
+    const validateBlock = source.slice(validateStart, source.indexOf('- name:', validateStart + 1))
+
+    expect(source).toContain('fetch-depth: 0')
+    expect(validateBlock).toContain("^v[0-9]+\\.[0-9]+\\.[0-9]+$")
+    expect(validateBlock).toContain('$expectedTag = "v$packageVersion"')
+    expect(validateBlock).toContain('git merge-base --is-ancestor $env:GITHUB_SHA origin/main')
+    expect(validateBlock).toContain('Release tags must point to merged main history')
+    expect(validateBlock).toContain('must be newer than existing stable tag')
   })
 
   it('keeps content writes isolated to release while allowing package status reporting', () => {
