@@ -30,6 +30,23 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Validate Conventional Commit PR title
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          release_prefix="$(printf '%s' "$PR_TITLE" | sed -nE 's/^([a-z][a-z0-9_-]*)(\([^)]+\))?!?:[[:space:]]+.+$/\1/p')"
+          case "$release_prefix" in
+            feat|fix|perf|refactor|chore|ci|docs)
+              echo "Valid Conventional Commit title: $PR_TITLE"
+              ;;
+            *)
+              echo "::error::PR title must use an approved Conventional Commit type: feat, fix, perf, refactor, chore, ci, or docs. Got: $PR_TITLE"
+              exit 1
+              ;;
+          esac
       - name: Install dependencies
         run: npm ci --no-audit
       - name: Verify mail API configuration
