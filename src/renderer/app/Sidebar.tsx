@@ -58,9 +58,14 @@ export function Sidebar() {
         if (active) setAiState('unavailable')
       })
 
-    const unsubscribe = privateAi.onProgress((progress) => {
-      if (active) setAiState(progress.state)
-    })
+    let unsubscribe = () => undefined
+    try {
+      unsubscribe = privateAi.onProgress((progress) => {
+        if (active) setAiState(progress.state)
+      })
+    } catch {
+      if (active) setAiState('unavailable')
+    }
 
     return () => {
       active = false
