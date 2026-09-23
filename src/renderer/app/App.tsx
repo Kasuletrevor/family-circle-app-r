@@ -17,12 +17,12 @@ const placeholderRoutes = [
   { path: '/settings', title: 'Settings' },
 ] as const
 
-export function AuthenticatedApp({ user }: { user: AuthUser }) {
+export function AuthenticatedApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => Promise<void> }) {
   return (
     <div className="app-shell">
       <Sidebar />
       <div className="app-shell__workspace">
-        <TopBar user={user} />
+        <TopBar user={user} onSignOut={onSignOut} />
         <main className="app-shell__content">
           <Routes>
             <Route path="/" element={<Home />} />

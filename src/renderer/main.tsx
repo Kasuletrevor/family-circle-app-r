@@ -24,7 +24,15 @@ createRoot(root).render(
         renderOnboarding={(state, onStateChange) => (
           <Onboarding state={state} client={authClient} onStateChange={onStateChange} />
         )}
-        renderAuthenticated={(state) => <AuthenticatedApp user={state.user} />}
+        renderAuthenticated={(state, onStateChange) => (
+          <AuthenticatedApp
+            user={state.user}
+            onSignOut={async () => {
+              await authClient.signOut()
+              onStateChange({ status: 'unauthenticated' })
+            }}
+          />
+        )}
       />
     </HashRouter>
   </StrictMode>,

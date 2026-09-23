@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthUser } from '../../shared/desktopApi'
 import type { CircleClient } from '../services/circle/CircleClient'
@@ -26,7 +26,7 @@ describe('TopBar', () => {
   it('renders protected user identity and real Circle notification chrome', async () => {
     render(
       <AppServicesProvider services={{ circle: circleWithShell('Example Family', 3) }}>
-        <TopBar user={user} />
+        <TopBar user={user} onSignOut={async () => undefined} />
       </AppServicesProvider>,
     )
 
@@ -37,10 +37,29 @@ describe('TopBar', () => {
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 
+  it('opens the user menu and logs out through the provided action', async () => {
+    const onSignOut = vi.fn(async () => undefined)
+
+    render(
+      <AppServicesProvider services={{ circle: circleWithShell('Example Family', 0) }}>
+        <TopBar user={user} onSignOut={onSignOut} />
+      </AppServicesProvider>,
+    )
+
+    await screen.findByText('Example Family')
+    fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }))
+
+    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument()
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    expect(onSignOut).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a neutral Circle state and no fake badge when there are no unread notifications', async () => {
     render(
       <AppServicesProvider services={{ circle: circleWithShell(null, 0) }}>
-        <TopBar user={user} />
+        <TopBar user={user} onSignOut={async () => undefined} />
       </AppServicesProvider>,
     )
 
