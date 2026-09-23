@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthUser } from '../../shared/desktopApi'
 import type { CircleClient } from '../services/circle/CircleClient'
@@ -23,27 +24,37 @@ function circleWithShell(activeCircleName: string | null, unreadNotifications: n
 }
 
 describe('TopBar', () => {
-  it('renders protected user identity and real Circle notification chrome', async () => {
+  it('renders protected identity, hides unimplemented chrome, and navigates the Circle chooser', async () => {
     render(
-      <AppServicesProvider services={{ circle: circleWithShell('Example Family', 3) }}>
-        <TopBar user={user} onSignOut={async () => undefined} />
-      </AppServicesProvider>,
+      <MemoryRouter initialEntries={['/']}>
+        <AppServicesProvider services={{ circle: circleWithShell('Example Family', 3) }}>
+          <TopBar user={user} onSignOut={async () => undefined} />
+          <Routes>
+            <Route path="/circles" element={<div>Circles destination</div>} />
+          </Routes>
+        </AppServicesProvider>
+      </MemoryRouter>,
     )
 
     expect(await screen.findByText('Example Family')).toBeInTheDocument()
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByText('AE')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Notifications, 3 unread' })).toBeInTheDocument()
-    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /notifications/i })).toBeNull()
+    expect(screen.queryByRole('searchbox', { name: /search family circle/i })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose active family circle' }))
+    expect(screen.getByText('Circles destination')).toBeInTheDocument()
   })
 
   it('opens the user menu and logs out through the provided action', async () => {
     const onSignOut = vi.fn(async () => undefined)
 
     render(
-      <AppServicesProvider services={{ circle: circleWithShell('Example Family', 0) }}>
-        <TopBar user={user} onSignOut={onSignOut} />
-      </AppServicesProvider>,
+      <MemoryRouter>
+        <AppServicesProvider services={{ circle: circleWithShell('Example Family', 0) }}>
+          <TopBar user={user} onSignOut={onSignOut} />
+        </AppServicesProvider>
+      </MemoryRouter>,
     )
 
     await screen.findByText('Example Family')
@@ -58,13 +69,15 @@ describe('TopBar', () => {
 
   it('shows a neutral Circle state and no fake badge when there are no unread notifications', async () => {
     render(
-      <AppServicesProvider services={{ circle: circleWithShell(null, 0) }}>
-        <TopBar user={user} onSignOut={async () => undefined} />
-      </AppServicesProvider>,
+      <MemoryRouter>
+        <AppServicesProvider services={{ circle: circleWithShell(null, 0) }}>
+          <TopBar user={user} onSignOut={async () => undefined} />
+        </AppServicesProvider>
+      </MemoryRouter>,
     )
 
     expect(await screen.findByText('No Circle yet')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Notifications' })).toBeInTheDocument()
-    expect(screen.queryByText('0')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Choose active family circle' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /notifications/i })).toBeNull()
   })
 })
