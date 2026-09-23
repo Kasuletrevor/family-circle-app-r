@@ -614,7 +614,7 @@ The old repo remains the behavioral reference.
 
 - encrypted write/read abstraction
 - valid restore
-- 30-day expiry handling
+- 1-day expiry handling
 - corrupt payload rejection
 - sessionVersion mismatch rejection
 - sign-out deletion
