@@ -381,7 +381,7 @@ Use Electron `safeStorage` in main. Store an encrypted local envelope conceptual
 }
 ```
 
-The protected session lifetime is **30 days**, preserving the lifetime of the old local JWT behavior. Successful sign-in/registration/claim refreshes the 30-day expiry.
+The protected session lifetime is **1 day**. Successful sign-in/registration/claim refreshes the 1-day expiry.
 
 Restore:
 
@@ -614,7 +614,7 @@ The old repo remains the behavioral reference.
 
 - encrypted write/read abstraction
 - valid restore
-- 30-day expiry handling
+- 1-day expiry handling
 - corrupt payload rejection
 - sessionVersion mismatch rejection
 - sign-out deletion

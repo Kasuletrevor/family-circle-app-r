@@ -17,7 +17,7 @@
 - Use built-in `node:sqlite`; do not add `better-sqlite3` or another native SQLite dependency.
 - Preserve old bcrypt hashes; newly written passwords remain bcrypt compatible.
 - Password length is 12-72 characters.
-- Persistent sessions expire after 30 days.
+- Persistent sessions expire after 1 day.
 - Renderer never receives a session credential, password hash, Circle API key, raw Circle URL, or database handle.
 - Do not store auth state in renderer `localStorage` or `sessionStorage`.
 - Only `LegacyCircleAuthAdapter` may know current Circle auth/onboarding paths or `X-Kin-Keepers-Key`.
@@ -46,7 +46,7 @@
 - Create `src/main/database/database.ts` — path resolution, copy-safe legacy import, `node:sqlite`, transactions.
 - Create `src/main/database/migrations.ts` — fresh schema plus additive migration of Jose's copied DB.
 - Create `src/main/auth/UserRepository.ts` — local identity persistence and internal/safe shapes.
-- Create `src/main/auth/SessionStore.ts` — encrypted 30-day session envelope.
+- Create `src/main/auth/SessionStore.ts` — encrypted 1-day session envelope.
 - Create `src/main/auth/RecoveryMailer.ts` — recovery-mail interface + legacy SMTP transport.
 - Create `src/main/auth/PasswordRecoveryService.ts` — reset-code lifecycle and atomic reset.
 - Create `src/main/circle/LegacyCircleAuthAdapter.ts` — all current shared-service compatibility calls.
@@ -357,7 +357,7 @@ git commit -m "feat: add local user repository"
 
 ---
 
-### Task 4: Protected 30-Day Session Store
+### Task 4: Protected 1-Day Session Store
 
 **Files:**
 - Create `src/main/auth/SessionStore.ts`, `SessionStore.test.ts`
@@ -378,7 +378,7 @@ npx vitest run src/main/auth/SessionStore.test.ts
 
 - [ ] **Step 2: Implement `save`, `restore`, `clear`**
 
-`save(userId)` stores current `sessionVersion` and `expiresAt = now + 30 days`. `restore()` deletes invalid/expired/mismatched data and returns the safe user or `null`.
+`save(userId)` stores current `sessionVersion` and `expiresAt = now + 1 day`. `restore()` deletes invalid/expired/mismatched data and returns the safe user or `null`.
 
 - [ ] **Step 3: Add Electron adapters**
 
@@ -744,7 +744,7 @@ Scan production `src/main/**/*.ts` and permit `X-Kin-Keepers-Key` and the curren
 
 - [ ] **Step 2: Add/extend source-boundary tests** so auth/onboarding renderer production files cannot use `localStorage.setItem`, `sessionStorage.setItem`, or `fetch(`.
 
-- [ ] **Step 3: Update README** with local auth architecture, copy-safe import from old `Family Circle/family.db`, 30-day safeStorage session, no renderer token, legacy adapter isolation, `CIRCLE_API_URL`, `CIRCLE_API_KEY`, recovery SMTP env names, and explicit warning not to commit/package secrets.
+- [ ] **Step 3: Update README** with local auth architecture, copy-safe import from old `Family Circle/family.db`, 1-day safeStorage session, no renderer token, legacy adapter isolation, `CIRCLE_API_URL`, `CIRCLE_API_KEY`, recovery SMTP env names, and explicit warning not to commit/package secrets.
 
 - [ ] **Step 4: Run focused suite**
 
