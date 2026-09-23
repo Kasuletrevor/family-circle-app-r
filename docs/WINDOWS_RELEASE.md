@@ -25,7 +25,7 @@ release/Family-Circle-Setup-0.1.0.exe
 
 ## Commit-driven server releases
 
-Every qualifying push to `main` already builds and verifies the Windows installer. The server publication step also derives a human release note from the exact `main` commit subject.
+Every relevant push to `main` builds and verifies the Windows installer, but **server publication happens only when the merged commit subject is an approved Conventional Commit**.
 
 For example:
 
@@ -47,13 +47,19 @@ become server release records carrying:
 
 `versions.json` preserves the existing `versions` string array for compatibility and also exposes a richer `releases` array for a download/history UI. Each release directory keeps its own immutable `release.json`; `current.json` describes the build currently behind `latest`.
 
-A Git tag is therefore **not required for each downloadable server build**. Tags are reserved for milestone/formal GitHub releases.
+The approved automatic-release types are `feat`, `fix`, `perf`, `refactor`, `chore`, `ci`, and `docs`, with optional scopes and optional `!` for a breaking change. Examples: `feat: add family export`, `fix(auth): correct invitation login`, and `feat!: replace the local data format`.
+
+A non-Conventional `main` commit still goes through build/test/package verification when its changed paths trigger the workflow, but publication is intentionally skipped and the previous server `latest` remains untouched. The deployment status reports this as a successful `release-skipped` policy outcome rather than a deployment failure.
+
+Pull-request titles are checked against the same rule because squash-merge titles become the `main` commit subject and therefore the human-facing release note.
+
+A Git tag is therefore **not required for each downloadable server build**. Tags are reserved for milestone/formal GitHub releases, and the tagged commit must itself satisfy the same Conventional Commit rule.
 
 ## Release workflow
 
 `.github/workflows/windows-package.yml` has two channels:
 
-- every qualifying push to `main` builds, verifies, publishes the latest installer to the Family Circle server, and records the merged commit title as its release note;
+- every relevant push to `main` builds and verifies the installer; only approved Conventional Commit subjects publish the latest installer to the Family Circle server and enter release history;
 - a stable version tag additionally publishes a **formal GitHub Release** for milestone/versioned distribution.
 
 The Windows package gate performs:
@@ -74,7 +80,8 @@ A formal release tag is accepted only when all of these are true:
 - the tag is stable SemVer exactly in the form `vMAJOR.MINOR.PATCH`, for example `v0.2.0`;
 - the tag exactly matches the `package.json` version;
 - the tagged commit is already contained in `main`;
-- the version is newer than every existing stable release tag.
+- the version is newer than every existing stable release tag;
+- the tagged commit subject is an approved Conventional Commit (`feat`, `fix`, `perf`, `refactor`, `chore`, `ci`, or `docs`).
 
 If any rule fails, packaging stops and no GitHub Release is created.
 
@@ -90,7 +97,7 @@ Prepare the version on a branch/PR first:
 ```powershell
 npm version 0.2.0 --no-git-tag-version
 git add package.json package-lock.json
-git commit -m "release: prepare v0.2.0"
+git commit -m "chore: prepare v0.2.0"
 ```
 
 Merge that change to `main` and wait for the normal `main` CI/demo deployment to pass. Then tag that exact merged commit:
