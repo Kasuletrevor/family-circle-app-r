@@ -338,6 +338,12 @@ jobs:
           stamp="$(date -u +'%Y%m%d-%H%M%S')"
           demo_version="${package_version}-demo-${stamp}-${GITHUB_SHA:0:7}"
           published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          release_title="$(git log -1 --format=%s "$GITHUB_SHA")"
+          release_type="change"
+          if [[ "$release_title" =~ ^([[:alpha:]][[:alnum:]_-]*)(\([^)]*\))?(!)?:[[:space:]]+ ]]; then
+            release_type="${BASH_REMATCH[1],,}"
+          fi
+          release_title_b64="$(printf '%s' "$release_title" | base64 -w0)"
           public_base_path="/electron-releases/demo"
           public_path="$public_base_path/latest/$installer"
           public_url="https://familycircle.o2gventures.com$public_path"
@@ -347,9 +353,12 @@ jobs:
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
           echo "demo_version=$demo_version" >> "$GITHUB_OUTPUT"
           echo "published_at=$published_at" >> "$GITHUB_OUTPUT"
+          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
+          echo "release_title_b64=$release_title_b64" >> "$GITHUB_OUTPUT"
           echo "public_base_path=$public_base_path" >> "$GITHUB_OUTPUT"
           echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
           echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
+          echo "Release note: [$release_type] $release_title"
 
       - name: Validate demo deployment credentials
         id: credentials
@@ -420,13 +429,15 @@ jobs:
           INSTALLER: ${{ steps.meta.outputs.installer }}
           INSTALLER_SHA256: ${{ steps.meta.outputs.sha256 }}
           PUBLISHED_AT: ${{ steps.meta.outputs.published_at }}
+          RELEASE_TYPE: ${{ steps.meta.outputs.release_type }}
+          RELEASE_TITLE_B64: ${{ steps.meta.outputs.release_title_b64 }}
           PUBLIC_BASE_PATH: ${{ steps.meta.outputs.public_base_path }}
         run: |
           set -euo pipefail
           export SSHPASS="$DEV_SSH_PASSWORD"
           remote_stage="electron-release-staging/$DEMO_VERSION"
           sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" \
-            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_BASE_PATH'"
+            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_BASE_PATH' '$RELEASE_TYPE' '$RELEASE_TITLE_B64'"
 
       - name: Verify public demo installer
         id: verify_public
@@ -436,6 +447,9 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ steps.meta.outputs.demo_version }}
           EXPECTED_SHA256: ${{ steps.meta.outputs.sha256 }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+          EXPECTED_RELEASE_TYPE: ${{ steps.meta.outputs.release_type }}
+          EXPECTED_RELEASE_TITLE_B64: ${{ steps.meta.outputs.release_title_b64 }}
           PUBLIC_URL: ${{ steps.meta.outputs.public_url }}
         run: |
           set -euo pipefail
@@ -464,6 +478,16 @@ jobs:
           }
           if (current.sha256 !== process.env.EXPECTED_SHA256) {
             throw new Error('Public demo metadata checksum mismatch')
+          }
+          if (current.commit !== process.env.EXPECTED_COMMIT) {
+            throw new Error(`Unexpected public demo commit: ${current.commit}`)
+          }
+          if (current.type !== process.env.EXPECTED_RELEASE_TYPE) {
+            throw new Error(`Unexpected public demo release type: ${current.type}`)
+          }
+          const expectedTitle = Buffer.from(process.env.EXPECTED_RELEASE_TITLE_B64 || '', 'base64').toString('utf8')
+          if (current.title !== expectedTitle) {
+            throw new Error(`Unexpected public demo release title: ${current.title}`)
           }
           NODE
 
