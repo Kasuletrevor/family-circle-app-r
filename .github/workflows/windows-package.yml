@@ -66,6 +66,8 @@ jobs:
       - name: Checkout repository
         id: package_checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         id: package_setup_node
@@ -73,6 +75,47 @@ jobs:
         with:
           node-version: 24
           cache: npm
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $tag = '${{ github.ref_name }}'
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "Release tag must be stable SemVer in the form vMAJOR.MINOR.PATCH; got '$tag'."
+          }
+
+          $packageVersion = node -p "require('./package.json').version"
+          $expectedTag = "v$packageVersion"
+          if ($tag -ne $expectedTag) {
+            throw "Release tag '$tag' does not match package.json version '$packageVersion'. Expected '$expectedTag'."
+          }
+
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Tagged commit $env:GITHUB_SHA is not contained in main. Release tags must point to merged main history."
+          }
+
+          $currentVersion = [version]$packageVersion
+          $previousVersions = @(
+            git tag --list 'v*' |
+              Where-Object { $_ -ne $tag -and $_ -match '^v[0-9]+\.[0-9]+\.[0-9]+$' } |
+              ForEach-Object { [version]$_.Substring(1) }
+          )
+
+          if ($previousVersions.Count -gt 0) {
+            $latestPrevious = $previousVersions | Sort-Object -Descending | Select-Object -First 1
+            if ($currentVersion -le $latestPrevious) {
+              throw "Release version $currentVersion must be newer than existing stable tag v$latestPrevious."
+            }
+          }
+
+          Write-Host "Validated release tag $tag on merged main commit $env:GITHUB_SHA."
 
       - name: Install dependencies
         id: package_install
@@ -225,16 +268,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = 'Stop'
           $tag = '${{ github.ref_name }}'
+          $installer = (Get-ChildItem -Path release -Filter 'Family-Circle-Setup-*.exe' -File | Select-Object -First 1).FullName
+          $checksumPath = "$installer.sha256"
+          $checksum = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$checksum  $(Split-Path -Leaf $installer)" | Set-Content -Path $checksumPath -Encoding ascii
+
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "Family Circle $tag" --generate-notes --target '${{ github.sha }}'
+            gh release create $tag --verify-tag --title "Family Circle $tag" --generate-notes
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-          $installer = (Get-ChildItem -Path release -Filter 'Family-Circle-Setup-*.exe' -File | Select-Object -First 1).FullName
-          gh release upload $tag $installer --clobber
+          gh release upload $tag $installer $checksumPath --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Write-Host "Published $tag with installer SHA256 $checksum"
 
 
   deploy-demo:

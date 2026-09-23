@@ -25,17 +25,58 @@ release/Family-Circle-Setup-0.1.0.exe
 
 ## Release workflow
 
-`.github/workflows/windows-package.yml` runs on Windows and performs the following gates:
+`.github/workflows/windows-package.yml` has two channels:
 
-1. install dependencies with `npm ci --no-audit`
-2. run the full `npm run check` quality gate
-3. build the Windows x64 NSIS installer
-4. run the deterministic package verifier
-5. require exactly one `Family-Circle-Setup-*.exe`
-6. upload that installer as a GitHub Actions artifact
-7. for a `v*` tag only, create/reuse the matching GitHub Release and attach the installer
+- every qualifying push to `main` builds, verifies, and publishes the latest **demo** installer to the Family Circle demo server;
+- a stable version tag publishes a **formal GitHub Release**.
 
-The first release is `v0.1.0` while `package.json` remains at version `0.1.0`.
+The Windows package gate performs:
+
+1. checkout with full tag history
+2. setup Node 24
+3. validate any release tag before packaging
+4. install dependencies with `npm ci --no-audit`
+5. run the full `npm run check` quality gate
+6. generate the temporary demo/runtime compatibility configuration
+7. build the Windows x64 NSIS installer
+8. run the deterministic package verifier
+9. require exactly one `Family-Circle-Setup-*.exe`
+10. upload that installer as a GitHub Actions artifact
+
+A formal release tag is accepted only when all of these are true:
+
+- the tag is stable SemVer exactly in the form `vMAJOR.MINOR.PATCH`, for example `v0.2.0`;
+- the tag exactly matches the `package.json` version;
+- the tagged commit is already contained in `main`;
+- the version is newer than every existing stable release tag.
+
+If any rule fails, packaging stops and no GitHub Release is created.
+
+For an accepted tag, GitHub Actions creates/reuses the matching GitHub Release, generates release notes, and uploads both:
+
+- `Family-Circle-Setup-X.Y.Z.exe`
+- `Family-Circle-Setup-X.Y.Z.exe.sha256`
+
+### Normal release procedure
+
+Prepare the version on a branch/PR first:
+
+```powershell
+npm version 0.2.0 --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "release: prepare v0.2.0"
+```
+
+Merge that change to `main` and wait for the normal `main` CI/demo deployment to pass. Then tag that exact merged commit:
+
+```powershell
+git checkout main
+git pull --ff-only
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag push is the explicit production-release decision. Ordinary `main` pushes never create formal GitHub Releases.
 
 ## Signing and SmartScreen
 
@@ -76,4 +117,4 @@ Before publishing a release, record all of the following against the exact commi
 - Actions artifact contains `Family-Circle-Setup-0.1.0.exe`
 - no forbidden secrets/model/user-data inputs are present in packaging configuration
 
-After tagging `v0.1.0`, verify the tag-triggered Windows workflow succeeds and the GitHub Release contains exactly one downloadable `Family-Circle-Setup-0.1.0.exe` asset.
+After tagging a release, verify the tag-triggered Windows workflow succeeds and the GitHub Release contains the matching installer plus its `.sha256` checksum asset.
