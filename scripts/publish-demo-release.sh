@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 7 ]]; then
-  echo "usage: publish-demo-release.sh <root> <version> <installer> <sha256> <published_at> <commit> <public_base_path>" >&2
+if [[ "$#" -ne 9 ]]; then
+  echo "usage: publish-demo-release.sh <root> <version> <installer> <sha256> <published_at> <commit> <public_base_path> <release_type> <release_title_b64>" >&2
   exit 64
 fi
 
@@ -13,6 +13,15 @@ EXPECTED_SHA="$4"
 PUBLISHED_AT="$5"
 COMMIT_SHA="$6"
 PUBLIC_BASE_PATH="$7"
+RELEASE_TYPE="$8"
+RELEASE_TITLE_B64="$9"
+RELEASE_TITLE="$(python3 - "$RELEASE_TITLE_B64" <<'PY'
+import base64
+import sys
+
+print(base64.b64decode(sys.argv[1]).decode("utf-8"), end="")
+PY
+)"
 STAGE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SOURCE="$STAGE_DIR/$INSTALLER"
 
@@ -48,25 +57,51 @@ install -m 0644 "$SOURCE" "$TMP_DIR/$INSTALLER"
 printf '%s  %s\n' "$EXPECTED_SHA" "$INSTALLER" > "$TMP_DIR/$INSTALLER.sha256"
 printf '%s\n' "$VERSION" > "$TMP_DIR/VERSION"
 
-cat > "$TMP_DIR/release.json" <<EOF
-{
-  "version": "$VERSION",
-  "commit": "$COMMIT_SHA",
-  "published_at": "$PUBLISHED_AT",
-  "installer": "$IMMUTABLE_PATH",
-  "sha256": "$EXPECTED_SHA"
-}
-EOF
+python3 - \
+  "$TMP_DIR/release.json" \
+  "$TMP_DIR/current.json" \
+  "$VERSION" \
+  "$COMMIT_SHA" \
+  "$PUBLISHED_AT" \
+  "$IMMUTABLE_PATH" \
+  "$LATEST_PATH" \
+  "$EXPECTED_SHA" \
+  "$RELEASE_TYPE" \
+  "$RELEASE_TITLE" <<'PY'
+import json
+import sys
 
-cat > "$TMP_DIR/current.json" <<EOF
-{
-  "version": "$VERSION",
-  "commit": "$COMMIT_SHA",
-  "published_at": "$PUBLISHED_AT",
-  "installer": "$LATEST_PATH",
-  "sha256": "$EXPECTED_SHA"
+(
+    release_path,
+    current_path,
+    version,
+    commit,
+    published_at,
+    immutable_installer,
+    latest_installer,
+    sha256,
+    release_type,
+    title,
+) = sys.argv[1:]
+
+base = {
+    "version": version,
+    "channel": "main",
+    "type": release_type,
+    "title": title,
+    "commit": commit,
+    "published_at": published_at,
+    "sha256": sha256,
 }
-EOF
+
+with open(release_path, "w", encoding="utf-8") as handle:
+    json.dump({**base, "installer": immutable_installer}, handle, indent=2)
+    handle.write("\n")
+
+with open(current_path, "w", encoding="utf-8") as handle:
+    json.dump({**base, "installer": latest_installer}, handle, indent=2)
+    handle.write("\n")
+PY
 
 chmod 0644   "$TMP_DIR/release.json"   "$TMP_DIR/current.json"   "$TMP_DIR/VERSION"   "$TMP_DIR/$INSTALLER.sha256"
 
@@ -85,16 +120,30 @@ import sys
 
 root, output = sys.argv[1:3]
 versions = []
+releases = []
+
 for name in os.listdir(root):
     path = os.path.join(root, name)
+    release_path = os.path.join(path, "release.json")
     if name.startswith(".") or name == "latest" or os.path.islink(path):
         continue
-    if os.path.isdir(path) and os.path.isfile(os.path.join(path, "release.json")):
+    if os.path.isdir(path) and os.path.isfile(release_path):
         versions.append(name)
+        try:
+            with open(release_path, "r", encoding="utf-8") as handle:
+                release = json.load(handle)
+            releases.append(release)
+        except (OSError, json.JSONDecodeError):
+            pass
 
 versions.sort(reverse=True)
+releases.sort(
+    key=lambda item: (str(item.get("published_at", "")), str(item.get("version", ""))),
+    reverse=True,
+)
+
 with open(output, "w", encoding="utf-8") as handle:
-    json.dump({"versions": versions}, handle, indent=2)
+    json.dump({"versions": versions, "releases": releases}, handle, indent=2)
     handle.write("\n")
 PY
 mv -f "$ROOT/.versions.json.tmp" "$ROOT/versions.json"
@@ -120,4 +169,5 @@ mv -Tf "$NEXT_LINK" "$ROOT/latest"
 rm -rf "$STAGE_DIR"
 
 echo "Published demo release $VERSION"
+echo "Release note: [$RELEASE_TYPE] $RELEASE_TITLE"
 echo "Installer SHA256: $EXPECTED_SHA"

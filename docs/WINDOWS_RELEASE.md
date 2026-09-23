@@ -2,7 +2,7 @@
 
 Family Circle is packaged for Windows x64 as a one-click per-user NSIS installer. The normal installer contains the compiled Electron application and `config/offline-ai-manifest.json`; it does not bundle Private AI models/runtime assets, Vault data, `.env` files, SMTP credentials, Circle API credentials, or user data.
 
-GitHub Releases are the canonical public download source. Branch and pull-request packaging runs also upload the installer as a GitHub Actions artifact for verification.
+The Family Circle server is the continuous download channel for verified `main` builds. GitHub Releases remain available for tagged milestone releases. Branch and pull-request packaging runs also upload the installer as a GitHub Actions artifact for verification.
 
 ## Local Windows build
 
@@ -23,12 +23,38 @@ release/Family-Circle-Setup-0.1.0.exe
 
 `npm run verify:package` checks the packaging identity and boundaries and, when `release/` exists, requires exactly one installer matching the current package version.
 
+## Commit-driven server releases
+
+Every qualifying push to `main` already builds and verifies the Windows installer. The server publication step also derives a human release note from the exact `main` commit subject.
+
+For example:
+
+```text
+feat: add family export
+fix: add logout to authenticated profile menu
+perf: speed up Vault indexing
+```
+
+become server release records carrying:
+
+- `type`: the Conventional Commit prefix (`feat`, `fix`, `perf`, etc.; otherwise `change`)
+- `title`: the exact first line of the merged `main` commit/PR title
+- commit SHA
+- published timestamp
+- SHA-256
+- immutable installer URL
+- stable `latest` installer URL through `current.json`
+
+`versions.json` preserves the existing `versions` string array for compatibility and also exposes a richer `releases` array for a download/history UI. Each release directory keeps its own immutable `release.json`; `current.json` describes the build currently behind `latest`.
+
+A Git tag is therefore **not required for each downloadable server build**. Tags are reserved for milestone/formal GitHub releases.
+
 ## Release workflow
 
 `.github/workflows/windows-package.yml` has two channels:
 
-- every qualifying push to `main` builds, verifies, and publishes the latest **demo** installer to the Family Circle demo server;
-- a stable version tag publishes a **formal GitHub Release**.
+- every qualifying push to `main` builds, verifies, publishes the latest installer to the Family Circle server, and records the merged commit title as its release note;
+- a stable version tag additionally publishes a **formal GitHub Release** for milestone/versioned distribution.
 
 The Windows package gate performs:
 
@@ -76,7 +102,7 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The tag push is the explicit production-release decision. Ordinary `main` pushes never create formal GitHub Releases.
+The tag push is the explicit **formal GitHub Release** decision. Ordinary `main` pushes still create verified downloadable server releases; they simply do not create formal GitHub Releases.
 
 ## Signing and SmartScreen
 
