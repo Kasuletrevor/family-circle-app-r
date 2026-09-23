@@ -71,9 +71,11 @@ function serviceHarness(options: { owner?: boolean; tree?: CircleTreeInternal } 
     listGroups: vi.fn(async () => [{ id: 'g-1', name: 'Security Family', ownerId, role: ownerId === '88' ? 'Circle owner' : 'Family member' }]),
     getTree: vi.fn(async () => activeTree),
     getNotifications: vi.fn(async () => []),
+    markNotificationsRead: vi.fn(async () => ({ success: true as const })),
     ensureSharedUser: vi.fn(async () => ({ serverUserId: '88' })),
     createCircle: vi.fn(async () => ({ id: 'created', name: 'Created', ownerId: '88', role: 'Circle owner' })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    getInvitationDelivery: vi.fn(async () => ({ temporaryPassword: 'test-password' })),
     addTreeRelation: vi.fn(async () => ({ success: true as const })),
     deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
     saveTreePosition: vi.fn(async () => ({ success: true as const })),
@@ -82,7 +84,8 @@ function serviceHarness(options: { owner?: boolean; tree?: CircleTreeInternal } 
     leaveCircle: vi.fn(async () => ({ success: true as const })),
   }
 
-  return { port, service: new CircleService(sessions, users, port) }
+  const mailer = { sendInvitation: vi.fn(async () => undefined) }
+  return { port, service: new CircleService(sessions, users, port, mailer) }
 }
 
 function mutationIpcHarness() {
