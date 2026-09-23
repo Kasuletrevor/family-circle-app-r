@@ -46,7 +46,7 @@ describe('demo server publish contract', () => {
     expect(workflow).toContain('Server release skipped: commit is not Conventional')
     expect(workflow).toContain('release_title="$(git log -1 --format=%s "$GITHUB_SHA")"')
     expect(workflow).toContain("release_prefix=\"$(printf '%s' \"$release_title\" | sed -nE")
-    expect(workflow).toContain('release_type="${release_prefix,,}"')
+    expect(workflow).toContain('release_type="$release_prefix"')
     expect(workflow).toContain("release_title_b64=\"$(printf '%s' \"$release_title\" | base64 -w0)\"")
     expect(workflow).toContain('RELEASE_TYPE: ${{ steps.meta.outputs.release_type }}')
     expect(workflow).toContain('RELEASE_TITLE_B64: ${{ steps.meta.outputs.release_title_b64 }}')
