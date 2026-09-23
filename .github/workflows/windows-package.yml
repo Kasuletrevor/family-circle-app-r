@@ -101,6 +101,11 @@ jobs:
             throw "Tagged commit $env:GITHUB_SHA is not contained in main. Release tags must point to merged main history."
           }
 
+          $releaseTitle = (git log -1 --format=%s $env:GITHUB_SHA).Trim()
+          if ($releaseTitle -notmatch '^(feat|fix|perf|refactor|chore|ci|docs)(\([^)]+\))?!?:\s+.+$') {
+            throw "Tagged commit subject '$releaseTitle' is not an approved Conventional Commit. Formal releases require feat, fix, perf, refactor, chore, ci, or docs."
+          }
+
           $currentVersion = [version]$packageVersion
           $previousVersions = @(
             git tag --list 'v*' |
@@ -291,6 +296,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: package
     runs-on: ubuntu-latest
+    outputs:
+      release_eligible: ${{ steps.meta.outputs.release_eligible }}
     permissions:
       contents: read
       statuses: write
@@ -326,6 +333,26 @@ jobs:
         run: |
           set -euo pipefail
 
+          release_title="$(git log -1 --format=%s "$GITHUB_SHA")"
+          release_prefix="$(printf '%s' "$release_title" | sed -nE 's/^([a-z][a-z0-9_-]*)(\([^)]+\))?!?:[[:space:]]+.+$/\1/p')"
+          release_type=""
+          release_eligible="false"
+
+          case "$release_prefix" in
+            feat|fix|perf|refactor|chore|ci|docs)
+              release_type="$release_prefix"
+              release_eligible="true"
+              ;;
+          esac
+
+          echo "release_eligible=$release_eligible" >> "$GITHUB_OUTPUT"
+          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
+
+          if [[ "$release_eligible" != "true" ]]; then
+            echo "Server release skipped: '$release_title' is not an approved Conventional Commit."
+            exit 0
+          fi
+
           count="$(find release -maxdepth 1 -type f -name 'Family-Circle-Setup-*.exe' | wc -l | tr -d ' ')"
           if [[ "$count" != "1" ]]; then
             echo "Expected exactly one Windows installer, found $count" >&2
@@ -338,12 +365,6 @@ jobs:
           stamp="$(date -u +'%Y%m%d-%H%M%S')"
           demo_version="${package_version}-demo-${stamp}-${GITHUB_SHA:0:7}"
           published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          release_title="$(git log -1 --format=%s "$GITHUB_SHA")"
-          release_type="change"
-          release_prefix="$(printf '%s' "$release_title" | sed -nE 's/^([[:alpha:]][[:alnum:]_-]*)(\([^)]*\))?!?:[[:space:]]+.*/\1/p')"
-          if [[ -n "$release_prefix" ]]; then
-            release_type="${release_prefix,,}"
-          fi
           release_title_b64="$(printf '%s' "$release_title" | base64 -w0)"
           public_base_path="/electron-releases/demo"
           public_path="$public_base_path/latest/$installer"
@@ -354,7 +375,6 @@ jobs:
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
           echo "demo_version=$demo_version" >> "$GITHUB_OUTPUT"
           echo "published_at=$published_at" >> "$GITHUB_OUTPUT"
-          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
           echo "release_title_b64=$release_title_b64" >> "$GITHUB_OUTPUT"
           echo "public_base_path=$public_base_path" >> "$GITHUB_OUTPUT"
           echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
@@ -363,7 +383,7 @@ jobs:
 
       - name: Validate demo deployment credentials
         id: credentials
-        if: steps.meta.outcome == 'success'
+        if: steps.meta.outcome == 'success' && steps.meta.outputs.release_eligible == 'true'
         continue-on-error: true
         shell: bash
         env:
@@ -504,6 +524,7 @@ jobs:
           SETUP_NODE_OUTCOME: ${{ steps.setup_node.outcome }}
           DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
           META_OUTCOME: ${{ steps.meta.outcome }}
+          RELEASE_ELIGIBLE: ${{ steps.meta.outputs.release_eligible }}
           CREDENTIALS_OUTCOME: ${{ steps.credentials.outcome }}
           TOOLING_OUTCOME: ${{ steps.tooling.outcome }}
           STAGE_OUTCOME: ${{ steps.stage.outcome }}
@@ -521,6 +542,8 @@ jobs:
             stage="artifact-download-failed"
           elif [[ "$META_OUTCOME" != "success" ]]; then
             stage="metadata-failed"
+          elif [[ "$RELEASE_ELIGIBLE" != "true" ]]; then
+            stage="release-skipped"
           elif [[ "$CREDENTIALS_OUTCOME" != "success" ]]; then
             stage="credentials-failed"
           elif [[ "$TOOLING_OUTCOME" != "success" ]]; then
@@ -533,7 +556,7 @@ jobs:
             stage="public-verify-failed"
           fi
 
-          if [[ "$stage" == "verified" ]]; then
+          if [[ "$stage" == "verified" || "$stage" == "release-skipped" ]]; then
             state="success"
           else
             state="failure"
@@ -548,7 +571,7 @@ jobs:
 
           echo "demo deploy stage: $stage"
 
-          if [[ "$stage" != "verified" ]]; then
+          if [[ "$stage" != "verified" && "$stage" != "release-skipped" ]]; then
             exit 1
           fi
 
@@ -570,12 +593,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PACKAGE_RESULT: ${{ needs.package.result }}
           DEPLOY_RESULT: ${{ needs.deploy-demo.result }}
+          RELEASE_ELIGIBLE: ${{ needs.deploy-demo.outputs.release_eligible }}
         run: |
           set -euo pipefail
 
           if [[ "$PACKAGE_RESULT" != "success" ]]; then
             state="failure"
-            description="Windows package failed; demo not deployed"
+            description="Windows package failed; server release not published"
+          elif [[ "$DEPLOY_RESULT" == "success" && "$RELEASE_ELIGIBLE" != "true" ]]; then
+            state="success"
+            description="Server release skipped: commit is not Conventional"
           elif [[ "$DEPLOY_RESULT" == "success" ]]; then
             state="success"
             description="Demo server deployment verified"
