@@ -101,6 +101,10 @@ function setup(options: {
         read: false,
       },
     ]),
+    markNotificationsRead: vi.fn(async () => ({ success: true as const })),
+    addTreeRelation: vi.fn(async () => ({ success: true as const })),
+    deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+    saveTreePosition: vi.fn(async () => ({ success: true as const })),
     ensureSharedUser: vi.fn(async () => ({ serverUserId: options.ensureSharedUserResult ?? '88' })),
     createCircle: options.createCircleError
       ? vi.fn(async () => { throw options.createCircleError })
@@ -138,6 +142,7 @@ describe('CircleService', () => {
       circles: [],
       activeCircleId: null,
       viewerPersonId: null,
+      viewerIsOwner: false,
       tree: null,
       notifications: [],
     })
@@ -169,6 +174,7 @@ describe('CircleService', () => {
       status: 'ready',
       activeCircleId: 'g-2',
       viewerPersonId: 'user:88',
+      viewerIsOwner: true,
       circles: [
         { id: 'g-1', name: 'Test Family', role: 'Family member' },
         { id: 'g-2', name: 'Other Family', role: 'Circle owner' },
@@ -253,6 +259,12 @@ describe('CircleService', () => {
     await service.createCircle({ name: 'Kasule Family' })
     expect(circle.ensureSharedUser).not.toHaveBeenCalled()
     expect(circle.createCircle).toHaveBeenCalledWith({ serverUserId: '88', name: 'Kasule Family' })
+  })
+
+  it('marks notifications read using only the protected shared identity', async () => {
+    const { service, circle } = setup({ serverUserId: '88' })
+    await expect(service.markNotificationsRead()).resolves.toEqual({ success: true })
+    expect(circle.markNotificationsRead).toHaveBeenCalledWith('88')
   })
 
   it('allows only the actual Circle owner to invite and validates the fixed family role at runtime', async () => {
