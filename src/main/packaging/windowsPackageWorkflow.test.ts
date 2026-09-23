@@ -4,10 +4,16 @@ import { describe, expect, it } from 'vitest'
 
 const root = resolve(__dirname, '../../..')
 const workflowPath = resolve(root, '.github/workflows/windows-package.yml')
+const desktopWorkflowPath = resolve(root, '.github/workflows/desktop-shell-ci.yml')
 
 function workflow(): string {
   expect(existsSync(workflowPath)).toBe(true)
   return readFileSync(workflowPath, 'utf8').replace(/\r\n/g, '\n')
+}
+
+function desktopWorkflow(): string {
+  expect(existsSync(desktopWorkflowPath)).toBe(true)
+  return readFileSync(desktopWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
 }
 
 describe('Windows packaging workflow', () => {
@@ -74,7 +80,17 @@ describe('Windows packaging workflow', () => {
     expect(validateBlock).toContain('$expectedTag = "v$packageVersion"')
     expect(validateBlock).toContain('git merge-base --is-ancestor $env:GITHUB_SHA origin/main')
     expect(validateBlock).toContain('Release tags must point to merged main history')
+    expect(validateBlock).toContain("^(feat|fix|perf|refactor|chore|ci|docs)")
+    expect(validateBlock).toContain('Formal releases require feat, fix, perf, refactor, chore, ci, or docs')
     expect(validateBlock).toContain('must be newer than existing stable tag')
+  })
+
+  it('requires approved Conventional Commit titles on pull requests', () => {
+    const source = desktopWorkflow()
+    expect(source).toContain('name: Validate Conventional Commit PR title')
+    expect(source).toContain('PR_TITLE: ${{ github.event.pull_request.title }}')
+    expect(source).toContain('feat|fix|perf|refactor|chore|ci|docs)')
+    expect(source).toContain('PR title must use an approved Conventional Commit type')
   })
 
   it('keeps content writes isolated to release while allowing package status reporting', () => {
