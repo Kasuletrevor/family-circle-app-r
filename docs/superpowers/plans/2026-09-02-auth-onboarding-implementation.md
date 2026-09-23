@@ -17,7 +17,7 @@
 - Use built-in `node:sqlite`; do not add `better-sqlite3` or another native SQLite dependency.
 - Preserve old bcrypt hashes; newly written passwords remain bcrypt compatible.
 - Password length is 12-72 characters.
-- Persistent sessions expire after 30 days.
+- Persistent sessions expire after 1 day.
 - Renderer never receives a session credential, password hash, Circle API key, raw Circle URL, or database handle.
 - Do not store auth state in renderer `localStorage` or `sessionStorage`.
 - Only `LegacyCircleAuthAdapter` may know current Circle auth/onboarding paths or `X-Kin-Keepers-Key`.
@@ -357,7 +357,7 @@ git commit -m "feat: add local user repository"
 
 ---
 
-### Task 4: Protected 30-Day Session Store
+### Task 4: Protected 1-Day Session Store
 
 **Files:**
 - Create `src/main/auth/SessionStore.ts`, `SessionStore.test.ts`
