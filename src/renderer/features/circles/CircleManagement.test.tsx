@@ -31,6 +31,7 @@ const memberDetails: CircleManagementSnapshot = {
 
 function service(overrides: Partial<CircleClient> = {}): CircleClient {
   return {
+    getOverview: vi.fn(),
     getHomeSnapshot: vi.fn(),
     getMyCircles: vi.fn(async () => []),
     getCircleDetails: vi.fn(async () => ownerDetails),
@@ -38,6 +39,10 @@ function service(overrides: Partial<CircleClient> = {}): CircleClient {
     selectCircle: vi.fn(async () => undefined),
     createCircle: vi.fn(async () => ({ circleId: 'g-new' })),
     inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
+    addTreeRelation: vi.fn(async () => ({ success: true as const })),
+    deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+    saveTreePosition: vi.fn(async () => ({ success: true as const })),
+    markNotificationsRead: vi.fn(async () => undefined),
     resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
     cancelInvitation: vi.fn(async () => undefined),
     removeMember: vi.fn(async () => undefined),
