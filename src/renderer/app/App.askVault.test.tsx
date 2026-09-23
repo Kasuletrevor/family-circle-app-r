@@ -36,7 +36,7 @@ describe('/ai route', () => {
     render(
       <MemoryRouter initialEntries={['/ai']}>
         <AppServicesProvider services={{ circle: new MockCircleClient() }}>
-          <App user={user} />
+          <App user={user} onSignOut={async () => undefined} />
         </AppServicesProvider>
       </MemoryRouter>,
     )
