@@ -118,6 +118,11 @@
   height: 7px;
   margin-right: 5px;
   border-radius: 50%;
+  background: #9aa5b5;
+}
+
+.ai-runtime-card__status--ready i,
+.profile-button__copy i {
   background: #33c36b;
 }
 
@@ -130,7 +135,7 @@
 
 .top-bar {
   display: grid;
-  grid-template-columns: minmax(190px, 0.7fr) minmax(320px, 1.3fr) minmax(270px, 0.8fr);
+  grid-template-columns: minmax(190px, 1fr) minmax(270px, auto);
   align-items: center;
   gap: 22px;
   padding: 0 24px;
@@ -139,8 +144,7 @@
 }
 
 .circle-switcher,
-.profile-button,
-.icon-button {
+.profile-button {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -159,8 +163,7 @@
 }
 
 .circle-switcher:hover,
-.profile-button:hover,
-.icon-button:hover {
+.profile-button:hover {
   background: var(--kk-cool-tint);
 }
 
@@ -177,78 +180,11 @@
   font-weight: 800;
 }
 
-.global-search {
-  display: grid;
-  width: min(100%, 520px);
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  justify-self: center;
-  padding: 0 12px;
-  border: 1px solid var(--kk-border);
-  border-radius: 11px;
-  color: #758195;
-  background: #fbfcfe;
-}
-
-.global-search:focus-within {
-  border-color: rgba(14, 159, 154, 0.55);
-  box-shadow: var(--kk-focus);
-}
-
-.global-search input {
-  min-width: 0;
-  height: 39px;
-  border: 0;
-  color: var(--kk-text);
-  background: transparent;
-  font-size: 12.5px;
-}
-
-.global-search input::placeholder {
-  color: #98a2b3;
-}
-
-.global-search kbd {
-  padding: 3px 6px;
-  border: 1px solid #dce2ea;
-  border-radius: 5px;
-  color: #8290a4;
-  background: white;
-  font-size: 9.5px;
-}
-
 .top-bar__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-}
-
-.icon-button {
-  position: relative;
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 10px;
-  color: var(--kk-navy);
-}
-
-.notification-button__badge {
-  position: absolute;
-  top: 3px;
-  right: 2px;
-  display: grid;
-  width: 16px;
-  height: 16px;
-  place-items: center;
-  border: 2px solid white;
-  border-radius: 50%;
-  color: white;
-  background: var(--kk-teal);
-  font-size: 8px;
-  font-weight: 800;
 }
 
 .profile-menu {
@@ -438,7 +374,7 @@
   }
 
   .top-bar {
-    grid-template-columns: 185px minmax(260px, 1fr) 240px;
+    grid-template-columns: minmax(185px, 1fr) auto;
     gap: 12px;
     padding: 0 16px;
   }

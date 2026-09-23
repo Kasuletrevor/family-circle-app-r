@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bell, ChevronDown, LogOut, Search } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, LogOut } from 'lucide-react'
 import type { AuthUser } from '../../shared/desktopApi'
 import type { ShellSnapshot } from '../services/circle/types'
 import { useAppServices } from './services'
@@ -13,6 +14,7 @@ function initials(name: string): string {
 
 export function TopBar({ user, onSignOut }: { user: AuthUser; onSignOut: () => Promise<void> }) {
   const { circle } = useAppServices()
+  const navigate = useNavigate()
   const [shell, setShell] = useState<ShellSnapshot | null>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -35,38 +37,21 @@ export function TopBar({ user, onSignOut }: { user: AuthUser; onSignOut: () => P
   const activeCircleName = shell?.activeCircleName ?? null
   const circleLabel = shell === null ? 'Loading Circle…' : activeCircleName || 'No Circle yet'
   const circleInitial = activeCircleName?.trim().charAt(0).toUpperCase() || '+'
-  const unreadNotifications = shell?.unreadNotifications ?? 0
-  const notificationLabel = unreadNotifications > 0
-    ? `Notifications, ${unreadNotifications} unread`
-    : 'Notifications'
 
   return (
     <header className="top-bar">
-      <button className="circle-switcher" type="button" aria-label="Select active family circle">
+      <button
+        className="circle-switcher"
+        type="button"
+        aria-label="Choose active family circle"
+        onClick={() => navigate('/circles')}
+      >
         <span className="circle-switcher__mark">{circleInitial}</span>
         <span>{circleLabel}</span>
         <ChevronDown size={15} aria-hidden="true" />
       </button>
 
-      <label className="global-search">
-        <Search size={18} aria-hidden="true" />
-        <span className="sr-only">Search Family Circle</span>
-        <input
-          type="search"
-          aria-label="Search Family Circle"
-          placeholder="Search people, stories, documents…"
-        />
-        <kbd>Ctrl + K</kbd>
-      </label>
-
       <div className="top-bar__actions">
-        <button className="icon-button notification-button" type="button" aria-label={notificationLabel}>
-          <Bell size={19} aria-hidden="true" />
-          {unreadNotifications > 0 ? (
-            <span className="notification-button__badge">{unreadNotifications}</span>
-          ) : null}
-        </button>
-
         <div className="profile-menu">
           <button
             className="profile-button"

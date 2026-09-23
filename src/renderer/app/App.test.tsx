@@ -9,14 +9,11 @@ import { AppServicesProvider } from './services'
 const navigationLabels = [
   'Home',
   'My Circles',
-  'Family Tree',
   'Members',
   'Invitations',
   'Stories',
   'Vault',
-  'Memories',
   'AI Assistant',
-  'Settings',
 ]
 
 const user: AuthUser = {
@@ -43,11 +40,25 @@ describe('App shell', () => {
           deleteDocument: async () => ({ success: true }),
           onUploadProgress: () => () => undefined,
         },
+        privateAi: {
+          getStatus: async () => ({
+            state: 'ready',
+            ready: true,
+            repairRequired: false,
+            totalSizeBytes: 0,
+            version: 'test',
+            message: null,
+          }),
+          startSetup: async () => { throw new Error('not used') },
+          pauseSetup: async () => { throw new Error('not used') },
+          repair: async () => { throw new Error('not used') },
+          onProgress: () => () => undefined,
+        },
       },
     })
 
     render(
-      <MemoryRouter initialEntries={['/family-tree']}>
+      <MemoryRouter initialEntries={['/']}>
         <AppServicesProvider services={{ circle: new MockCircleClient() }}>
           <App user={user} onSignOut={onSignOut} />
         </AppServicesProvider>
@@ -59,11 +70,13 @@ describe('App shell', () => {
       expect(primaryNavigation.getByRole('link', { name: label })).toBeInTheDocument()
     }
 
-    expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('heading', { name: 'Family Tree' })).toBeInTheDocument()
-    expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Choose active family circle' })).toHaveTextContent('Kasule Family')
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
-    expect(screen.getByRole('searchbox', { name: /search family circle/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Family Tree' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Memories' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
+    expect(screen.queryByRole('searchbox', { name: /search family circle/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /notifications/i })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }))
     expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument()

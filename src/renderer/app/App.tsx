@@ -6,16 +6,10 @@ import { Home } from '../features/home/Home'
 import { MyStory } from '../features/story/MyStory'
 import { AskVault } from '../features/vault/AskVault'
 import { Vault } from '../features/vault/Vault'
-import { PlaceholderPage } from './PlaceholderPage'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import './App.css'
 
-const placeholderRoutes = [
-  { path: '/family-tree', title: 'Family Tree' },
-  { path: '/memories', title: 'Memories' },
-  { path: '/settings', title: 'Settings' },
-] as const
 
 export function AuthenticatedApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => Promise<void> }) {
   return (
@@ -32,9 +26,6 @@ export function AuthenticatedApp({ user, onSignOut }: { user: AuthUser; onSignOu
             <Route path="/stories" element={<MyStory />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/ai" element={<AskVault />} />
-            {placeholderRoutes.map(({ path, title }) => (
-              <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
-            ))}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
