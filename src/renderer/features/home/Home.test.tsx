@@ -98,6 +98,15 @@ describe('Home', () => {
       .mockResolvedValueOnce(snapshot)
 
     renderHome({
+      getOverview: vi.fn(async () => ({
+        status: 'empty',
+        reason: 'no-circles',
+        circles: [],
+        activeCircleId: null,
+        viewerPersonId: null,
+        tree: null,
+        notifications: [],
+      } satisfies CircleOverview)),
       getHomeSnapshot,
       getMyCircles: vi.fn(async () => [snapshot.activeCircle]),
       getCircleDetails: vi.fn(async () => null),
@@ -105,10 +114,10 @@ describe('Home', () => {
       selectCircle: vi.fn(async () => undefined),
       createCircle: vi.fn(async () => ({ circleId: snapshot.activeCircle.id })),
       inviteMember: vi.fn(async () => ({ outcome: 'sent' as const })),
-    addTreeRelation: vi.fn(async () => ({ success: true as const })),
-    deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
-    saveTreePosition: vi.fn(async () => ({ success: true as const })),
-    markNotificationsRead: vi.fn(async () => undefined),
+      addTreeRelation: vi.fn(async () => ({ success: true as const })),
+      deleteTreeRelation: vi.fn(async () => ({ success: true as const })),
+      saveTreePosition: vi.fn(async () => ({ success: true as const })),
+      markNotificationsRead: vi.fn(async () => undefined),
       resendInvitation: vi.fn(async () => ({ outcome: 'sent' as const })),
       cancelInvitation: vi.fn(async () => undefined),
       removeMember: vi.fn(async () => undefined),
