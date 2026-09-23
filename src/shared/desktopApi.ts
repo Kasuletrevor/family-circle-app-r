@@ -198,7 +198,7 @@ export type CircleOverview =
       circles: CircleGroupRecord[]
       activeCircleId: null
       viewerPersonId: null
-      viewerIsOwner: false
+      viewerIsOwner?: false
       tree: null
       notifications: CircleNotificationRecord[]
     }
@@ -207,7 +207,7 @@ export type CircleOverview =
       circles: CircleGroupRecord[]
       activeCircleId: string
       viewerPersonId: string | null
-      viewerIsOwner: boolean
+      viewerIsOwner?: boolean
       tree: CircleTreeRecord
       notifications: CircleNotificationRecord[]
     }
