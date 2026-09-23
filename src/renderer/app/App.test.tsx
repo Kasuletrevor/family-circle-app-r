@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AuthUser } from '../../shared/desktopApi'
 import { MockCircleClient } from '../services/circle/MockCircleClient'
 import { App } from './App'
@@ -29,7 +29,9 @@ const user: AuthUser = {
 }
 
 describe('App shell', () => {
-  it('renders stable desktop navigation and routes /vault to the real private Vault screen', async () => {
+  it('renders stable desktop navigation, exposes logout, and routes /vault to the real private Vault screen', async () => {
+    const onSignOut = vi.fn(async () => undefined)
+
     Object.defineProperty(window, 'familyCircle', {
       configurable: true,
       value: {
@@ -47,7 +49,7 @@ describe('App shell', () => {
     render(
       <MemoryRouter initialEntries={['/family-tree']}>
         <AppServicesProvider services={{ circle: new MockCircleClient() }}>
-          <App user={user} />
+          <App user={user} onSignOut={onSignOut} />
         </AppServicesProvider>
       </MemoryRouter>,
     )
@@ -62,6 +64,12 @@ describe('App shell', () => {
     expect(await screen.findByText('Kasule Family')).toBeInTheDocument()
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: /search family circle/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }))
+    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument()
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    expect(onSignOut).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Ready (Offline)')).toBeInTheDocument()
     expect(primaryNavigation.getByRole('link', { name: 'Invitations' }).querySelector('.sidebar-link__badge')).toBeNull()
 
@@ -113,7 +121,7 @@ describe('App shell', () => {
     render(
       <MemoryRouter initialEntries={['/stories']}>
         <AppServicesProvider services={{ circle: new MockCircleClient() }}>
-          <App user={user} />
+          <App user={user} onSignOut={vi.fn(async () => undefined)} />
         </AppServicesProvider>
       </MemoryRouter>,
     )
