@@ -16,7 +16,9 @@
 
 .my-story__header h1,
 .my-story__memory h2,
-.my-story__chapter h2 {
+.my-story__chapter h2,
+.my-story__review h2,
+.my-story__history h2 {
   margin: 0;
 }
 
@@ -101,7 +103,9 @@
 }
 
 .my-story__guided,
-.my-story__chapter-list {
+.my-story__chapter-list,
+.my-story__review,
+.my-story__history {
   display: grid;
   gap: 1rem;
 }
@@ -112,7 +116,9 @@
   font-size: 0.875rem;
 }
 
-.my-story__memory {
+.my-story__memory,
+.my-story__review-memory,
+.my-story__history-card {
   display: grid;
   gap: 1rem;
   border: 1px solid #e2e6ed;
@@ -154,7 +160,8 @@
 
 .my-story__memory input,
 .my-story__memory textarea,
-.my-story__memory select {
+.my-story__memory select,
+.my-story__review input {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid #d8dde6;
@@ -173,6 +180,7 @@
 .my-story__memory input:focus,
 .my-story__memory textarea:focus,
 .my-story__memory select:focus,
+.my-story__review input:focus,
 .my-story button:focus-visible {
   outline: 3px solid rgba(71, 88, 214, 0.2);
   outline-offset: 2px;
@@ -220,7 +228,9 @@
   font-size: 0.85rem;
 }
 
-.my-story__actions {
+.my-story__actions,
+.my-story__media-actions,
+.my-story__media-toolbar > div {
   display: flex;
   gap: 0.5rem;
 }
@@ -241,14 +251,168 @@
   color: #4d5765;
 }
 
+.my-story__review-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.my-story__review-toolbar label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 16rem;
+  color: #646f7e;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.my-story__review-section {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.my-story__review-memory h3,
+.my-story__history-card h3 {
+  margin: 0;
+}
+
+.my-story__review-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
+
+.my-story__review-attachments,
+.my-story__media-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.my-story__review-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  color: #65707e;
+  font-size: 0.82rem;
+}
+
+.my-story__review-attachments li {
+  border-radius: 999px;
+  background: #f1f3f7;
+  padding: 0.3rem 0.55rem;
+}
+
+.my-story__history-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.my-story__history-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.my-story__history-card p {
+  margin: 0.25rem 0 0;
+  color: #67717f;
+}
+
+.my-story__empty {
+  border: 1px dashed #d8dde6;
+  border-radius: 0.8rem;
+  padding: 1rem;
+  color: #6c7684;
+}
+
+.my-story__media {
+  display: grid;
+  gap: 0.65rem;
+  border-top: 1px solid #edf0f4;
+  padding-top: 0.9rem;
+}
+
+.my-story__media-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #626d7b;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.my-story__media-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.my-story__media-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  background: #f7f8fa;
+  padding: 0.7rem;
+}
+
+.my-story__media-list li > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.my-story__media-list strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-story__media-list span {
+  color: #77818f;
+  font-size: 0.78rem;
+}
+
+.my-story__voice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.my-story__voice span {
+  color: #596575;
+  font-size: 0.85rem;
+}
+
+.my-story__voice [role='alert'],
+.my-story__media [role='alert'] {
+  margin: 0;
+  color: #a33d3d;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 760px) {
   .my-story__header,
-  .my-story__memory-footer {
+  .my-story__memory-footer,
+  .my-story__review-toolbar,
+  .my-story__media-toolbar,
+  .my-story__media-list li {
     align-items: stretch;
     flex-direction: column;
   }
 
   .my-story__save-area {
     justify-content: space-between;
+  }
+
+  .my-story__review-toolbar label {
+    min-width: 0;
+  }
+
+  .my-story__history-card {
+    grid-template-columns: 1fr;
   }
 }
