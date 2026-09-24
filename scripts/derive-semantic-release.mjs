@@ -2,6 +2,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, readFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 const APPROVED_TYPES = new Set(['feat', 'fix', 'perf', 'refactor', 'chore', 'ci', 'docs'])
 const IMPACT_ORDER = { patch: 1, minor: 2, major: 3 }
@@ -135,7 +136,7 @@ async function main() {
   )
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     process.exitCode = 1
