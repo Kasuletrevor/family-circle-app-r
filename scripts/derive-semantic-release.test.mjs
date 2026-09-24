@@ -45,6 +45,18 @@ describe('semantic release derivation', () => {
     expect(bumpVersion(base, impact)).toBe(expected)
   })
 
+  it('bootstraps the first automatic release as minor when the unreleased range contains Family Tree feat', () => {
+    expect(deriveNextRelease({
+      baseVersion: '0.1.0',
+      subjects: [
+        'feat: ship Family Tree, notifications, and Circle switcher (#41)',
+        'fix: host Private AI assets on own server + harden downloader',
+        'ci: automate semantic versions and release tags (#42)',
+        'fix: publish the first semantic release',
+      ],
+    })).toEqual({ impact: 'minor', version: '0.2.0' })
+  })
+
   it('uses the highest release impact across all commits since the previous tag', () => {
     expect(deriveNextRelease({
       baseVersion: '0.1.0',
