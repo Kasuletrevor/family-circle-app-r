@@ -55,7 +55,100 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  recover-pending-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Recover verified server release if finalization was interrupted
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          current_url="https://familycircle.o2gventures.com/electron-releases/demo/current.json"
+          if ! curl --fail --location --silent --show-error --retry 5 --retry-delay 2             -H 'Cache-Control: no-cache' "${current_url}?recover=${GITHUB_SHA:0:12}"             -o /tmp/current-release.json; then
+            echo "No recoverable server release metadata; continuing."
+            exit 0
+          fi
+
+          readarray -t meta < <(node - <<'NODE'
+          const fs = require('node:fs')
+          const current = JSON.parse(fs.readFileSync('/tmp/current-release.json', 'utf8'))
+          const values = [
+            String(current.version || ''),
+            String(current.tag || ''),
+            String(current.commit || ''),
+            String(current.sha256 || ''),
+            String(current.installer || ''),
+          ]
+          for (const value of values) console.log(value)
+          NODE
+          )
+
+          version="${meta[0]:-}"
+          tag="${meta[1]:-}"
+          commit="${meta[2]:-}"
+          sha256="${meta[3]:-}"
+          installer_path="${meta[4]:-}"
+
+          if [[ -z "$tag" ]]; then
+            echo "Current server release predates semantic tags; nothing to recover."
+            exit 0
+          fi
+
+          [[ "$tag" =~ ^v[0-9]+.[0-9]+.[0-9]+$ ]] || { echo "Unsafe recoverable tag: $tag" >&2; exit 1; }
+          [[ "$version" == "${tag#v}" ]] || { echo "Server version/tag mismatch: $version vs $tag" >&2; exit 1; }
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "Unsafe recoverable commit: $commit" >&2; exit 1; }
+          [[ "$sha256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "Unsafe recoverable checksum" >&2; exit 1; }
+          [[ "$installer_path" == /electron-releases/demo/latest/Family-Circle-Setup-"$version".exe ]] || {
+            echo "Unexpected recoverable installer path: $installer_path" >&2
+            exit 1
+          }
+
+          existing_sha=""
+          if existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$existing_sha" != "$commit" ]]; then
+              echo "Tag $tag already points to $existing_sha instead of verified commit $commit" >&2
+              exit 1
+            fi
+          else
+            existing_sha=""
+          fi
+
+          installer="/tmp/Family-Circle-Setup-$version.exe"
+          checksum_path="$installer.sha256"
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors             -H 'Cache-Control: no-cache'             "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}"             -o "$installer"
+
+          actual_sha="$(sha256sum "$installer" | awk '{print $1}')"
+          if [[ "${actual_sha,,}" != "${sha256,,}" ]]; then
+            echo "Recoverable installer checksum mismatch" >&2
+            exit 1
+          fi
+          printf '%s  %s
+' "${sha256,,}" "$(basename "$installer")" > "$checksum_path"
+
+          if [[ -z "$existing_sha" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs"               -f "ref=refs/tags/$tag"               -f "sha=$commit" >/dev/null
+            echo "Recovered $tag -> $commit"
+          else
+            echo "Tag $tag already points to verified commit $commit."
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$installer" "$checksum_path" --clobber
+          else
+            gh release create "$tag"               --verify-tag               --target "$commit"               --title "Family Circle $tag"               --generate-notes               "$installer" "$checksum_path"
+          fi
+
+          echo "Verified semantic release finalization for $tag."
+
   package:
+    needs: recover-pending-release
+    if: ${{ always() && (needs.recover-pending-release.result == 'success' || needs.recover-pending-release.result == 'skipped') }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -556,10 +649,14 @@ jobs:
           checksum_path="$installer.sha256"
           printf '%s  %s\n' "$checksum" "$(basename "$installer")" > "$checksum_path"
 
-          existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
-          if [[ -n "$existing_sha" && "$existing_sha" != "$GITHUB_SHA" ]]; then
-            echo "Release tag $RELEASE_TAG already points to $existing_sha instead of $GITHUB_SHA" >&2
-            exit 1
+          existing_sha=""
+          if existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$existing_sha" != "$GITHUB_SHA" ]]; then
+              echo "Release tag $RELEASE_TAG already points to $existing_sha instead of $GITHUB_SHA" >&2
+              exit 1
+            fi
+          else
+            existing_sha=""
           fi
 
           if [[ -z "$existing_sha" ]]; then
