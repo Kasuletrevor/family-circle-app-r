@@ -71,6 +71,26 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('release/Family-Circle-Setup-*.exe')
   })
 
+  it('recovers a publicly verified release before calculating the next main version', () => {
+    const source = workflow()
+    const recoveryStart = source.indexOf('  recover-pending-release:\n')
+    const packageStart = source.indexOf('  package:\n')
+
+    expect(recoveryStart).toBeGreaterThanOrEqual(0)
+    expect(packageStart).toBeGreaterThan(recoveryStart)
+    const recoveryBlock = source.slice(recoveryStart, packageStart)
+
+    expect(recoveryBlock).toContain("github.ref == 'refs/heads/main'")
+    expect(recoveryBlock).toContain('contents: write')
+    expect(recoveryBlock).toContain('electron-releases/demo/current.json')
+    expect(recoveryBlock).toContain('Recoverable installer checksum mismatch')
+    expect(recoveryBlock).toContain('refs/tags/$tag')
+    expect(recoveryBlock).toContain('gh release create "$tag"')
+    expect(source).toContain('needs: recover-pending-release')
+    expect(source).toContain("needs.recover-pending-release.result == 'success'")
+    expect(source).toContain("needs.recover-pending-release.result == 'skipped'")
+  })
+
   it('creates the immutable tag and GitHub Release only after verified server deployment', () => {
     const source = workflow()
     const finalizeStart = source.indexOf('  finalize-release:\n')
@@ -84,6 +104,7 @@ describe('Windows packaging workflow', () => {
     expect(finalizeBlock).toContain('contents: write')
     expect(finalizeBlock).toContain('actions/download-artifact@v8')
     expect(finalizeBlock).toContain('git/ref/tags/$RELEASE_TAG')
+    expect(finalizeBlock).toContain('if existing_sha="$(gh api')
     expect(finalizeBlock).toContain('refs/tags/$RELEASE_TAG')
     expect(finalizeBlock).toContain('gh release create "$RELEASE_TAG"')
     expect(finalizeBlock).toContain('--generate-notes')
