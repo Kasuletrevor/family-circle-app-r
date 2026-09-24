@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url'
 
 const APPROVED_TYPES = new Set(['feat', 'fix', 'perf', 'refactor', 'chore', 'ci', 'docs'])
 const IMPACT_ORDER = { patch: 1, minor: 2, major: 3 }
+const INITIAL_BASELINE_VERSION = '0.1.0'
+const INITIAL_BASELINE_COMMIT = '2e85ed47821928a2f6a2bd922f2836b56197ce22'
 
 export function parseSemver(value) {
   const match = String(value ?? '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/)
@@ -95,11 +97,16 @@ async function main() {
   const tags = stableMergedTags()
   const latest = tags.at(-1) ?? null
 
-  const baseVersion = latest?.parsed.version ?? packageVersion
+  const baseVersion = latest?.parsed.version ?? INITIAL_BASELINE_VERSION
   const baseTag = latest?.tag ?? ''
-  const subjects = latest
-    ? git(['log', '--reverse', '--format=%s', `${latest.tag}..HEAD`]).split(/\r?\n/).filter(Boolean)
-    : [subject]
+  const baselineRef = latest?.tag ?? INITIAL_BASELINE_COMMIT
+  const subjects = git(['log', '--reverse', '--format=%s', `${baselineRef}..HEAD`]).split(/\r?\n/).filter(Boolean)
+
+  if (!latest && packageVersion !== INITIAL_BASELINE_VERSION) {
+    throw new Error(
+      `Expected checked-in package baseline ${INITIAL_BASELINE_VERSION} before first semantic tag, got ${packageVersion}`,
+    )
+  }
 
   if (!current.eligible) {
     const output = {
@@ -132,7 +139,7 @@ async function main() {
   for (const [name, value] of Object.entries(output)) writeOutput(name, value)
 
   process.stdout.write(
-    `Semantic release: ${baseTag || `package@${baseVersion}`} -> ${tag} (${next.impact}) from '${subject}'.\n`,
+    `Semantic release: ${baseTag || `bootstrap@${INITIAL_BASELINE_COMMIT.slice(0, 7)}`} ${baseVersion} -> ${tag} (${next.impact}) from '${subject}'.\n`,
   )
 }
 

@@ -89,18 +89,6 @@ jobs:
         shell: pwsh
         run: node scripts/derive-semantic-release.mjs
 
-      - name: Apply semantic version to package workspace
-        id: package_apply_version
-        if: steps.semantic_release.outputs.release_eligible == 'true'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = '${{ steps.semantic_release.outputs.release_version }}'
-          npm version $version --no-git-tag-version --allow-same-version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $actual = node -p "require('./package.json').version"
-          if ($actual -ne $version) { throw "Expected package version $version, got $actual" }
-          Write-Host "Packaging Family Circle $version"
       - name: Install dependencies
         id: package_install
         run: npm ci --no-audit
@@ -119,6 +107,19 @@ jobs:
       - name: Verify application
         id: package_verify_application
         run: npm run check
+
+      - name: Apply semantic version to package workspace
+        id: package_apply_version
+        if: steps.semantic_release.outputs.release_eligible == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ steps.semantic_release.outputs.release_version }}'
+          npm version $version --no-git-tag-version --allow-same-version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $actual = node -p "require('./package.json').version"
+          if ($actual -ne $version) { throw "Expected package version $version, got $actual" }
+          Write-Host "Packaging Family Circle $version"
 
       - name: Generate demo mail config
         id: package_write_mail
@@ -195,14 +196,14 @@ jobs:
             $stage = 'setup-node-failed'
           } elseif ($env:SEMANTIC_OUTCOME -ne 'success') {
             $stage = 'semantic-version-failed'
-          } elseif ($env:RELEASE_ELIGIBLE -eq 'true' -and $env:APPLY_VERSION_OUTCOME -ne 'success') {
-            $stage = 'apply-version-failed'
           } elseif ($env:INSTALL_OUTCOME -ne 'success') {
             $stage = 'install-dependencies-failed'
           } elseif ($env:VERIFY_MAIL_OUTCOME -ne 'success') {
             $stage = 'mail-config-failed'
           } elseif ($env:VERIFY_APP_OUTCOME -ne 'success') {
             $stage = 'verify-application-failed'
+          } elseif ($env:RELEASE_ELIGIBLE -eq 'true' -and $env:APPLY_VERSION_OUTCOME -ne 'success') {
+            $stage = 'apply-version-failed'
           } elseif ($env:WRITE_MAIL_OUTCOME -ne 'success') {
             $stage = 'write-mail-config-failed'
           } elseif ($env:WRITE_CIRCLE_OUTCOME -ne 'success') {

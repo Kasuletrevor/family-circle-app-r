@@ -46,7 +46,14 @@ v0.2.1 + feat: ...  -> v0.3.0
 v0.3.0 + fix!: ...  -> v1.0.0
 ```
 
-If the repository has no stable tag yet, the checked-in `package.json` version is used only as the initial baseline.
+Because the automatic release system was introduced after several verified `0.1.0` demo builds already existed, the first semantic release has a one-time bootstrap boundary:
+
+- baseline version: `0.1.0`
+- baseline commit: `2e85ed47821928a2f6a2bd922f2836b56197ce22` (the last successful pre-Family-Tree release)
+
+When no stable tag exists yet, the engine evaluates Conventional Commits after that commit. This intentionally includes the Family Tree `feat:` release, so the first automatic release is `v0.2.0`, not `v0.1.1`.
+
+Once `v0.2.0` exists, the bootstrap commit is ignored and all future versions are derived exclusively from stable tags.
 
 ## Single-build release pipeline
 
@@ -54,8 +61,8 @@ For an eligible `main` commit, `.github/workflows/windows-package.yml` performs 
 
 1. checkout with full tag history
 2. derive the next semantic version and planned tag
-3. apply that version only inside the CI workspace with `npm version --no-git-tag-version`
-4. install dependencies and run the full application verification
+3. install dependencies and run the full application verification against the checked-in source version
+4. only after verification passes, apply the derived version inside the CI workspace with `npm version --no-git-tag-version`
 5. generate the temporary demo/runtime compatibility configuration
 6. build the Windows x64 NSIS installer once
 7. verify the package and require exactly one installer

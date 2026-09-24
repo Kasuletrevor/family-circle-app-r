@@ -29,16 +29,18 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('Family-Circle-Setup-*.exe')
   })
 
-  it('derives and applies the semantic version before dependency install and packaging', () => {
+  it('derives the semantic version early but applies it only after application verification', () => {
     const source = workflow()
     const deriveStart = source.indexOf('- name: Derive semantic release version')
     const applyStart = source.indexOf('- name: Apply semantic version to package workspace')
     const installStart = source.indexOf('- name: Install dependencies')
+    const verifyStart = source.indexOf('- name: Verify application')
 
     expect(source).toContain('fetch-depth: 0')
     expect(deriveStart).toBeGreaterThanOrEqual(0)
-    expect(applyStart).toBeGreaterThan(deriveStart)
-    expect(installStart).toBeGreaterThan(applyStart)
+    expect(installStart).toBeGreaterThan(deriveStart)
+    expect(verifyStart).toBeGreaterThan(installStart)
+    expect(applyStart).toBeGreaterThan(verifyStart)
     expect(source).toContain('node scripts/derive-semantic-release.mjs')
     expect(source).toContain("steps.semantic_release.outputs.release_eligible == 'true'")
     expect(source).toContain('npm version $version --no-git-tag-version --allow-same-version')
