@@ -630,6 +630,11 @@ jobs:
       statuses: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download verified Windows installer
         uses: actions/download-artifact@v8
         with:
