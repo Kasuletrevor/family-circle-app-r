@@ -104,6 +104,8 @@ describe('Windows packaging workflow', () => {
     expect(finalizeBlock).toContain('needs:\n      - package\n      - deploy-demo')
     expect(finalizeBlock).toContain("needs.deploy-demo.result == 'success'")
     expect(finalizeBlock).toContain('contents: write')
+    expect(finalizeBlock).toContain('actions/checkout@v7')
+    expect(finalizeBlock).toContain('fetch-depth: 0')
     expect(finalizeBlock).toContain('actions/download-artifact@v8')
     expect(finalizeBlock).toContain('git/ref/tags/$RELEASE_TAG')
     expect(finalizeBlock).toContain('if existing_sha="$(gh api')
