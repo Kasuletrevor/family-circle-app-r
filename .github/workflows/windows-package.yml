@@ -6,8 +6,6 @@ on:
     branches:
       - main
       - feature/windows-packaging-release
-    tags:
-      - 'v*'
     paths:
       - 'src/**'
       - 'public/**'
@@ -31,6 +29,7 @@ on:
       - 'config/offline-voice-manifest.json'
       - 'third_party/whisper.cpp-LICENSE.txt'
       - 'scripts/verify-package.mjs'
+      - 'scripts/derive-semantic-release*.mjs'
       - 'scripts/verify-mail-api-config.mjs'
       - 'scripts/write-demo-mail-config.mjs'
       - 'scripts/write-demo-circle-config.mjs'
@@ -53,7 +52,7 @@ permissions:
 
 concurrency:
   group: windows-package-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   package:
@@ -61,6 +60,14 @@ jobs:
     permissions:
       contents: read
       statuses: write
+    outputs:
+      release_eligible: ${{ steps.semantic_release.outputs.release_eligible }}
+      release_type: ${{ steps.semantic_release.outputs.release_type }}
+      release_impact: ${{ steps.semantic_release.outputs.release_impact }}
+      release_version: ${{ steps.semantic_release.outputs.release_version }}
+      release_tag: ${{ steps.semantic_release.outputs.release_tag }}
+      release_base_tag: ${{ steps.semantic_release.outputs.release_base_tag }}
+      release_title_b64: ${{ steps.semantic_release.outputs.release_title_b64 }}
 
     steps:
       - name: Checkout repository
@@ -76,52 +83,24 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Derive semantic release version
+        id: semantic_release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: node scripts/derive-semantic-release.mjs
+
+      - name: Apply semantic version to package workspace
+        id: package_apply_version
+        if: steps.semantic_release.outputs.release_eligible == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
-          $tag = '${{ github.ref_name }}'
-          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-            throw "Release tag must be stable SemVer in the form vMAJOR.MINOR.PATCH; got '$tag'."
-          }
-
-          $packageVersion = node -p "require('./package.json').version"
-          $expectedTag = "v$packageVersion"
-          if ($tag -ne $expectedTag) {
-            throw "Release tag '$tag' does not match package.json version '$packageVersion'. Expected '$expectedTag'."
-          }
-
-          git fetch origin main --no-tags
+          $version = '${{ steps.semantic_release.outputs.release_version }}'
+          npm version $version --no-git-tag-version --allow-same-version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
-          if ($LASTEXITCODE -ne 0) {
-            throw "Tagged commit $env:GITHUB_SHA is not contained in main. Release tags must point to merged main history."
-          }
-
-          $releaseTitle = (git log -1 --format=%s $env:GITHUB_SHA).Trim()
-          if ($releaseTitle -notmatch '^(feat|fix|perf|refactor|chore|ci|docs)(\([^)]+\))?!?:\s+.+$') {
-            throw "Tagged commit subject '$releaseTitle' is not an approved Conventional Commit. Formal releases require feat, fix, perf, refactor, chore, ci, or docs."
-          }
-
-          $currentVersion = [version]$packageVersion
-          $previousVersions = @(
-            git tag --list 'v*' |
-              Where-Object { $_ -ne $tag -and $_ -match '^v[0-9]+\.[0-9]+\.[0-9]+$' } |
-              ForEach-Object { [version]$_.Substring(1) }
-          )
-
-          if ($previousVersions.Count -gt 0) {
-            $latestPrevious = $previousVersions | Sort-Object -Descending | Select-Object -First 1
-            if ($currentVersion -le $latestPrevious) {
-              throw "Release version $currentVersion must be newer than existing stable tag v$latestPrevious."
-            }
-          }
-
-          Write-Host "Validated release tag $tag on merged main commit $env:GITHUB_SHA."
-
+          $actual = node -p "require('./package.json').version"
+          if ($actual -ne $version) { throw "Expected package version $version, got $actual" }
+          Write-Host "Packaging Family Circle $version"
       - name: Install dependencies
         id: package_install
         run: npm ci --no-audit
@@ -194,6 +173,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CHECKOUT_OUTCOME: ${{ steps.package_checkout.outcome }}
           SETUP_NODE_OUTCOME: ${{ steps.package_setup_node.outcome }}
+          SEMANTIC_OUTCOME: ${{ steps.semantic_release.outcome }}
+          RELEASE_ELIGIBLE: ${{ steps.semantic_release.outputs.release_eligible }}
+          APPLY_VERSION_OUTCOME: ${{ steps.package_apply_version.outcome }}
           INSTALL_OUTCOME: ${{ steps.package_install.outcome }}
           VERIFY_MAIL_OUTCOME: ${{ steps.package_verify_mail.outcome }}
           VERIFY_APP_OUTCOME: ${{ steps.package_verify_application.outcome }}
@@ -211,6 +193,10 @@ jobs:
             $stage = 'checkout-failed'
           } elseif ($env:SETUP_NODE_OUTCOME -ne 'success') {
             $stage = 'setup-node-failed'
+          } elseif ($env:SEMANTIC_OUTCOME -ne 'success') {
+            $stage = 'semantic-version-failed'
+          } elseif ($env:RELEASE_ELIGIBLE -eq 'true' -and $env:APPLY_VERSION_OUTCOME -ne 'success') {
+            $stage = 'apply-version-failed'
           } elseif ($env:INSTALL_OUTCOME -ne 'success') {
             $stage = 'install-dependencies-failed'
           } elseif ($env:VERIFY_MAIL_OUTCOME -ne 'success') {
@@ -243,54 +229,6 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "demo package stage: $stage"
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: package
-    runs-on: windows-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download verified Windows installer
-        uses: actions/download-artifact@v8
-        with:
-          name: family-circle-windows-installer
-          path: release
-
-      - name: Assert release installer
-        shell: pwsh
-        run: |
-          $installers = @(Get-ChildItem -Path release -Filter 'Family-Circle-Setup-*.exe' -File)
-          if ($installers.Count -ne 1) {
-            Write-Error "Expected exactly one release installer, found $($installers.Count)."
-            exit 1
-          }
-          Write-Host "Release installer: $($installers[0].Name)"
-
-      - name: Publish tagged GitHub Release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $tag = '${{ github.ref_name }}'
-          $installer = (Get-ChildItem -Path release -Filter 'Family-Circle-Setup-*.exe' -File | Select-Object -First 1).FullName
-          $checksumPath = "$installer.sha256"
-          $checksum = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$checksum  $(Split-Path -Leaf $installer)" | Set-Content -Path $checksumPath -Encoding ascii
-
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --verify-tag --title "Family Circle $tag" --generate-notes
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-
-          gh release upload $tag $installer $checksumPath --clobber
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          Write-Host "Published $tag with installer SHA256 $checksum"
-
 
   deploy-demo:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -330,26 +268,23 @@ jobs:
         if: steps.download.outcome == 'success'
         continue-on-error: true
         shell: bash
+        env:
+          RELEASE_ELIGIBLE: ${{ needs.package.outputs.release_eligible }}
+          RELEASE_TYPE: ${{ needs.package.outputs.release_type }}
+          RELEASE_VERSION: ${{ needs.package.outputs.release_version }}
+          RELEASE_TAG: ${{ needs.package.outputs.release_tag }}
+          RELEASE_TITLE_B64: ${{ needs.package.outputs.release_title_b64 }}
         run: |
           set -euo pipefail
 
-          release_title="$(git log -1 --format=%s "$GITHUB_SHA")"
-          release_prefix="$(printf '%s' "$release_title" | sed -nE 's/^([a-z][a-z0-9_-]*)(\([^)]+\))?!?:[[:space:]]+.+$/\1/p')"
-          release_type=""
-          release_eligible="false"
+          echo "release_eligible=$RELEASE_ELIGIBLE" >> "$GITHUB_OUTPUT"
+          echo "release_type=$RELEASE_TYPE" >> "$GITHUB_OUTPUT"
+          echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_title_b64=$RELEASE_TITLE_B64" >> "$GITHUB_OUTPUT"
 
-          case "$release_prefix" in
-            feat|fix|perf|refactor|chore|ci|docs)
-              release_type="$release_prefix"
-              release_eligible="true"
-              ;;
-          esac
-
-          echo "release_eligible=$release_eligible" >> "$GITHUB_OUTPUT"
-          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
-
-          if [[ "$release_eligible" != "true" ]]; then
-            echo "Server release skipped: '$release_title' is not an approved Conventional Commit."
+          if [[ "$RELEASE_ELIGIBLE" != "true" ]]; then
+            echo "Server release skipped: commit is not an approved Conventional Commit."
             exit 0
           fi
 
@@ -359,28 +294,29 @@ jobs:
             exit 1
           fi
 
-          package_version="$(node -p "require('./package.json').version")"
           installer="$(find release -maxdepth 1 -type f -name 'Family-Circle-Setup-*.exe' -printf '%f\n')"
+          expected_installer="Family-Circle-Setup-${RELEASE_VERSION}.exe"
+          if [[ "$installer" != "$expected_installer" ]]; then
+            echo "Expected semantic installer $expected_installer, got $installer" >&2
+            exit 1
+          fi
+
           sha256="$(sha256sum "release/$installer" | awk '{print $1}')"
-          stamp="$(date -u +'%Y%m%d-%H%M%S')"
-          demo_version="${package_version}-demo-${stamp}-${GITHUB_SHA:0:7}"
           published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          release_title_b64="$(printf '%s' "$release_title" | base64 -w0)"
+          build_id="${RELEASE_VERSION}-main-${GITHUB_SHA:0:7}"
           public_base_path="/electron-releases/demo"
           public_path="$public_base_path/latest/$installer"
           public_url="https://familycircle.o2gventures.com$public_path"
 
-          echo "package_version=$package_version" >> "$GITHUB_OUTPUT"
           echo "installer=$installer" >> "$GITHUB_OUTPUT"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
-          echo "demo_version=$demo_version" >> "$GITHUB_OUTPUT"
+          echo "demo_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
           echo "published_at=$published_at" >> "$GITHUB_OUTPUT"
-          echo "release_title_b64=$release_title_b64" >> "$GITHUB_OUTPUT"
           echo "public_base_path=$public_base_path" >> "$GITHUB_OUTPUT"
           echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
           echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
-          echo "Release note: [$release_type] $release_title"
-
+          echo "Semantic server release: $RELEASE_TAG ($build_id)"
       - name: Validate demo deployment credentials
         id: credentials
         if: steps.meta.outcome == 'success' && steps.meta.outputs.release_eligible == 'true'
@@ -452,13 +388,15 @@ jobs:
           PUBLISHED_AT: ${{ steps.meta.outputs.published_at }}
           RELEASE_TYPE: ${{ steps.meta.outputs.release_type }}
           RELEASE_TITLE_B64: ${{ steps.meta.outputs.release_title_b64 }}
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          BUILD_ID: ${{ steps.meta.outputs.build_id }}
           PUBLIC_BASE_PATH: ${{ steps.meta.outputs.public_base_path }}
         run: |
           set -euo pipefail
           export SSHPASS="$DEV_SSH_PASSWORD"
           remote_stage="electron-release-staging/$DEMO_VERSION"
           sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" \
-            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_BASE_PATH' '$RELEASE_TYPE' '$RELEASE_TITLE_B64'"
+            "bash '$remote_stage/publish-demo-release.sh' '/var/www/family-circle-prod/electron-releases/demo' '$DEMO_VERSION' '$INSTALLER' '$INSTALLER_SHA256' '$PUBLISHED_AT' '$GITHUB_SHA' '$PUBLIC_BASE_PATH' '$RELEASE_TYPE' '$RELEASE_TITLE_B64' '$RELEASE_TAG' '$BUILD_ID'"
 
       - name: Verify public demo installer
         id: verify_public
@@ -471,6 +409,8 @@ jobs:
           EXPECTED_COMMIT: ${{ github.sha }}
           EXPECTED_RELEASE_TYPE: ${{ steps.meta.outputs.release_type }}
           EXPECTED_RELEASE_TITLE_B64: ${{ steps.meta.outputs.release_title_b64 }}
+          EXPECTED_TAG: ${{ steps.meta.outputs.release_tag }}
+          EXPECTED_BUILD: ${{ steps.meta.outputs.build_id }}
           PUBLIC_URL: ${{ steps.meta.outputs.public_url }}
         run: |
           set -euo pipefail
@@ -499,6 +439,12 @@ jobs:
           }
           if (current.sha256 !== process.env.EXPECTED_SHA256) {
             throw new Error('Public demo metadata checksum mismatch')
+          }
+          if (current.tag !== process.env.EXPECTED_TAG) {
+            throw new Error(`Unexpected public demo tag: ${current.tag}`)
+          }
+          if (current.build !== process.env.EXPECTED_BUILD) {
+            throw new Error(`Unexpected public demo build: ${current.build}`)
           }
           if (current.commit !== process.env.EXPECTED_COMMIT) {
             throw new Error(`Unexpected public demo commit: ${current.commit}`)
@@ -576,11 +522,78 @@ jobs:
           fi
 
 
+  finalize-release:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.package.result == 'success' && needs.deploy-demo.result == 'success' && needs.package.outputs.release_eligible == 'true' }}
+    needs:
+      - package
+      - deploy-demo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      statuses: write
+
+    steps:
+      - name: Download verified Windows installer
+        uses: actions/download-artifact@v8
+        with:
+          name: family-circle-windows-installer
+          path: release
+
+      - name: Create immutable tag and GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.package.outputs.release_version }}
+          RELEASE_TAG: ${{ needs.package.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          installer="release/Family-Circle-Setup-${RELEASE_VERSION}.exe"
+          [[ -f "$installer" ]] || { echo "Missing verified installer: $installer" >&2; exit 1; }
+
+          checksum="$(sha256sum "$installer" | awk '{print $1}')"
+          checksum_path="$installer.sha256"
+          printf '%s  %s\n' "$checksum" "$(basename "$installer")" > "$checksum_path"
+
+          existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -n "$existing_sha" && "$existing_sha" != "$GITHUB_SHA" ]]; then
+            echo "Release tag $RELEASE_TAG already points to $existing_sha instead of $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+          if [[ -z "$existing_sha" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/$RELEASE_TAG" \
+              -f "sha=$GITHUB_SHA" >/dev/null
+            echo "Created $RELEASE_TAG -> $GITHUB_SHA"
+          else
+            echo "Tag $RELEASE_TAG already points to this commit; continuing idempotently."
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$installer" "$checksum_path" --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              --verify-tag \
+              --target "$GITHUB_SHA" \
+              --title "Family Circle $RELEASE_TAG" \
+              --generate-notes \
+              "$installer" "$checksum_path"
+          fi
+
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state=success \
+            -f context="semantic-release:published" \
+            -f description="Published $RELEASE_TAG after verified server deployment" >/dev/null
+
+          echo "Published $RELEASE_TAG using the already-verified installer ($checksum)."
+
   report-demo-status:
     if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     needs:
       - package
       - deploy-demo
+      - finalize-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -593,7 +606,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PACKAGE_RESULT: ${{ needs.package.result }}
           DEPLOY_RESULT: ${{ needs.deploy-demo.result }}
-          RELEASE_ELIGIBLE: ${{ needs.deploy-demo.outputs.release_eligible }}
+          FINALIZE_RESULT: ${{ needs.finalize-release.result }}
+          RELEASE_ELIGIBLE: ${{ needs.package.outputs.release_eligible }}
         run: |
           set -euo pipefail
 
@@ -603,9 +617,12 @@ jobs:
           elif [[ "$DEPLOY_RESULT" == "success" && "$RELEASE_ELIGIBLE" != "true" ]]; then
             state="success"
             description="Server release skipped: commit is not Conventional"
+          elif [[ "$DEPLOY_RESULT" == "success" && "$RELEASE_ELIGIBLE" == "true" && "$FINALIZE_RESULT" != "success" ]]; then
+            state="failure"
+            description="Server deploy verified but semantic tag/release failed"
           elif [[ "$DEPLOY_RESULT" == "success" ]]; then
             state="success"
-            description="Demo server deployment verified"
+            description="Demo server deployment and semantic release verified"
           elif [[ "$DEPLOY_RESULT" == "skipped" ]]; then
             state="failure"
             description="Demo server deployment was skipped"
@@ -625,4 +642,4 @@ jobs:
             -f description="$description"
 
           echo "demo-server-deploy: $state"
-          echo "package=$PACKAGE_RESULT deploy=$DEPLOY_RESULT"
+          echo "package=$PACKAGE_RESULT deploy=$DEPLOY_RESULT finalize=$FINALIZE_RESULT"

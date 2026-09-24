@@ -29,6 +29,23 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('Family-Circle-Setup-*.exe')
   })
 
+  it('derives and applies the semantic version before dependency install and packaging', () => {
+    const source = workflow()
+    const deriveStart = source.indexOf('- name: Derive semantic release version')
+    const applyStart = source.indexOf('- name: Apply semantic version to package workspace')
+    const installStart = source.indexOf('- name: Install dependencies')
+
+    expect(source).toContain('fetch-depth: 0')
+    expect(deriveStart).toBeGreaterThanOrEqual(0)
+    expect(applyStart).toBeGreaterThan(deriveStart)
+    expect(installStart).toBeGreaterThan(applyStart)
+    expect(source).toContain('node scripts/derive-semantic-release.mjs')
+    expect(source).toContain("steps.semantic_release.outputs.release_eligible == 'true'")
+    expect(source).toContain('npm version $version --no-git-tag-version --allow-same-version')
+    expect(source).toContain('release_version: ${{ steps.semantic_release.outputs.release_version }}')
+    expect(source).toContain('release_tag: ${{ steps.semantic_release.outputs.release_tag }}')
+  })
+
   it('generates Circle config in a dedicated secret-bearing step before packaging', () => {
     const source = workflow()
     const circleStart = source.indexOf('- name: Generate demo Circle config')
@@ -52,37 +69,24 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('release/Family-Circle-Setup-*.exe')
   })
 
-  it('publishes version tags to a GitHub Release without coupling that job to server secrets', () => {
+  it('creates the immutable tag and GitHub Release only after verified server deployment', () => {
     const source = workflow()
-    const releaseStart = source.indexOf('  release:\n')
-    const deployStart = source.indexOf('  deploy-demo:\n')
-    expect(releaseStart).toBeGreaterThanOrEqual(0)
-    expect(deployStart).toBeGreaterThan(releaseStart)
-    const releaseBlock = source.slice(releaseStart, deployStart)
+    const finalizeStart = source.indexOf('  finalize-release:\n')
+    const reportStart = source.indexOf('  report-demo-status:\n')
+    expect(finalizeStart).toBeGreaterThanOrEqual(0)
+    expect(reportStart).toBeGreaterThan(finalizeStart)
+    const finalizeBlock = source.slice(finalizeStart, reportStart)
 
-    expect(releaseBlock).toContain("startsWith(github.ref, 'refs/tags/v')")
-    expect(releaseBlock).toContain('contents: write')
-    expect(releaseBlock).toContain('gh release create $tag --verify-tag')
-    expect(releaseBlock).toContain('Get-FileHash -Path $installer -Algorithm SHA256')
-    expect(releaseBlock).toContain('$checksumPath = "$installer.sha256"')
-    expect(releaseBlock).toContain('gh release upload $tag $installer $checksumPath --clobber')
-    expect(releaseBlock).not.toMatch(/DEV_SSH_|SERVER_IP|scp-action|ssh-action/i)
-  })
-
-  it('rejects unsafe or mismatched release tags before packaging', () => {
-    const source = workflow()
-    const validateStart = source.indexOf('- name: Validate release tag')
-    expect(validateStart).toBeGreaterThanOrEqual(0)
-    const validateBlock = source.slice(validateStart, source.indexOf('- name:', validateStart + 1))
-
-    expect(source).toContain('fetch-depth: 0')
-    expect(validateBlock).toContain("^v[0-9]+\\.[0-9]+\\.[0-9]+$")
-    expect(validateBlock).toContain('$expectedTag = "v$packageVersion"')
-    expect(validateBlock).toContain('git merge-base --is-ancestor $env:GITHUB_SHA origin/main')
-    expect(validateBlock).toContain('Release tags must point to merged main history')
-    expect(validateBlock).toContain("^(feat|fix|perf|refactor|chore|ci|docs)")
-    expect(validateBlock).toContain('Formal releases require feat, fix, perf, refactor, chore, ci, or docs')
-    expect(validateBlock).toContain('must be newer than existing stable tag')
+    expect(finalizeBlock).toContain('needs:\n      - package\n      - deploy-demo')
+    expect(finalizeBlock).toContain("needs.deploy-demo.result == 'success'")
+    expect(finalizeBlock).toContain('contents: write')
+    expect(finalizeBlock).toContain('actions/download-artifact@v8')
+    expect(finalizeBlock).toContain('git/ref/tags/$RELEASE_TAG')
+    expect(finalizeBlock).toContain('refs/tags/$RELEASE_TAG')
+    expect(finalizeBlock).toContain('gh release create "$RELEASE_TAG"')
+    expect(finalizeBlock).toContain('--generate-notes')
+    expect(finalizeBlock).toContain('semantic-release:published')
+    expect(finalizeBlock).not.toMatch(/DEV_SSH_|SERVER_IP|scp-action|ssh-action/i)
   })
 
   it('requires approved Conventional Commit titles on pull requests', () => {
@@ -93,17 +97,17 @@ describe('Windows packaging workflow', () => {
     expect(source).toContain('PR title must use an approved Conventional Commit type')
   })
 
-  it('keeps content writes isolated to release while allowing package status reporting', () => {
+  it('keeps repository writes isolated to post-deploy release finalization', () => {
     const source = workflow()
     expect(source).toContain('permissions:\n  contents: read')
     expect(source).toMatch(/package:[\s\S]*?permissions:\n\s+contents: read\n\s+statuses: write/)
     expect(source).toContain('context=demo-package-stage:$stage')
-    expect(source).toMatch(/release:\n\s+if: startsWith\(github\.ref, 'refs\/tags\/v'\)/)
-    expect(source).toMatch(/release:[\s\S]*?permissions:\n\s+contents: write/)
+    expect(source).toMatch(/finalize-release:[\s\S]*?permissions:\n\s+contents: write\n\s+statuses: write/)
     expect(source).toContain('actions/download-artifact@')
+    expect(source).not.toContain("if: startsWith(github.ref, 'refs/tags/v')")
   })
 
-  it('packages relevant main pushes for demo deployment while preserving tag and PR triggers', () => {
+  it('packages relevant main pushes and does not rebuild when automation creates a tag', () => {
     const source = workflow()
     const pushStart = source.indexOf('  push:\n')
     const pullStart = source.indexOf('  pull_request:\n')
@@ -112,28 +116,40 @@ describe('Windows packaging workflow', () => {
     const pushBlock = source.slice(pushStart, pullStart)
 
     expect(pushBlock).toContain('branches:\n      - main\n      - feature/windows-packaging-release')
-    expect(pushBlock).toContain("tags:\n      - 'v*'")
+    expect(pushBlock).not.toContain("tags:\n      - 'v*'")
     expect(pushBlock).toContain("      - 'src/**'")
     expect(pushBlock).toContain("      - 'public/**'")
     expect(pushBlock).toContain("      - 'scripts/**'")
+    expect(source).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
     expect(source).toMatch(/pull_request:\n\s+branches:\n\s+- main/)
+    expect(source).toContain("scripts/derive-semantic-release*.mjs")
 
     for (const path of [
-      "config/offline-voice-manifest.json",
-      "third_party/whisper.cpp-LICENSE.txt",
-      "scripts/write-demo-mail-config.mjs",
-      "scripts/write-demo-circle-config.mjs",
-      "src/main/auth/**",
-      "src/main/circle/**",
-      "src/main/story/**",
-      "src/main/voice/**",
-      "src/renderer/features/story/**",
-      "src/renderer/services/story/**",
-      "src/renderer/design-system/**",
-      "src/renderer/assets/**",
-      "src/shared/story.ts",
+      'config/offline-voice-manifest.json',
+      'third_party/whisper.cpp-LICENSE.txt',
+      'scripts/write-demo-mail-config.mjs',
+      'scripts/write-demo-circle-config.mjs',
+      'src/main/auth/**',
+      'src/main/circle/**',
+      'src/main/story/**',
+      'src/main/voice/**',
+      'src/renderer/features/story/**',
+      'src/renderer/services/story/**',
+      'src/renderer/design-system/**',
+      'src/renderer/assets/**',
+      'src/shared/story.ts',
     ]) {
       expect(source).toContain(`- '${path}'`)
     }
+  })
+
+  it('makes aggregate deployment status depend on semantic release finalization', () => {
+    const source = workflow()
+    const reportStart = source.indexOf('  report-demo-status:\n')
+    const reportBlock = source.slice(reportStart)
+    expect(reportBlock).toContain('needs:\n      - package\n      - deploy-demo\n      - finalize-release')
+    expect(reportBlock).toContain('FINALIZE_RESULT: ${{ needs.finalize-release.result }}')
+    expect(reportBlock).toContain('semantic tag/release failed')
+    expect(reportBlock).toContain('deployment and semantic release verified')
   })
 })

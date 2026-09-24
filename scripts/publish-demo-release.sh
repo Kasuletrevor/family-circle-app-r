@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 9 ]]; then
-  echo "usage: publish-demo-release.sh <root> <version> <installer> <sha256> <published_at> <commit> <public_base_path> <release_type> <release_title_b64>" >&2
+if [[ "$#" -ne 11 ]]; then
+  echo "usage: publish-demo-release.sh <root> <version> <installer> <sha256> <published_at> <commit> <public_base_path> <release_type> <release_title_b64> <tag> <build>" >&2
   exit 64
 fi
 
@@ -15,6 +15,8 @@ COMMIT_SHA="$6"
 PUBLIC_BASE_PATH="$7"
 RELEASE_TYPE="$8"
 RELEASE_TITLE_B64="$9"
+RELEASE_TAG="${10}"
+BUILD_ID="${11}"
 RELEASE_TITLE="$(python3 - "$RELEASE_TITLE_B64" <<'PY'
 import base64
 import sys
@@ -67,7 +69,9 @@ python3 - \
   "$LATEST_PATH" \
   "$EXPECTED_SHA" \
   "$RELEASE_TYPE" \
-  "$RELEASE_TITLE" <<'PY'
+  "$RELEASE_TITLE" \
+  "$RELEASE_TAG" \
+  "$BUILD_ID" <<'PY'
 import json
 import sys
 
@@ -82,10 +86,14 @@ import sys
     sha256,
     release_type,
     title,
+    tag,
+    build,
 ) = sys.argv[1:]
 
 base = {
     "version": version,
+    "tag": tag,
+    "build": build,
     "channel": "main",
     "type": release_type,
     "title": title,
@@ -168,6 +176,7 @@ mv -Tf "$NEXT_LINK" "$ROOT/latest"
 
 rm -rf "$STAGE_DIR"
 
-echo "Published demo release $VERSION"
+echo "Published demo release $VERSION ($RELEASE_TAG)"
+echo "Build: $BUILD_ID"
 echo "Release note: [$RELEASE_TYPE] $RELEASE_TITLE"
 echo "Installer SHA256: $EXPECTED_SHA"
