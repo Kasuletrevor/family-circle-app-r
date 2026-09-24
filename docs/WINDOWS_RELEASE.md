@@ -1,12 +1,110 @@
-# Windows installer and release procedure
+# Windows installer and automatic release procedure
 
-Family Circle is packaged for Windows x64 as a one-click per-user NSIS installer. The normal installer contains the compiled Electron application and `config/offline-ai-manifest.json`; it does not bundle Private AI models/runtime assets, Vault data, `.env` files, SMTP credentials, Circle API credentials, or user data.
+Family Circle is packaged for Windows x64 as a one-click per-user NSIS installer. The normal installer contains the compiled Electron application and the offline-model manifests; it does not bundle Private AI model/runtime payloads, Vault data, `.env` files, mail credentials, Circle API credentials, or user data.
 
-The Family Circle server is the continuous download channel for verified `main` builds. GitHub Releases remain available for tagged milestone releases. Branch and pull-request packaging runs also upload the installer as a GitHub Actions artifact for verification.
+## Release source of truth
+
+Releases are driven automatically from approved Conventional Commit titles merged to `main`.
+
+Approved release types:
+
+- `feat` -> minor
+- `fix`, `perf`, `refactor`, `chore`, `ci`, `docs` -> patch
+- any approved type using `!`, or a title containing `BREAKING CHANGE` / `BREAKING-CHANGE` -> major
+
+Optional scopes are supported, for example `fix(auth): ...`.
+
+A non-Conventional `main` commit may still build/test/package when its paths trigger CI, but it does not publish a server release, move `latest`, create a tag, or create a GitHub Release.
+
+Pull-request titles are validated because squash-merge titles become the `main` commit subject and the human-facing release note.
+
+## Semantic version calculation
+
+The Windows workflow checks out full tag history and finds the highest stable tag matching `vMAJOR.MINOR.PATCH` that is already in the current commit history.
+
+It then examines approved Conventional Commits since that tag and selects the highest release impact:
+
+- any breaking change -> major
+- otherwise any `feat` -> minor
+- otherwise patch
+
+Example from `v0.1.0`:
+
+```text
+fix: clean up shell chrome
+feat: ship Family Tree
+ci: automate semantic releases
+```
+
+produces `v0.2.0`, because the unreleased range contains a feature.
+
+Once every eligible merge is automatically tagged, subsequent single-merge examples are the familiar:
+
+```text
+v0.2.0 + fix: ...   -> v0.2.1
+v0.2.1 + feat: ...  -> v0.3.0
+v0.3.0 + fix!: ...  -> v1.0.0
+```
+
+If the repository has no stable tag yet, the checked-in `package.json` version is used only as the initial baseline.
+
+## Single-build release pipeline
+
+For an eligible `main` commit, `.github/workflows/windows-package.yml` performs this sequence:
+
+1. checkout with full tag history
+2. derive the next semantic version and planned tag
+3. apply that version only inside the CI workspace with `npm version --no-git-tag-version`
+4. install dependencies and run the full application verification
+5. generate the temporary demo/runtime compatibility configuration
+6. build the Windows x64 NSIS installer once
+7. verify the package and require exactly one installer
+8. upload that exact installer as the Actions artifact
+9. publish that same verified installer to the Family Circle server
+10. download the public installer back and verify its SHA-256 and metadata
+11. only after successful public verification, create the immutable Git tag on the original `main` commit
+12. create the GitHub Release and attach that same installer plus its `.sha256`
+
+There is no tag-triggered second build.
+
+The source tree is not polluted with generated version-bump commits. The CI workspace version controls Electron/electron-builder packaging, so a release such as `v0.2.0` produces:
+
+```text
+Family-Circle-Setup-0.2.0.exe
+Family-Circle-Setup-0.2.0.exe.sha256
+```
+
+The tag points to the actual feature/fix/CI merge commit that caused the release.
+
+## Server metadata
+
+New server releases use the clean semantic version as the immutable release directory and metadata version. They also carry the planned/created Git tag and a unique build identifier.
+
+Example:
+
+```json
+{
+  "version": "0.2.0",
+  "tag": "v0.2.0",
+  "build": "0.2.0-main-104e054",
+  "channel": "main",
+  "type": "feat",
+  "title": "feat: ship Family Tree, notifications, and Circle switcher (#41)",
+  "commit": "104e05417b6a1b7778a4becc11b3fc4e691647dc"
+}
+```
+
+`current.json` describes the release behind `latest`. `versions.json` preserves release history for the download page. Older pre-semantic demo records remain readable.
+
+## Release ordering
+
+Main release runs share the same workflow concurrency group and are not cancelled when a newer `main` push arrives. Pull-request runs may still cancel older PR runs.
+
+This prevents two normal `main` release runs from racing to publish the same next version or moving `latest` out of order.
 
 ## Local Windows build
 
-Run these commands from PowerShell on Windows with Node.js 24 installed:
+A normal local developer build still uses the checked-in package version:
 
 ```powershell
 npm.cmd ci --no-audit
@@ -15,139 +113,34 @@ npm.cmd run package:win
 npm.cmd run verify:package
 ```
 
-For package version `0.1.0`, the expected installer is:
-
-```text
-release/Family-Circle-Setup-0.1.0.exe
-```
-
-`npm run verify:package` checks the packaging identity and boundaries and, when `release/` exists, requires exactly one installer matching the current package version.
-
-## Commit-driven server releases
-
-Every relevant push to `main` builds and verifies the Windows installer, but **server publication happens only when the merged commit subject is an approved Conventional Commit**.
-
-For example:
-
-```text
-feat: add family export
-fix: add logout to authenticated profile menu
-perf: speed up Vault indexing
-```
-
-become server release records carrying:
-
-- `type`: the Conventional Commit prefix (`feat`, `fix`, `perf`, etc.; otherwise `change`)
-- `title`: the exact first line of the merged `main` commit/PR title
-- commit SHA
-- published timestamp
-- SHA-256
-- immutable installer URL
-- stable `latest` installer URL through `current.json`
-
-`versions.json` preserves the existing `versions` string array for compatibility and also exposes a richer `releases` array for a download/history UI. Each release directory keeps its own immutable `release.json`; `current.json` describes the build currently behind `latest`.
-
-The approved automatic-release types are `feat`, `fix`, `perf`, `refactor`, `chore`, `ci`, and `docs`, with optional scopes and optional `!` for a breaking change. Examples: `feat: add family export`, `fix(auth): correct invitation login`, and `feat!: replace the local data format`.
-
-A non-Conventional `main` commit still goes through build/test/package verification when its changed paths trigger the workflow, but publication is intentionally skipped and the previous server `latest` remains untouched. The deployment status reports this as a successful `release-skipped` policy outcome rather than a deployment failure.
-
-Pull-request titles are checked against the same rule because squash-merge titles become the `main` commit subject and therefore the human-facing release note.
-
-A Git tag is therefore **not required for each downloadable server build**. Tags are reserved for milestone/formal GitHub releases, and the tagged commit must itself satisfy the same Conventional Commit rule.
-
-## Release workflow
-
-`.github/workflows/windows-package.yml` has two channels:
-
-- every relevant push to `main` builds and verifies the installer; only approved Conventional Commit subjects publish the latest installer to the Family Circle server and enter release history;
-- a stable version tag additionally publishes a **formal GitHub Release** for milestone/versioned distribution.
-
-The Windows package gate performs:
-
-1. checkout with full tag history
-2. setup Node 24
-3. validate any release tag before packaging
-4. install dependencies with `npm ci --no-audit`
-5. run the full `npm run check` quality gate
-6. generate the temporary demo/runtime compatibility configuration
-7. build the Windows x64 NSIS installer
-8. run the deterministic package verifier
-9. require exactly one `Family-Circle-Setup-*.exe`
-10. upload that installer as a GitHub Actions artifact
-
-A formal release tag is accepted only when all of these are true:
-
-- the tag is stable SemVer exactly in the form `vMAJOR.MINOR.PATCH`, for example `v0.2.0`;
-- the tag exactly matches the `package.json` version;
-- the tagged commit is already contained in `main`;
-- the version is newer than every existing stable release tag;
-- the tagged commit subject is an approved Conventional Commit (`feat`, `fix`, `perf`, `refactor`, `chore`, `ci`, or `docs`).
-
-If any rule fails, packaging stops and no GitHub Release is created.
-
-For an accepted tag, GitHub Actions creates/reuses the matching GitHub Release, generates release notes, and uploads both:
-
-- `Family-Circle-Setup-X.Y.Z.exe`
-- `Family-Circle-Setup-X.Y.Z.exe.sha256`
-
-### Normal release procedure
-
-Prepare the version on a branch/PR first:
+To reproduce a particular semantic release locally, first check out its tag and apply the release version to the workspace without creating another tag:
 
 ```powershell
-npm version 0.2.0 --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore: prepare v0.2.0"
+npm.cmd version 0.2.0 --no-git-tag-version --allow-same-version
+npm.cmd ci --no-audit
+npm.cmd run package:win
+npm.cmd run verify:package
 ```
-
-Merge that change to `main` and wait for the normal `main` CI/demo deployment to pass. Then tag that exact merged commit:
-
-```powershell
-git checkout main
-git pull --ff-only
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-The tag push is the explicit **formal GitHub Release** decision. Ordinary `main` pushes still create verified downloadable server releases; they simply do not create formal GitHub Releases.
 
 ## Signing and SmartScreen
 
-The first installer is currently unsigned. Windows SmartScreen may therefore show an unknown-publisher or reputation warning. Code signing can be added later without changing the packaging layout, but signing credentials are not required for this first release.
+The installer is currently unsigned, so Windows SmartScreen may show an unknown-publisher or reputation warning. Code signing can be added later without changing the semantic-release layout.
 
 ## Private AI stays progressive-download
 
-Installing Family Circle does not download or bundle the roughly 2 GiB Private AI stack. Upload/storage/extraction work without Private AI. The user must explicitly choose **Set up Private AI** later; the app then downloads the configured llama.cpp runtime, Granite model, and Nomic embedding model, verifies immutable size/SHA-256 metadata in the Electron main process, and stores them beneath Electron `userData`.
+Installing Family Circle does not bundle the Private AI model/runtime payloads. Upload/storage/extraction work without Private AI. The user explicitly chooses **Set up Private AI** later; the app downloads the configured runtime/model assets, verifies immutable size/SHA-256 metadata in the Electron main process, and stores them beneath Electron `userData`.
 
-The normal installer must never include `.env`, `.env.*`, `*.gguf`, Private AI `models/` or `bin/` payloads, local databases, `.family-circle-data/`, Vault documents, or user data.
-
-## Clean-machine acceptance test
-
-Run this on a clean Windows 10/11 x64 machine or clean Windows VM:
-
-1. Download `Family-Circle-Setup-0.1.0.exe` from the GitHub Release.
-2. Confirm the installer starts and completes.
-3. Launch Family Circle from the desktop or Start Menu shortcut.
-4. Confirm the app window renders without a dev server.
-5. Confirm app version reports `0.1.0`.
-6. Confirm `%APPDATA%`/Electron userData is created only after first launch.
-7. Upload a TXT document without setting up Private AI; confirm upload/extraction works and the document is `waiting_for_ai`.
-8. Confirm the Private AI card offers explicit setup and shows the expected total download size.
-9. Start Private AI setup; confirm progress is friendly and no model URL/path/hash is exposed in the renderer.
-10. After setup, confirm indexing completes and `/ai` can answer from the uploaded document.
-11. Disconnect the network after setup and confirm Vault Q&A still works locally.
-12. Uninstall Family Circle and confirm user data is not automatically deleted.
+The installer must never include `.env`, `.env.*`, `*.gguf`, Private AI `models/` or `bin/` payloads, local databases, `.family-circle-data/`, Vault documents, or user data.
 
 ## Release acceptance evidence
 
-Before publishing a release, record all of the following against the exact commit being tagged:
+An automatic release is complete only when all of these are true:
 
-- `Desktop shell CI` succeeded
-- `Windows Package` succeeded
-- exact Vitest file/test counts from the CI log
-- `npm audit --audit-level=high` result
-- Windows job produced exactly one installer
-- Actions artifact contains `Family-Circle-Setup-0.1.0.exe`
-- no forbidden secrets/model/user-data inputs are present in packaging configuration
-
-After tagging a release, verify the tag-triggered Windows workflow succeeds and the GitHub Release contains the matching installer plus its `.sha256` checksum asset.
+- Desktop/application CI passed
+- Windows package verification passed
+- exactly one semantic-versioned installer was produced
+- the installer was published to the Family Circle server
+- the public installer was downloaded back and its SHA-256 matched
+- `current.json` matched the expected semantic version, tag, build, commit, type, title, and checksum
+- the immutable `vX.Y.Z` tag points to the release-triggering `main` commit
+- the GitHub Release contains the exact verified installer and its `.sha256` asset
