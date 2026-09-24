@@ -105,6 +105,12 @@ class NodeDownloadFs implements OfflineAiDownloadFs {
 }
 
 class NodeHttpPort implements OfflineAiHttpPort {
+  private readonly stallTimeoutMs: number
+
+  constructor(stallTimeoutMs = 60_000) {
+    this.stallTimeoutMs = stallTimeoutMs
+  }
+
   async request(url: string, options: { headers: Record<string, string> }): Promise<OfflineAiHttpResponse> {
     return this.requestFollowingRedirects(url, options, 0)
   }
@@ -128,12 +134,19 @@ class NodeHttpPort implements OfflineAiHttpPort {
           return
         }
 
+        response.setTimeout(this.stallTimeoutMs, () => {
+          response.destroy(new OfflineAiDownloadError('http-error', 'Private AI download stalled — no data received for 60 seconds'))
+        })
+
         resolveResponse({
           statusCode,
           headers: response.headers as Record<string, string | string[] | undefined>,
           body: response,
           cancel: () => response.destroy(),
         })
+      })
+      req.setTimeout(this.stallTimeoutMs, () => {
+        req.destroy(new OfflineAiDownloadError('http-error', 'Private AI connection stalled — no data received for 60 seconds'))
       })
       req.on('error', reject)
       req.end()

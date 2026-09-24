@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { OfflineAiDownloader } from './OfflineAiDownloader'
+import { OfflineAiDownloadError, OfflineAiDownloader } from './OfflineAiDownloader'
 import type {
   InstalledAiPaths,
   OfflineAiDownloadResult,
@@ -41,6 +41,24 @@ function phaseForState(state: PrivateAiState): PrivateAiStatus['phase'] {
     case 'failed': return 'failed'
     default: return 'idle'
   }
+}
+
+const MAX_SETUP_ATTEMPTS = 3
+
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof OfflineAiDownloadError) return error.code === 'http-error'
+  const code = (error as NodeJS.ErrnoException | undefined)?.code ?? ''
+  return ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE', 'ERR_STREAM_PREMATURE_CLOSE', 'UND_ERR_CONNECT_TIMEOUT'].includes(code)
+}
+
+function describeSetupError(error: unknown): string {
+  if (error instanceof OfflineAiDownloadError) return error.message
+  if (error instanceof Error && error.message) return `Private AI download failed: ${error.message}`
+  return 'Private AI setup failed'
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function statusFor(state: PrivateAiState, totalBytes: number, message: string | null = null): PrivateAiStatus {
@@ -106,41 +124,56 @@ export class OfflineAiAssetService {
     if (current.state === 'ready') return current
 
     await mkdir(this.rootPath, { recursive: true })
-    this.transientStatus = statusFor('downloading', totalBytes, 'Downloading Private AI')
 
-    try {
-      const result = await this.downloader.downloadAll(manifest, this.rootPath, (progress) => {
-        this.transientStatus = { ...progress, totalBytes }
+    for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt += 1) {
+      this.transientStatus = statusFor('downloading', totalBytes, attempt > 1
+        ? `Retrying Private AI download (attempt ${attempt})`
+        : 'Downloading Private AI')
+
+      try {
+        const result = await this.downloader.downloadAll(manifest, this.rootPath, (progress) => {
+          this.transientStatus = { ...progress, totalBytes }
+          onProgress?.(this.transientStatus)
+        })
+
+        if (result.paused) {
+          const latest = this.transientStatus ?? statusFor('paused', totalBytes)
+          this.transientStatus = { ...latest, state: 'paused', phase: 'paused', message: 'Private AI setup paused' }
+          onProgress?.(this.transientStatus)
+          return this.transientStatus
+        }
+
+        const latest = this.transientStatus ?? statusFor('verifying', totalBytes)
+        this.transientStatus = { ...latest, state: 'verifying', phase: 'verifying', message: 'Verifying Private AI' }
         onProgress?.(this.transientStatus)
-      })
 
-      if (result.paused) {
-        const latest = this.transientStatus ?? statusFor('paused', totalBytes)
-        this.transientStatus = { ...latest, state: 'paused', phase: 'paused', message: 'Private AI setup paused' }
+        const installedPaths = await this.verifyRequiredAssets(manifest)
+        if (!installedPaths) {
+          this.transientStatus = null
+          return statusFor('repair_required', totalBytes, 'Private AI needs repair')
+        }
+
+        await this.writeMarkerAtomically(manifest.version)
+        this.transientStatus = null
+        const ready = statusFor('ready', totalBytes, 'Private AI is ready')
+        onProgress?.(ready)
+        return ready
+      } catch (error) {
+        if (attempt < MAX_SETUP_ATTEMPTS && isRetryableError(error)) {
+          await delay(attempt * 1500)
+          continue
+        }
+        const message = describeSetupError(error)
+        this.transientStatus = statusFor('failed', totalBytes, message)
         onProgress?.(this.transientStatus)
         return this.transientStatus
       }
-
-      const latest = this.transientStatus ?? statusFor('verifying', totalBytes)
-      this.transientStatus = { ...latest, state: 'verifying', phase: 'verifying', message: 'Verifying Private AI' }
-      onProgress?.(this.transientStatus)
-
-      const installedPaths = await this.verifyRequiredAssets(manifest)
-      if (!installedPaths) {
-        this.transientStatus = null
-        return statusFor('repair_required', totalBytes, 'Private AI needs repair')
-      }
-
-      await this.writeMarkerAtomically(manifest.version)
-      this.transientStatus = null
-      const ready = statusFor('ready', totalBytes, 'Private AI is ready')
-      onProgress?.(ready)
-      return ready
-    } catch {
-      this.transientStatus = statusFor('failed', totalBytes, 'Private AI setup failed')
-      onProgress?.(this.transientStatus)
-      return this.transientStatus
     }
+
+    const message = 'Private AI setup failed'
+    this.transientStatus = statusFor('failed', totalBytes, message)
+    onProgress?.(this.transientStatus)
+    return this.transientStatus
   }
 
   pauseSetup(): PrivateAiStatus | null {
