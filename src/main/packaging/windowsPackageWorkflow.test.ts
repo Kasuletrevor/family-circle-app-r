@@ -82,6 +82,8 @@ describe('Windows packaging workflow', () => {
 
     expect(recoveryBlock).toContain("github.ref == 'refs/heads/main'")
     expect(recoveryBlock).toContain('contents: write')
+    expect(recoveryBlock).toContain('actions/checkout@v7')
+    expect(recoveryBlock).toContain('fetch-depth: 0')
     expect(recoveryBlock).toContain('electron-releases/demo/current.json')
     expect(recoveryBlock).toContain('Recoverable installer checksum mismatch')
     expect(recoveryBlock).toContain('refs/tags/$tag')
