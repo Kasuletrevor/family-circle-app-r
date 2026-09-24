@@ -103,6 +103,20 @@ Example:
 
 `current.json` describes the release behind `latest`. `versions.json` preserves release history for the download page. Older pre-semantic demo records remain readable.
 
+## Interrupted-finalization recovery
+
+A server publication can succeed even if the later GitHub tag/release finalization is interrupted. Before every new `main` package run, the workflow checks the live `current.json` for a semantic release that has a verified server installer but no matching Git tag.
+
+If it finds one, it:
+
+1. validates the semantic version/tag/commit/checksum metadata;
+2. downloads the already-published installer from the Family Circle server;
+3. verifies its SHA-256;
+4. recreates the missing immutable tag on the verified commit;
+5. creates or repairs the matching GitHub Release using those verified bytes.
+
+Only after that recovery succeeds does the next `main` commit calculate its own semantic version. This prevents a failed finalizer from causing the next run to reuse the same semantic version or overwrite an immutable server release.
+
 ## Release ordering
 
 Main release runs share the same workflow concurrency group and are not cancelled when a newer `main` push arrives. Pull-request runs may still cancel older PR runs.
