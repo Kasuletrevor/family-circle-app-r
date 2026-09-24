@@ -29,6 +29,7 @@ on:
       - 'config/offline-voice-manifest.json'
       - 'third_party/whisper.cpp-LICENSE.txt'
       - 'scripts/verify-package.mjs'
+      - 'scripts/derive-semantic-release*.mjs'
       - 'scripts/verify-mail-api-config.mjs'
       - 'scripts/write-demo-mail-config.mjs'
       - 'scripts/write-demo-circle-config.mjs'
