@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 
 const APPROVED_TYPES = new Set(['feat', 'fix', 'perf', 'refactor', 'chore', 'ci', 'docs'])
 const IMPACT_ORDER = { patch: 1, minor: 2, major: 3 }
@@ -78,8 +78,7 @@ function stableMergedTags() {
 function writeOutput(name, value) {
   const output = process.env.GITHUB_OUTPUT
   if (output) {
-    const fs = await import('node:fs')
-    fs.appendFileSync(output, `${name}=${value}\n`, 'utf8')
+    appendFileSync(output, `${name}=${value}\n`, 'utf8')
   } else {
     process.stdout.write(`${name}=${value}\n`)
   }
@@ -111,7 +110,7 @@ async function main() {
       release_base_tag: baseTag,
       release_title_b64: Buffer.from(subject, 'utf8').toString('base64'),
     }
-    for (const [name, value] of Object.entries(output)) await writeOutput(name, value)
+    for (const [name, value] of Object.entries(output)) writeOutput(name, value)
     process.stdout.write(`Semantic release skipped: '${subject}' is not an approved Conventional Commit.\n`)
     return
   }
@@ -129,7 +128,7 @@ async function main() {
     release_base_tag: baseTag,
     release_title_b64: Buffer.from(subject, 'utf8').toString('base64'),
   }
-  for (const [name, value] of Object.entries(output)) await writeOutput(name, value)
+  for (const [name, value] of Object.entries(output)) writeOutput(name, value)
 
   process.stdout.write(
     `Semantic release: ${baseTag || `package@${baseVersion}`} -> ${tag} (${next.impact}) from '${subject}'.\n`,
