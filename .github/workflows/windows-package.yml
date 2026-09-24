@@ -526,7 +526,6 @@ jobs:
     needs:
       - package
       - deploy-demo
-      - finalize-release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -593,6 +592,7 @@ jobs:
     needs:
       - package
       - deploy-demo
+      - finalize-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
