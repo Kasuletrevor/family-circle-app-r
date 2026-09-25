@@ -256,7 +256,7 @@ export function SettingsPage({
         <article className="settings-card">
           <div className="settings-card__heading">
             <span className="settings-card__icon"><UserRound size={20} /></span>
-            <div><h2>Profile</h2><p>The name your family sees in this app.</p></div>
+            <div><h2>Profile</h2><p>Your display name on this installation.</p></div>
           </div>
           <form className="settings-form" onSubmit={(event) => void saveProfile(event)}>
             <label>
@@ -266,7 +266,7 @@ export function SettingsPage({
             <label>
               <span>Email</span>
               <input value={user.email} readOnly aria-readonly="true" />
-              <small>Email is tied to your Family Circle identity and cannot be changed here.</small>
+              <small>Email is tied to your Family Circle identity and cannot be changed here. Name changes here do not rename your shared Circle identity.</small>
             </label>
             <div className="settings-actions">
               <button className="settings-button settings-button--primary" type="submit" disabled={profileBusy || name.trim() === (user.name ?? '').trim()}>
@@ -339,7 +339,7 @@ export function SettingsPage({
         <article className="settings-card">
           <div className="settings-card__heading">
             <span className="settings-card__icon"><DatabaseBackup size={20} /></span>
-            <div><h2>Local data backup</h2><p>Create a portable copy of your local Family Circle data.</p></div>
+            <div><h2>Local data backup</h2><p>Create a device backup when this Windows profile has one Family Circle account.</p></div>
           </div>
           <div className="settings-copy">
             <p>The backup includes your Family Circle database, Vault documents and Story media.</p>
