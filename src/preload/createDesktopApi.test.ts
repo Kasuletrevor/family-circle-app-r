@@ -6,6 +6,8 @@ describe('createDesktopApi', () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'app:get-version') return '0.1.0'
       if (channel === 'app:get-platform') return 'win32'
+      if (channel === 'app:create-database-backup') return { canceled: false, fileName: 'Family-Circle-backup.db' }
+      if (channel === 'app:open-data-folder') return { success: true }
       if (channel === 'auth:check-invitation') return { hasPendingInvite: false, groupName: null, role: null }
       if (channel === 'auth:sign-out' || channel === 'auth:reset-password') return { success: true }
       if (channel === 'auth:request-password-reset') return {
@@ -68,12 +70,12 @@ describe('createDesktopApi', () => {
     const api = createDesktopApi(invoke, subscribe)
 
     expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'privateAi', 'story'])
-    expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
-    expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword'])
+    expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform', 'createDatabaseBackup', 'openDataFolder'])
+    expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'updateProfile', 'changePassword', 'requestPasswordReset', 'resetPassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
     expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
-    expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
+    expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'remove', 'onProgress'])
 
     const serialized = JSON.stringify(api).toLowerCase()
     expect(serialized).not.toContain('api_key')
