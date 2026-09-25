@@ -115,7 +115,7 @@ describe('SettingsPage', () => {
   })
 
   it('keeps Pause enabled while Private AI setup is still in flight', async () => {
-    let progressListener: ((progress: Parameters<Parameters<PrivateAiClient['onProgress']>[0]>[0]) => void) | null = null
+    const progressListeners: Parameters<PrivateAiClient['onProgress']>[0][] = []
     let resolveSetup!: (status: Awaited<ReturnType<PrivateAiClient['startSetup']>>) => void
     const startSetup = vi.fn(() => new Promise<Awaited<ReturnType<PrivateAiClient['startSetup']>>>((resolve) => {
       resolveSetup = resolve
@@ -141,7 +141,7 @@ describe('SettingsPage', () => {
       pauseSetup,
       repair: vi.fn(),
       onProgress: vi.fn((listener) => {
-        progressListener = listener
+        progressListeners.push(listener)
         return () => undefined
       }),
     }
@@ -161,7 +161,8 @@ describe('SettingsPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Private AI' }))
     await waitFor(() => expect(startSetup).toHaveBeenCalledTimes(1))
 
-    progressListener?.({
+    expect(progressListeners).toHaveLength(1)
+    progressListeners[0]!({
       state: 'downloading',
       message: 'Downloading Private AI',
       bytesDownloaded: 10,
