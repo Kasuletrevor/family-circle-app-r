@@ -114,12 +114,71 @@ PY
 chmod 0644   "$TMP_DIR/release.json"   "$TMP_DIR/current.json"   "$TMP_DIR/VERSION"   "$TMP_DIR/$INSTALLER.sha256"
 
 if [[ -e "$DEST_DIR" ]]; then
-  echo "Release destination already exists: $DEST_DIR" >&2
-  rm -rf "$TMP_DIR"
-  exit 68
-fi
+  python3 - \
+    "$DEST_DIR/release.json" \
+    "$VERSION" \
+    "$COMMIT_SHA" \
+    "$IMMUTABLE_PATH" \
+    "$EXPECTED_SHA" \
+    "$RELEASE_TYPE" \
+    "$RELEASE_TITLE" \
+    "$RELEASE_TAG" \
+    "$BUILD_ID" <<'PY'
+import json
+import os
+import sys
 
-mv "$TMP_DIR" "$DEST_DIR"
+(
+    release_path,
+    version,
+    commit,
+    installer,
+    sha256,
+    release_type,
+    title,
+    tag,
+    build,
+) = sys.argv[1:]
+
+if not os.path.isfile(release_path):
+    raise SystemExit(f"Existing release is missing release.json: {release_path}")
+
+with open(release_path, "r", encoding="utf-8") as handle:
+    existing = json.load(handle)
+
+expected = {
+    "version": version,
+    "commit": commit,
+    "installer": installer,
+    "sha256": sha256,
+    "type": release_type,
+    "title": title,
+    "tag": tag,
+    "build": build,
+}
+
+mismatches = {
+    key: {"expected": value, "actual": existing.get(key)}
+    for key, value in expected.items()
+    if existing.get(key) != value
+}
+
+if mismatches:
+    raise SystemExit(f"Existing release does not match retry payload: {mismatches}")
+PY
+
+  existing_sha="$(sha256sum "$DEST_DIR/$INSTALLER" | awk '{print $1}')"
+  if [[ "$existing_sha" != "$EXPECTED_SHA" ]]; then
+    echo "Existing release installer checksum mismatch" >&2
+    rm -rf "$TMP_DIR"
+    exit 68
+  fi
+
+  echo "Reusing existing verified release destination: $DEST_DIR"
+  rm -rf "$TMP_DIR"
+else
+  mv "$TMP_DIR" "$DEST_DIR"
+fi
 
 python3 - "$ROOT" "$ROOT/.versions.json.tmp" <<'PY'
 import json
