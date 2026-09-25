@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthState, AuthUser, DesktopApi } from '../../../shared/desktopApi'
 import type { AuthClient } from '../../services/auth/AuthClient'
-import type { PrivateAiClient } from '../../services/ai/PrivateAiClient'
+import type { PrivateAiClient, PrivateAiStatus } from '../../services/ai/PrivateAiClient'
 import { Settings } from './Settings'
 
 const user: AuthUser = {
@@ -39,47 +39,22 @@ function authClient(): AuthClient {
 }
 
 function privateAiClient(): PrivateAiClient {
+  const ready: PrivateAiStatus = {
+    state: 'ready',
+    ready: true,
+    repairRequired: false,
+    totalSizeBytes: 704 * 1024 * 1024,
+    version: 'private-ai-v2',
+    message: 'Private AI is ready',
+  }
+  const paused: PrivateAiStatus = { ...ready, state: 'paused', ready: false, message: 'Private AI setup paused' }
+  const notInstalled: PrivateAiStatus = { ...ready, state: 'not_installed', ready: false, message: 'Private AI is not installed' }
   return {
-    getStatus: vi.fn(async () => ({
-      state: 'ready',
-      ready: true,
-      repairRequired: false,
-      totalSizeBytes: 704 * 1024 * 1024,
-      version: 'private-ai-v2',
-      message: 'Private AI is ready',
-    })),
-    startSetup: vi.fn(async () => ({
-      state: 'ready',
-      ready: true,
-      repairRequired: false,
-      totalSizeBytes: 704 * 1024 * 1024,
-      version: 'private-ai-v2',
-      message: 'Private AI is ready',
-    })),
-    pauseSetup: vi.fn(async () => ({
-      state: 'paused',
-      ready: false,
-      repairRequired: false,
-      totalSizeBytes: 704 * 1024 * 1024,
-      version: 'private-ai-v2',
-      message: 'Private AI setup paused',
-    })),
-    repair: vi.fn(async () => ({
-      state: 'ready',
-      ready: true,
-      repairRequired: false,
-      totalSizeBytes: 704 * 1024 * 1024,
-      version: 'private-ai-v2',
-      message: 'Private AI is ready',
-    })),
-    remove: vi.fn(async () => ({
-      state: 'not_installed',
-      ready: false,
-      repairRequired: false,
-      totalSizeBytes: 704 * 1024 * 1024,
-      version: 'private-ai-v2',
-      message: 'Private AI is not installed',
-    })),
+    getStatus: vi.fn(async () => ready),
+    startSetup: vi.fn(async () => ready),
+    pauseSetup: vi.fn(async () => paused),
+    repair: vi.fn(async () => ready),
+    remove: vi.fn(async () => notInstalled),
     onProgress: vi.fn(() => () => undefined),
   }
 }
@@ -87,7 +62,7 @@ function privateAiClient(): PrivateAiClient {
 function appClient(): Pick<DesktopApi['app'], 'getVersion' | 'getPlatform' | 'createDatabaseBackup' | 'openDataFolder'> {
   return {
     getVersion: vi.fn(async () => '0.2.3'),
-    getPlatform: vi.fn(async () => 'win32'),
+    getPlatform: vi.fn(async (): Promise<NodeJS.Platform> => 'win32'),
     createDatabaseBackup: vi.fn(async () => ({ canceled: false as const, fileName: 'Family-Circle-backup.db' })),
     openDataFolder: vi.fn(async () => ({ success: true as const })),
   }
