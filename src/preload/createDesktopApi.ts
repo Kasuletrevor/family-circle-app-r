@@ -1,12 +1,14 @@
 import type {
   AddTreeRelationInput,
   AuthState,
+  ChangePasswordInput,
   CircleContext,
   CircleDetails,
   CircleListItem,
   CircleOverview,
   CreateCircleInput,
   CreateCircleResult,
+  DatabaseBackupResult,
   DesktopApi,
   InvitationCheckResult,
   InviteMemberInput,
@@ -42,11 +44,15 @@ import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '.
 type DesktopChannel =
   | 'app:get-version'
   | 'app:get-platform'
+  | 'app:create-database-backup'
+  | 'app:open-data-folder'
   | 'auth:restore'
   | 'auth:sign-in'
   | 'auth:check-invitation'
   | 'auth:register'
   | 'auth:sign-out'
+  | 'auth:update-profile'
+  | 'auth:change-password'
   | 'auth:request-password-reset'
   | 'auth:reset-password'
   | 'onboarding:get-state'
@@ -79,6 +85,7 @@ type DesktopChannel =
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
   | 'private-ai:repair'
+  | 'private-ai:remove'
   | 'story:get'
   | 'story:save-draft'
   | 'story:confirm-field'
@@ -372,6 +379,12 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       async getPlatform() {
         return String(await invoke('app:get-platform')) as NodeJS.Platform
       },
+      createDatabaseBackup() {
+        return invoke('app:create-database-backup') as Promise<DatabaseBackupResult>
+      },
+      openDataFolder() {
+        return invoke('app:open-data-folder') as Promise<{ success: true }>
+      },
     },
     auth: {
       restore() {
@@ -388,6 +401,12 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       signOut() {
         return invoke('auth:sign-out') as Promise<{ success: true }>
+      },
+      updateProfile(name: string) {
+        return invoke('auth:update-profile', name) as Promise<AuthState>
+      },
+      changePassword(input: ChangePasswordInput) {
+        return invoke('auth:change-password', input) as Promise<AuthState>
       },
       requestPasswordReset(email: string) {
         return invoke('auth:request-password-reset', email) as Promise<{ success: true; message: string; expiresInMinutes: number }>
@@ -499,6 +518,9 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       async repair() {
         return safePrivateAiStatus(await invoke('private-ai:repair'))
+      },
+      async remove() {
+        return safePrivateAiStatus(await invoke('private-ai:remove'))
       },
       onProgress(listener: (progress: PrivateAiPublicProgress) => void) {
         return subscribe('private-ai:progress', (payload) => listener(safePrivateAiProgress(payload)))
