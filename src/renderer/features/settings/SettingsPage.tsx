@@ -82,6 +82,7 @@ export function SettingsPage({
   const [aiStatus, setAiStatus] = useState<PrivateAiStatus | null>(null)
   const [aiProgress, setAiProgress] = useState<PrivateAiProgress | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
+  const [aiPauseBusy, setAiPauseBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
   const [backupBusy, setBackupBusy] = useState(false)
@@ -201,14 +202,14 @@ export function SettingsPage({
   }
 
   async function pausePrivateAi() {
-    setAiBusy(true)
+    setAiPauseBusy(true)
     setAiError(null)
     try {
       setAiStatus(await privateAiClient.pauseSetup())
     } catch (error) {
       setAiError(error instanceof Error ? error.message : 'Could not pause Private AI setup.')
     } finally {
-      setAiBusy(false)
+      setAiPauseBusy(false)
     }
   }
 
@@ -322,8 +323,8 @@ export function SettingsPage({
               </button>
             ) : null}
             {aiStatus?.state === 'downloading' ? (
-              <button className="settings-button settings-button--secondary" type="button" disabled={aiBusy} onClick={() => void pausePrivateAi()}>
-                <Pause size={15} /> Pause download
+              <button className="settings-button settings-button--secondary" type="button" disabled={aiPauseBusy} onClick={() => void pausePrivateAi()}>
+                <Pause size={15} /> {aiPauseBusy ? 'Pausing…' : 'Pause download'}
               </button>
             ) : null}
             {aiStatus?.state === 'repair_required' ? (
