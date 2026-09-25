@@ -19,6 +19,7 @@ import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
 import { SettingsService } from './settings/SettingsService'
+import { AsyncMutationLock } from './storage/MutationLock'
 import { registerSettingsIpc } from './settings/settingsIpc'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
 import { StoryChunkRepository } from './story/StoryChunkRepository'
@@ -51,6 +52,7 @@ interface AppServices extends StoryServices {
   settingsService: SettingsService
   vaultIndexService: VaultIndexService
   sessions: SessionStore
+  mutationLock: AsyncMutationLock
 }
 
 function registerDesktopIpc(services: AppServices) {
@@ -58,13 +60,14 @@ function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
-  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)
+  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock)
   registerSettingsIpc(ipcMain, services.settingsService)
   registerStoryIpc(ipcMain, {
     story: services.storyService,
     media: services.storyMediaService,
     voiceAssets: services.voiceAssetService,
     transcription: services.voiceTranscriptionService,
+    mutationLock: services.mutationLock,
   })
   registerPrivateAiIpc(ipcMain, services.privateAiService, () => {
     void retryPendingPrivateIndexes(
@@ -92,6 +95,8 @@ async function createAppServices(): Promise<AppServices> {
   const recovery = new PasswordRecoveryService(database, users, mailer)
   const circle = new LegacyCircleAuthAdapter(resolveCircleApiConfig())
 
+  const mutationLock = new AsyncMutationLock()
+
   const privateAiService = new OfflineAiAssetService({
     userDataPath,
     manifestPath: join(app.getAppPath(), 'config', 'offline-ai-manifest.json'),
@@ -103,6 +108,7 @@ async function createAppServices(): Promise<AppServices> {
     userDataPath,
     appVersion: app.getVersion(),
     session: sessions,
+    mutationLock,
     picker: {
       async chooseDestination() {
         const result = await dialog.showOpenDialog({
@@ -194,6 +200,7 @@ async function createAppServices(): Promise<AppServices> {
     settingsService,
     vaultIndexService,
     sessions,
+    mutationLock,
     ...storyServices,
   }
 
