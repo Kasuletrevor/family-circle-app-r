@@ -114,6 +114,76 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('button', { name: /remove private ai/i })).toBeNull()
   })
 
+  it('keeps Pause enabled while Private AI setup is still in flight', async () => {
+    let progressListener: ((progress: Parameters<Parameters<PrivateAiClient['onProgress']>[0]>[0]) => void) | null = null
+    let resolveSetup!: (status: Awaited<ReturnType<PrivateAiClient['startSetup']>>) => void
+    const startSetup = vi.fn(() => new Promise<Awaited<ReturnType<PrivateAiClient['startSetup']>>>((resolve) => {
+      resolveSetup = resolve
+    }))
+    const pauseSetup = vi.fn(async () => ({
+      state: 'paused' as const,
+      ready: false,
+      repairRequired: false,
+      totalSizeBytes: 704 * 1024 * 1024,
+      version: 'qwen3.5-0.8b',
+      message: 'Private AI setup paused',
+    }))
+    const privateAi: PrivateAiClient = {
+      getStatus: vi.fn(async () => ({
+        state: 'not_installed' as const,
+        ready: false,
+        repairRequired: false,
+        totalSizeBytes: 704 * 1024 * 1024,
+        version: 'qwen3.5-0.8b',
+        message: null,
+      })),
+      startSetup,
+      pauseSetup,
+      repair: vi.fn(),
+      onProgress: vi.fn((listener) => {
+        progressListener = listener
+        return () => undefined
+      }),
+    }
+    const desktop = {
+      app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
+      settings: { createBackup: vi.fn() },
+    } as Pick<DesktopApi, 'app' | 'settings'>
+    const auth = {
+      updateProfile: vi.fn(async () => authenticated()),
+      changePassword: vi.fn(async () => authenticated()),
+    } as unknown as AuthClient
+
+    render(
+      <SettingsPage user={user} auth={auth} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up Private AI' }))
+    await waitFor(() => expect(startSetup).toHaveBeenCalledTimes(1))
+
+    progressListener?.({
+      state: 'downloading',
+      message: 'Downloading Private AI',
+      bytesDownloaded: 10,
+      totalSizeBytes: 100,
+      percent: 10,
+    })
+
+    const pauseButton = await screen.findByRole('button', { name: 'Pause download' })
+    expect(pauseButton).toBeEnabled()
+    fireEvent.click(pauseButton)
+    await waitFor(() => expect(pauseSetup).toHaveBeenCalledTimes(1))
+
+    resolveSetup({
+      state: 'paused',
+      ready: false,
+      repairRequired: false,
+      totalSizeBytes: 704 * 1024 * 1024,
+      version: 'qwen3.5-0.8b',
+      message: 'Private AI setup paused',
+    })
+  })
+
   it('validates password confirmation before crossing the desktop boundary', async () => {
     const changePassword = vi.fn()
     const auth = {
