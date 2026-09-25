@@ -98,7 +98,7 @@ export function Settings({
       .then((status) => { if (active) setAiStatus(status) })
       .catch(() => { if (active) setAiError('Could not read Private AI status.') })
 
-    let unsubscribe = () => undefined
+    let unsubscribe: () => void = () => {}
     try {
       unsubscribe = privateAi.onProgress((progress) => {
         if (!active) return
