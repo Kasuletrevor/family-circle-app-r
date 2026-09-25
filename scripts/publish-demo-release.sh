@@ -216,22 +216,83 @@ PY
 mv -f "$ROOT/.versions.json.tmp" "$ROOT/versions.json"
 chmod 0644 "$ROOT/versions.json"
 
+PROMOTE_LATEST="true"
+if [[ -f "$ROOT/current.json" ]]; then
+  latest_decision="$(python3 - \
+    "$ROOT/current.json" \
+    "$VERSION" \
+    "$COMMIT_SHA" \
+    "$EXPECTED_SHA" \
+    "$RELEASE_TAG" \
+    "$BUILD_ID" <<'PY'
+import json
+import re
+import sys
+
+current_path, target_version, commit, sha256, tag, build = sys.argv[1:]
+
+def semver(value):
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-|$)", str(value or ""))
+    if not match:
+        raise SystemExit(f"Cannot compare release version: {value!r}")
+    return tuple(int(part) for part in match.groups())
+
+with open(current_path, "r", encoding="utf-8") as handle:
+    current = json.load(handle)
+
+current_version = str(current.get("version", ""))
+current_semver = semver(current_version)
+target_semver = semver(target_version)
+
+if current_semver > target_semver:
+    print("newer")
+elif current_semver < target_semver:
+    print("older")
+else:
+    expected = {
+        "version": target_version,
+        "commit": commit,
+        "sha256": sha256,
+        "tag": tag,
+        "build": build,
+    }
+    mismatches = {
+        key: {"expected": value, "actual": current.get(key)}
+        for key, value in expected.items()
+        if current.get(key) != value
+    }
+    if mismatches:
+        raise SystemExit(f"Current release metadata conflicts with same semantic version: {mismatches}")
+    print("same")
+PY
+  )"
+
+  if [[ "$latest_decision" == "newer" ]]; then
+    PROMOTE_LATEST="false"
+    echo "Preserving newer current release; retry will not move latest backward from $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown) to $VERSION"
+  fi
+fi
+
 # Root compatibility endpoints resolve through latest so installer bytes and
 # current metadata switch together when the single latest pointer is replaced.
-CURRENT_LINK="$ROOT/.current-$VERSION"
-VERSION_LINK="$ROOT/.version-$VERSION"
-NEXT_LINK="$ROOT/.latest-$VERSION"
-rm -f "$CURRENT_LINK" "$VERSION_LINK" "$NEXT_LINK"
-ln -s "latest/current.json" "$CURRENT_LINK"
-ln -s "latest/VERSION" "$VERSION_LINK"
-ln -s "$VERSION" "$NEXT_LINK"
+if [[ "$PROMOTE_LATEST" == "true" ]]; then
+  CURRENT_LINK="$ROOT/.current-$VERSION"
+  VERSION_LINK="$ROOT/.version-$VERSION"
+  NEXT_LINK="$ROOT/.latest-$VERSION"
+  rm -f "$CURRENT_LINK" "$VERSION_LINK" "$NEXT_LINK"
+  ln -s "latest/current.json" "$CURRENT_LINK"
+  ln -s "latest/VERSION" "$VERSION_LINK"
+  ln -s "$VERSION" "$NEXT_LINK"
 
-mv -Tf "$CURRENT_LINK" "$ROOT/current.json"
-mv -Tf "$VERSION_LINK" "$ROOT/VERSION"
+  mv -Tf "$CURRENT_LINK" "$ROOT/current.json"
+  mv -Tf "$VERSION_LINK" "$ROOT/VERSION"
 
-# This is the publication point. Everything visible through latest/current.json,
-# root current.json, root VERSION, and latest/<installer> changes together.
-mv -Tf "$NEXT_LINK" "$ROOT/latest"
+  # This is the publication point. Everything visible through latest/current.json,
+  # root current.json, root VERSION, and latest/<installer> changes together.
+  mv -Tf "$NEXT_LINK" "$ROOT/latest"
+else
+  echo "Immutable release $VERSION verified; latest remains on the newer release."
+fi
 
 rm -rf "$STAGE_DIR"
 
