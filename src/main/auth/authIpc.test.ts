@@ -15,11 +15,12 @@ describe('registerAuthIpc', () => {
       checkInvitation: vi.fn(async () => ({ hasPendingInvite: false, groupName: null, role: null })),
       register: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       signOut: vi.fn(async () => ({ success: true as const })),
+      updateProfile: vi.fn(async () => ({ status: 'unauthenticated' as const })),
+      changePassword: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       requestPasswordReset: vi.fn(async () => ({ success: true as const, message: 'neutral', expiresInMinutes: 10 })),
       resetPassword: vi.fn(async () => ({ success: true as const })),
       getState: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       setInitialPassword: vi.fn(async () => ({ status: 'unauthenticated' as const })),
-      updateProfile: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       getCircleContext: vi.fn(async () => ({ accountOrigin: 'registered' as const, invitation: null, groups: [] })),
       complete: vi.fn(async () => ({ status: 'unauthenticated' as const })),
     }
@@ -32,6 +33,8 @@ describe('registerAuthIpc', () => {
       'auth:check-invitation',
       'auth:register',
       'auth:sign-out',
+      'auth:update-profile',
+      'auth:change-password',
       'auth:request-password-reset',
       'auth:reset-password',
       'onboarding:get-state',
@@ -52,6 +55,13 @@ describe('registerAuthIpc', () => {
     const registration = { name: 'Family Member', email: 'member@example.com', password: '123456789012' }
     await handlers.get('auth:register')?.(electronEvent, registration)
     expect(service.register).toHaveBeenCalledWith(registration)
+
+    await handlers.get('auth:update-profile')?.(electronEvent, 'Settings Name')
+    expect(service.updateProfile).toHaveBeenCalledWith('Settings Name')
+
+    const change = { currentPassword: 'current password 123', newPassword: 'new password 1234' }
+    await handlers.get('auth:change-password')?.(electronEvent, change)
+    expect(service.changePassword).toHaveBeenCalledWith(change)
 
     await handlers.get('auth:request-password-reset')?.(electronEvent, 'member@example.com')
     expect(service.requestPasswordReset).toHaveBeenCalledWith('member@example.com')
