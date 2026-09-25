@@ -25,7 +25,6 @@ export interface AuthIpcService {
   changePassword(input: ChangePasswordInput): Promise<AuthState>
   getState(): Promise<AuthState>
   setInitialPassword(newPassword: string): Promise<AuthState>
-  updateProfile(name: string): Promise<AuthState>
   getCircleContext(): Promise<CircleContext>
   complete(nextAction: OnboardingNextAction): Promise<AuthState>
 }
