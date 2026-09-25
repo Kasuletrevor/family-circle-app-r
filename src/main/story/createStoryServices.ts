@@ -16,6 +16,7 @@ import { StoryRepository } from './StoryRepository'
 import { StoryService, type StorySessionSource } from './StoryService'
 import { OfflineVoiceAssetService } from '../voice/OfflineVoiceAssetService'
 import { VoiceTranscriptionService } from '../voice/VoiceTranscriptionService'
+import type { MutationLock } from '../storage/MutationLock'
 
 interface CreateStoryServicesDependencies {
   db: DatabaseSync
@@ -27,6 +28,7 @@ interface CreateStoryServicesDependencies {
   privateAiAssets: StoryAiStatusSource
   picker: StoryMediaPicker
   opener: StoryMediaOpenPort
+  mutationLock?: MutationLock
 }
 
 export interface StoryServices {
@@ -47,6 +49,7 @@ export function createStoryServices(dependencies: CreateStoryServicesDependencie
     runtime: dependencies.runtime,
     nomic: dependencies.nomic,
     assets: dependencies.privateAiAssets,
+    mutationLock: dependencies.mutationLock,
   })
   const storyService = new StoryService({
     session: dependencies.sessions,
