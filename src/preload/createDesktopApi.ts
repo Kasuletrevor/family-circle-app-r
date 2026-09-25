@@ -1,6 +1,7 @@
 import type {
   AddTreeRelationInput,
   AuthState,
+  ChangePasswordInput,
   CircleContext,
   CircleDetails,
   CircleListItem,
@@ -11,6 +12,7 @@ import type {
   InvitationCheckResult,
   InviteMemberInput,
   InviteMemberResult,
+  LocalBackupResult,
   OnboardingNextAction,
   PrivateAiPublicProgress,
   PrivateAiPublicState,
@@ -49,6 +51,8 @@ type DesktopChannel =
   | 'auth:sign-out'
   | 'auth:request-password-reset'
   | 'auth:reset-password'
+  | 'auth:update-profile'
+  | 'auth:change-password'
   | 'onboarding:get-state'
   | 'onboarding:set-initial-password'
   | 'onboarding:update-profile'
@@ -75,6 +79,7 @@ type DesktopChannel =
   | 'vault:retry-indexing'
   | 'vault:delete'
   | 'vault:ask'
+  | 'settings:create-backup'
   | 'private-ai:get-status'
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
@@ -222,6 +227,16 @@ function safeQueryScope(scope: VaultQueryScope): VaultQueryScope {
   return {
     type: 'documents',
     documentIds: scope.documentIds.filter((id) => Number.isSafeInteger(id) && id > 0),
+  }
+}
+
+function safeBackupResult(value: unknown): LocalBackupResult {
+  const raw = recordOf(value)
+  const createdAt = Number(raw.createdAt)
+  return {
+    canceled: raw.canceled === true,
+    folderName: raw.folderName == null ? null : String(raw.folderName),
+    createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : null,
   }
 }
 
@@ -395,6 +410,12 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       resetPassword(input: ResetPasswordInput) {
         return invoke('auth:reset-password', input) as Promise<{ success: true }>
       },
+      updateProfile(name: string) {
+        return invoke('auth:update-profile', name) as Promise<AuthState>
+      },
+      changePassword(input: ChangePasswordInput) {
+        return invoke('auth:change-password', input) as Promise<AuthState>
+      },
     },
     onboarding: {
       getState() {
@@ -485,6 +506,11 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       onUploadProgress(listener: (progress: VaultUploadProgress) => void) {
         return subscribe('vault:upload-progress', (payload) => listener(safeProgress(payload)))
+      },
+    },
+    settings: {
+      async createBackup() {
+        return safeBackupResult(await invoke('settings:create-backup'))
       },
     },
     privateAi: {
