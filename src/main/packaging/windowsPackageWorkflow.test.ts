@@ -88,12 +88,16 @@ describe('Windows packaging workflow', () => {
     expect(recoveryBlock).toContain('--retry-all-errors')
     expect(recoveryBlock).not.toContain('No recoverable server release metadata; continuing.')
     expect(recoveryBlock).toContain('GH_REPO: ${{ github.repository }}')
-    expect(recoveryBlock).toContain('Tag $tag and both GitHub Release assets are byte-verified; recovery is a no-op.')
+    expect(recoveryBlock).toContain('Server bytes, tag, and both GitHub Release assets are verified; recovery is a no-op.')
     expect(recoveryBlock).not.toContain('--clobber')
     expect(recoveryBlock).toContain('gh release download "$tag" --pattern "$expected_installer"')
     expect(recoveryBlock).toContain('Existing GitHub Release installer checksum mismatch for $tag')
     expect(recoveryBlock).toContain('Existing GitHub Release checksum asset mismatch for $tag')
     expect(recoveryBlock).toContain('Recoverable installer checksum mismatch')
+    expect(recoveryBlock).toContain('Verified server installer bytes for $tag before GitHub recovery.')
+    expect(recoveryBlock.indexOf('Recoverable installer checksum mismatch')).toBeLessThan(
+      recoveryBlock.indexOf('git ls-remote --tags origin "refs/tags/$tag"'),
+    )
     expect(recoveryBlock).toContain('git ls-remote --tags origin "refs/tags/$tag"')
     expect(recoveryBlock).toContain('Recovered $tag -> $commit')
     expect(recoveryBlock).toContain('gh release create "$tag"')
