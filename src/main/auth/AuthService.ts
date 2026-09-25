@@ -1,6 +1,7 @@
 import type {
   AuthState,
   AuthUser,
+  ChangePasswordInput,
   CircleContext,
   InvitationCheckResult,
   OnboardingNextAction,
@@ -22,6 +23,7 @@ export interface CircleAuthPort {
 export interface RecoveryPort {
   request(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
   reset(input: ResetPasswordInput): Promise<{ success: true }>
+  invalidateOutstanding(userId: number): Promise<void>
 }
 
 export function stateFor(user: AuthUser): AuthState {
@@ -121,6 +123,18 @@ export class AuthService {
     await this.sessions.save(updated.id)
     return stateFor(updated)
   }
+
+  async changePassword(input: ChangePasswordInput): Promise<AuthState> {
+    const current = await this.requireUser()
+    if (!await this.users.verifyPassword(current.id, String(input.currentPassword ?? ''))) {
+      throw new Error('Current password is incorrect.')
+    }
+    const updated = await this.users.replacePassword(current.id, String(input.newPassword ?? ''))
+    await this.recovery.invalidateOutstanding(current.id)
+    await this.sessions.save(updated.id)
+    return stateFor(updated)
+  }
+
 
   async getCircleContext(): Promise<CircleContext> {
     const current = await this.requireUser()

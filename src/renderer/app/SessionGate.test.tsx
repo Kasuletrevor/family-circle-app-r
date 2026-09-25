@@ -19,6 +19,7 @@ function clientWithRestore(restore: () => Promise<AuthState>): AuthClient {
     signOut: vi.fn(),
     requestPasswordReset: vi.fn(),
     resetPassword: vi.fn(),
+    changePassword: vi.fn(),
     getOnboardingState: vi.fn(),
     setInitialPassword: vi.fn(),
     updateProfile: vi.fn(),

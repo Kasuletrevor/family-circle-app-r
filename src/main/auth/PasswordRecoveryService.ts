@@ -183,4 +183,12 @@ export class PasswordRecoveryService {
 
     return { success: true }
   }
+
+  async invalidateOutstanding(userId: number): Promise<void> {
+    this.db.prepare(`
+      UPDATE password_reset_tokens
+         SET used_at = ?
+       WHERE user_id = ? AND used_at IS NULL
+    `).run(this.now(), userId)
+  }
 }

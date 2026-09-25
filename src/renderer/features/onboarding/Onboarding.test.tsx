@@ -37,6 +37,7 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
     signOut: vi.fn(),
     requestPasswordReset: vi.fn(),
     resetPassword: vi.fn(),
+    changePassword: vi.fn(),
     getOnboardingState: vi.fn(),
     setInitialPassword: vi.fn(async (): Promise<AuthState> => ({
       ...invitedState,

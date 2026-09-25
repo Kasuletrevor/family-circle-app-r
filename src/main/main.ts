@@ -18,6 +18,9 @@ import { CircleService } from './circle/CircleService'
 import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
+import { SettingsService } from './settings/SettingsService'
+import { AsyncMutationLock } from './storage/MutationLock'
+import { registerSettingsIpc } from './settings/settingsIpc'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
 import { StoryChunkRepository } from './story/StoryChunkRepository'
 import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'
@@ -46,8 +49,10 @@ interface AppServices extends StoryServices {
   vaultService: VaultService
   vaultQueryService: VaultQueryService
   privateAiService: OfflineAiAssetService
+  settingsService: SettingsService
   vaultIndexService: VaultIndexService
   sessions: SessionStore
+  mutationLock: AsyncMutationLock
 }
 
 function registerDesktopIpc(services: AppServices) {
@@ -55,12 +60,14 @@ function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
-  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)
+  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock)
+  registerSettingsIpc(ipcMain, services.settingsService)
   registerStoryIpc(ipcMain, {
     story: services.storyService,
     media: services.storyMediaService,
     voiceAssets: services.voiceAssetService,
     transcription: services.voiceTranscriptionService,
+    mutationLock: services.mutationLock,
   })
   registerPrivateAiIpc(ipcMain, services.privateAiService, () => {
     void retryPendingPrivateIndexes(
@@ -88,11 +95,30 @@ async function createAppServices(): Promise<AppServices> {
   const recovery = new PasswordRecoveryService(database, users, mailer)
   const circle = new LegacyCircleAuthAdapter(resolveCircleApiConfig())
 
+  const mutationLock = new AsyncMutationLock()
+
   const privateAiService = new OfflineAiAssetService({
     userDataPath,
     manifestPath: join(app.getAppPath(), 'config', 'offline-ai-manifest.json'),
   })
   aiRuntimeManager = new AiRuntimeManager({ assets: privateAiService })
+
+  const settingsService = new SettingsService({
+    db: database,
+    userDataPath,
+    appVersion: app.getVersion(),
+    session: sessions,
+    mutationLock,
+    picker: {
+      async chooseDestination() {
+        const result = await dialog.showOpenDialog({
+          title: 'Choose where to save your Family Circle backup',
+          properties: ['openDirectory', 'createDirectory'],
+        })
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
+    },
+  })
 
   const vaultRepository = new VaultRepository(database)
   const vaultChunkRepository = new VaultChunkRepository(database)
@@ -105,6 +131,7 @@ async function createAppServices(): Promise<AppServices> {
     runtime: aiRuntimeManager,
     nomic: nomicClient,
     assets: privateAiService,
+    mutationLock,
   })
   const vaultService = new VaultService({
     session: sessions,
@@ -148,6 +175,7 @@ async function createAppServices(): Promise<AppServices> {
     opener: {
       openPath: (absolutePath) => shell.openPath(absolutePath),
     },
+    mutationLock,
   })
 
   const storyQueryHistory = new StoryHistoryRepository(database)
@@ -171,8 +199,10 @@ async function createAppServices(): Promise<AppServices> {
     vaultService,
     vaultQueryService,
     privateAiService,
+    settingsService,
     vaultIndexService,
     sessions,
+    mutationLock,
     ...storyServices,
   }
 

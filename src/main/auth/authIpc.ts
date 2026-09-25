@@ -1,5 +1,6 @@
 import type {
   AuthState,
+  ChangePasswordInput,
   CircleContext,
   InvitationCheckResult,
   OnboardingNextAction,
@@ -20,9 +21,10 @@ export interface AuthIpcService {
   signOut(): Promise<{ success: true }>
   requestPasswordReset(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
   resetPassword(input: ResetPasswordInput): Promise<{ success: true }>
+  updateProfile(name: string): Promise<AuthState>
+  changePassword(input: ChangePasswordInput): Promise<AuthState>
   getState(): Promise<AuthState>
   setInitialPassword(newPassword: string): Promise<AuthState>
-  updateProfile(name: string): Promise<AuthState>
   getCircleContext(): Promise<CircleContext>
   complete(nextAction: OnboardingNextAction): Promise<AuthState>
 }
@@ -35,6 +37,8 @@ export function registerAuthIpc(ipc: IpcHandleRegistrar, service: AuthIpcService
   ipc.handle('auth:sign-out', () => service.signOut())
   ipc.handle('auth:request-password-reset', (_event, payload) => service.requestPasswordReset(String(payload ?? '')))
   ipc.handle('auth:reset-password', (_event, payload) => service.resetPassword(payload as ResetPasswordInput))
+  ipc.handle('auth:update-profile', (_event, payload) => service.updateProfile(String(payload ?? '')))
+  ipc.handle('auth:change-password', (_event, payload) => service.changePassword(payload as ChangePasswordInput))
   ipc.handle('onboarding:get-state', () => service.getState())
   ipc.handle('onboarding:set-initial-password', (_event, payload) => service.setInitialPassword(String(payload ?? '')))
   ipc.handle('onboarding:update-profile', (_event, payload) => service.updateProfile(String(payload ?? '')))

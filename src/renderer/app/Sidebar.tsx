@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   MailPlus,
   Network,
+  Settings,
   UsersRound,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -30,6 +31,7 @@ export const navigationItems: NavigationItem[] = [
   { label: 'Stories', to: '/stories', icon: BookOpen },
   { label: 'Vault', to: '/vault', icon: LockKeyhole },
   { label: 'AI Assistant', to: '/ai', icon: Bot },
+  { label: 'Settings', to: '/settings', icon: Settings },
 ]
 
 function aiStatusLabel(state: PrivateAiState | 'checking' | 'unavailable'): string {

@@ -7,6 +7,7 @@ import type {
 } from '../../shared/desktopApi'
 import type { IpcHandleRegistrar } from '../auth/authIpc'
 import type { VaultDocumentInternal } from './vaultModels'
+import { noMutationLock, type MutationLock } from '../storage/MutationLock'
 import type {
   VaultUploadBatchResult as InternalVaultUploadBatchResult,
   VaultUploadProgress as InternalVaultUploadProgress,
@@ -118,21 +119,22 @@ export function registerVaultIpc(
   ipc: IpcHandleRegistrar,
   service: VaultIpcService,
   queryService?: VaultQueryIpcService,
+  mutationLock: MutationLock = noMutationLock,
 ): void {
-  ipc.handle('vault:list', async () => (await service.listDocuments()).map(safeSummary))
+  ipc.handle('vault:list', async () => mutationLock.runExclusive(async () => (await service.listDocuments()).map(safeSummary)))
   ipc.handle('vault:choose-and-upload', async (event) => {
     const sender = (event as VaultIpcEvent | null)?.sender
-    const result = await service.chooseAndUploadDocuments((progress) => {
+    const result = await mutationLock.runExclusive(() => service.chooseAndUploadDocuments((progress) => {
       sender?.send('vault:upload-progress', safeProgress(progress))
-    })
+    }))
     return safeUploadResult(result)
   })
   ipc.handle('vault:open', (_event, payload) => service.openDocument(documentIdOf(payload)))
   ipc.handle('vault:retry-extraction', async (_event, payload) => {
-    return safeSummary(await service.retryExtraction(documentIdOf(payload)))
+    return mutationLock.runExclusive(async () => safeSummary(await service.retryExtraction(documentIdOf(payload))))
   })
   ipc.handle('vault:retry-indexing', (_event, payload) => service.retryIndexing(documentIdOf(payload)))
-  ipc.handle('vault:delete', (_event, payload) => service.deleteDocument(documentIdOf(payload)))
+  ipc.handle('vault:delete', (_event, payload) => mutationLock.runExclusive(() => service.deleteDocument(documentIdOf(payload))))
   if (queryService) {
     ipc.handle('vault:ask', async (_event, payload) => safeAnswer(await queryService.ask(queryInputOf(payload))))
   }

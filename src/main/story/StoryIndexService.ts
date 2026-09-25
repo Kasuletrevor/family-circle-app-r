@@ -3,6 +3,7 @@ import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from '../ai/embeddingCont
 import { chunkDocument } from '../vault/chunkDocument'
 import type { StoryAnswerInternal } from './storyModels'
 import type { StoryIndexChunkInput } from './StoryChunkRepository'
+import { noMutationLock, type MutationLock } from '../storage/MutationLock'
 
 export interface StoryIndexRepository {
   getAnswer(localUserId: number, fieldKey: StoryFieldKey): Promise<StoryAnswerInternal | null>
@@ -39,6 +40,7 @@ interface StoryIndexServiceDependencies {
   runtime: StoryEmbeddingRuntime
   nomic: StoryNomicClient
   assets: StoryAiStatusSource
+  mutationLock?: MutationLock
 }
 
 type StoryIndexErrorCode = 'not-confirmed' | 'indexing-failed'
@@ -54,6 +56,11 @@ export class StoryIndexService {
   constructor(private readonly dependencies: StoryIndexServiceDependencies) {}
 
   async indexField(localUserId: number, fieldKey: StoryFieldKey): Promise<void> {
+    const mutationLock = this.dependencies.mutationLock ?? noMutationLock
+    return mutationLock.runExclusive(() => this.indexFieldUnlocked(localUserId, fieldKey))
+  }
+
+  private async indexFieldUnlocked(localUserId: number, fieldKey: StoryFieldKey): Promise<void> {
     requireStoryField(fieldKey)
     const current = await this.dependencies.repository.getAnswer(localUserId, fieldKey)
     if (!current || !current.confirmed || !current.answer.trim()) {

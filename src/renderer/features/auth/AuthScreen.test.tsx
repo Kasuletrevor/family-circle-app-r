@@ -31,6 +31,7 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
       expiresInMinutes: 10,
     })),
     resetPassword: vi.fn(async () => ({ success: true as const })),
+    changePassword: vi.fn(),
     getOnboardingState: vi.fn(),
     setInitialPassword: vi.fn(),
     updateProfile: vi.fn(),

@@ -8,6 +8,16 @@ describe('createDesktopApi', () => {
       if (channel === 'app:get-platform') return 'win32'
       if (channel === 'auth:check-invitation') return { hasPendingInvite: false, groupName: null, role: null }
       if (channel === 'auth:sign-out' || channel === 'auth:reset-password') return { success: true }
+      if (channel === 'auth:update-profile' || channel === 'auth:change-password') return {
+        status: 'authenticated',
+        user: { id: 1, email: 'a@example.com', name: 'Ada Updated', accountOrigin: 'registered', mustChangePassword: false, onboardingCompleted: true },
+      }
+      if (channel === 'settings:create-backup') return {
+        canceled: false,
+        folderName: 'Family Circle Backup 2026-09-25T10-00-00-000Z',
+        createdAt: 123456,
+        absolutePath: 'C:/private/backups/secret',
+      }
       if (channel === 'auth:request-password-reset') return {
         success: true,
         message: 'If an account exists for that email, a recovery code has been sent.',
@@ -67,12 +77,13 @@ describe('createDesktopApi', () => {
     const subscribe = vi.fn(() => () => undefined)
     const api = createDesktopApi(invoke, subscribe)
 
-    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'privateAi', 'story'])
+    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'settings', 'privateAi', 'story'])
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
-    expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword'])
+    expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword', 'updateProfile', 'changePassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
     expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
+    expect(Object.keys(api.settings)).toEqual(['createBackup'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
 
     const serialized = JSON.stringify(api).toLowerCase()
@@ -89,6 +100,10 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('auth:restore')
     await api.auth.signIn({ email: 'a@example.com', password: '123456789012' })
     expect(invoke).toHaveBeenCalledWith('auth:sign-in', { email: 'a@example.com', password: '123456789012' })
+    await api.auth.updateProfile('Ada Updated')
+    expect(invoke).toHaveBeenCalledWith('auth:update-profile', 'Ada Updated')
+    await api.auth.changePassword({ currentPassword: 'old password 123', newPassword: 'new password 123' })
+    expect(invoke).toHaveBeenCalledWith('auth:change-password', { currentPassword: 'old password 123', newPassword: 'new password 123' })
     await api.onboarding.complete('home')
     expect(invoke).toHaveBeenCalledWith('onboarding:complete', 'home')
 
@@ -145,6 +160,14 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('vault:ask', { question: 'Who?', scope: { type: 'documents', documentIds: [5] } })
     expect(answer).toEqual({ answer: 'Grounded answer', sources: [{ documentId: 5, fileName: 'Family History.pdf', excerpt: 'Safe excerpt' }] })
     expect(JSON.stringify(answer)).not.toMatch(/embedding|modelPath|localUserId|storedRelativePath|extractedText/)
+    const backup = await api.settings.createBackup()
+    expect(invoke).toHaveBeenCalledWith('settings:create-backup')
+    expect(backup).toEqual({
+      canceled: false,
+      folderName: 'Family Circle Backup 2026-09-25T10-00-00-000Z',
+      createdAt: 123456,
+    })
+    expect(JSON.stringify(backup)).not.toContain('absolutePath')
     await api.privateAi.getStatus()
     expect(invoke).toHaveBeenCalledWith('private-ai:get-status')
   })

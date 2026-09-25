@@ -15,6 +15,7 @@ const navigationLabels = [
   'Stories',
   'Vault',
   'AI Assistant',
+  'Settings',
 ]
 
 const user: AuthUser = {
@@ -33,6 +34,13 @@ describe('App shell', () => {
     Object.defineProperty(window, 'familyCircle', {
       configurable: true,
       value: {
+        app: {
+          getVersion: async () => '0.2.3',
+          getPlatform: async () => 'win32',
+        },
+        settings: {
+          createBackup: async () => ({ canceled: true, folderName: null, createdAt: null }),
+        },
         vault: {
           listDocuments: async () => [],
           chooseAndUploadDocuments: async () => ({ canceled: true, items: [] }),
@@ -75,7 +83,7 @@ describe('App shell', () => {
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Memories' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
+    expect(primaryNavigation.getByRole('link', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('searchbox', { name: /search family circle/i })).toBeNull()
     expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
 
@@ -108,6 +116,11 @@ describe('App shell', () => {
     expect(await screen.findByRole('heading', { name: 'Vault' })).toBeInTheDocument()
     expect(screen.getByText('Your private documents stay on this computer.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
+
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Settings' }))
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(await screen.findByText('v0.2.3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create backup' })).toBeInTheDocument()
   })
 
   it('routes /stories to the real private My Story studio instead of the Stories placeholder', async () => {

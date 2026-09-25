@@ -17,6 +17,7 @@ describe('registerAuthIpc', () => {
       signOut: vi.fn(async () => ({ success: true as const })),
       requestPasswordReset: vi.fn(async () => ({ success: true as const, message: 'neutral', expiresInMinutes: 10 })),
       resetPassword: vi.fn(async () => ({ success: true as const })),
+      changePassword: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       getState: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       setInitialPassword: vi.fn(async () => ({ status: 'unauthenticated' as const })),
       updateProfile: vi.fn(async () => ({ status: 'unauthenticated' as const })),
@@ -34,6 +35,8 @@ describe('registerAuthIpc', () => {
       'auth:sign-out',
       'auth:request-password-reset',
       'auth:reset-password',
+      'auth:update-profile',
+      'auth:change-password',
       'onboarding:get-state',
       'onboarding:set-initial-password',
       'onboarding:update-profile',
@@ -59,6 +62,13 @@ describe('registerAuthIpc', () => {
     const reset = { email: 'member@example.com', code: '12345678', newPassword: 'abcdefghijkl' }
     await handlers.get('auth:reset-password')?.(electronEvent, reset)
     expect(service.resetPassword).toHaveBeenCalledWith(reset)
+
+    await handlers.get('auth:update-profile')?.(electronEvent, 'Settings Name')
+    expect(service.updateProfile).toHaveBeenCalledWith('Settings Name')
+
+    const passwordChange = { currentPassword: 'current password 123', newPassword: 'new password 123' }
+    await handlers.get('auth:change-password')?.(electronEvent, passwordChange)
+    expect(service.changePassword).toHaveBeenCalledWith(passwordChange)
 
     await handlers.get('onboarding:set-initial-password')?.(electronEvent, 'abcdefghijkl')
     expect(service.setInitialPassword).toHaveBeenCalledWith('abcdefghijkl')
