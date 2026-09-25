@@ -2,6 +2,7 @@ import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from '../ai/embeddingCont
 import type { VaultDocumentInternal } from './vaultModels'
 import type { VaultIndexChunkInput } from './VaultChunkRepository'
 import { chunkDocument } from './chunkDocument'
+import { noMutationLock, type MutationLock } from '../storage/MutationLock'
 
 export { EMBEDDING_MODEL_ID } from '../ai/embeddingContract'
 export const INDEX_VERSION = EMBEDDING_INDEX_VERSION
@@ -41,6 +42,7 @@ interface VaultIndexServiceDependencies {
   runtime: VaultEmbeddingRuntime
   nomic: VaultNomicClient
   assets: VaultAiStatusSource
+  mutationLock?: MutationLock
 }
 
 type VaultIndexErrorCode = 'not-found' | 'not-ready' | 'indexing-failed'
@@ -63,6 +65,11 @@ export class VaultIndexService {
   constructor(private readonly dependencies: VaultIndexServiceDependencies) {}
 
   async indexDocument(localUserId: number, documentId: number): Promise<void> {
+    const mutationLock = this.dependencies.mutationLock ?? noMutationLock
+    return mutationLock.runExclusive(() => this.indexDocumentUnlocked(localUserId, documentId))
+  }
+
+  private async indexDocumentUnlocked(localUserId: number, documentId: number): Promise<void> {
     const id = requireDocumentId(documentId)
     const document = await this.dependencies.documents.getByIdForUser(localUserId, id)
     if (!document || document.deleteStatus !== 'active') {
