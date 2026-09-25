@@ -76,6 +76,15 @@ export interface ResetPasswordInput {
   newPassword: string
 }
 
+export interface ChangePasswordInput {
+  currentPassword: string
+  newPassword: string
+}
+
+export type DatabaseBackupResult =
+  | { canceled: true; fileName: null }
+  | { canceled: false; fileName: string }
+
 export interface InvitationCheckResult {
   hasPendingInvite: boolean
   groupName: string | null
@@ -352,6 +361,8 @@ export interface DesktopApi {
   app: {
     getVersion(): Promise<string>
     getPlatform(): Promise<NodeJS.Platform>
+    createDatabaseBackup(): Promise<DatabaseBackupResult>
+    openDataFolder(): Promise<{ success: true }>
   }
   auth: {
     restore(): Promise<AuthState>
@@ -359,6 +370,8 @@ export interface DesktopApi {
     checkInvitation(email: string): Promise<InvitationCheckResult>
     register(input: RegisterInput): Promise<AuthState>
     signOut(): Promise<{ success: true }>
+    updateProfile(name: string): Promise<AuthState>
+    changePassword(input: ChangePasswordInput): Promise<AuthState>
     requestPasswordReset(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
     resetPassword(input: ResetPasswordInput): Promise<{ success: true }>
   }
@@ -400,6 +413,7 @@ export interface DesktopApi {
     startSetup(): Promise<PrivateAiPublicStatus>
     pauseSetup(): Promise<PrivateAiPublicStatus>
     repair(): Promise<PrivateAiPublicStatus>
+    remove(): Promise<PrivateAiPublicStatus>
     onProgress(listener: (progress: PrivateAiPublicProgress) => void): () => void
   }
   story: StoryDesktopApi
