@@ -66,7 +66,7 @@ export function registerPrivateAiIpc(
   ipc: IpcHandleRegistrar,
   service: PrivateAiIpcService,
   onReady?: () => void,
-  onBeforeRemove?: () => void,
+  onBeforeRemove?: () => void | Promise<void>,
 ): void {
   const publicStatus = async (status: PrivateAiStatus) => safeStatus(status, await service.getVersion())
   const maybeReady = (status: PrivateAiStatus) => {
@@ -110,8 +110,12 @@ export function registerPrivateAiIpc(
     maybeReady(status)
     return publicStatus(status)
   })
-  ipc.handle('private-ai:remove', async () => {
-    onBeforeRemove?.()
-    return publicStatus(await service.remove())
+  ipc.handle('private-ai:remove', async (event) => {
+    await onBeforeRemove?.()
+    const status = await service.remove()
+    const publicResult = await publicStatus(status)
+    const sender = (event as PrivateAiIpcEvent | null)?.sender
+    sender?.send('private-ai:progress', safeProgress(status))
+    return publicResult
   })
 }
