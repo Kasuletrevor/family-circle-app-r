@@ -48,10 +48,6 @@ export class DesktopAuthClient implements AuthClient {
     return this.desktop.onboarding.setInitialPassword(newPassword)
   }
 
-  updateProfile(name: string) {
-    return this.desktop.onboarding.updateProfile(name)
-  }
-
   getCircleContext() {
     return this.desktop.onboarding.getCircleContext()
   }
