@@ -35,6 +35,7 @@ describe('registerPrivateAiIpc', () => {
       startSetup: vi.fn(async () => internalStatus('ready')),
       pauseSetup: vi.fn(() => internalStatus('paused')),
       repair: vi.fn(async () => internalStatus('ready')),
+      remove: vi.fn(async () => internalStatus('not_installed')),
     }
 
     registerPrivateAiIpc(ipc as never, service as never)
@@ -44,6 +45,7 @@ describe('registerPrivateAiIpc', () => {
       'private-ai:start-setup',
       'private-ai:pause-setup',
       'private-ai:repair',
+      'private-ai:remove',
     ])
 
     const malicious = {
@@ -61,11 +63,13 @@ describe('registerPrivateAiIpc', () => {
     await handlers.get('private-ai:start-setup')?.({}, malicious)
     await handlers.get('private-ai:pause-setup')?.({}, malicious)
     await handlers.get('private-ai:repair')?.({}, malicious)
+    await handlers.get('private-ai:remove')?.({}, malicious)
 
     expect(service.getStatus).toHaveBeenCalledWith()
     expect(service.startSetup).toHaveBeenCalledWith(expect.any(Function))
     expect(service.pauseSetup).toHaveBeenCalledWith()
     expect(service.repair).toHaveBeenCalledWith(expect.any(Function))
+    expect(service.remove).toHaveBeenCalledWith()
   })
 
   it('returns and emits only safe public status/progress fields', async () => {
@@ -93,6 +97,7 @@ describe('registerPrivateAiIpc', () => {
       }),
       pauseSetup: vi.fn(() => internalStatus('paused')),
       repair: vi.fn(async () => internalStatus('ready')),
+      remove: vi.fn(async () => internalStatus('not_installed')),
     }
     registerPrivateAiIpc(ipc as never, service as never)
 
@@ -132,6 +137,29 @@ describe('registerPrivateAiIpc', () => {
     })
   })
 
+  it('stops managed runtimes before removing Private AI assets', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipc = {
+      handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),
+    }
+    const service = {
+      getStatus: vi.fn(async () => internalStatus('ready')),
+      getVersion: vi.fn(async () => '2026.09.04'),
+      startSetup: vi.fn(async () => internalStatus('ready')),
+      pauseSetup: vi.fn(() => internalStatus('paused')),
+      repair: vi.fn(async () => internalStatus('ready')),
+      remove: vi.fn(async () => internalStatus('not_installed')),
+    }
+    const beforeRemove = vi.fn()
+    registerPrivateAiIpc(ipc as never, service as never, undefined, beforeRemove)
+
+    const result = await handlers.get('private-ai:remove')?.({})
+
+    expect(beforeRemove).toHaveBeenCalledTimes(1)
+    expect(service.remove).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ state: 'not_installed', ready: false })
+  })
+
   it('throttles bursty downloading progress while forwarding state transitions immediately', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipc = {
@@ -167,6 +195,7 @@ describe('registerPrivateAiIpc', () => {
       }),
       pauseSetup: vi.fn(() => internalStatus('paused')),
       repair: vi.fn(async () => internalStatus('ready')),
+      remove: vi.fn(async () => internalStatus('not_installed')),
     }
     registerPrivateAiIpc(ipc as never, service as never)
 
