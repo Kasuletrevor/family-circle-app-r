@@ -15,6 +15,7 @@ const navigationLabels = [
   'Stories',
   'Vault',
   'AI Assistant',
+  'Settings',
 ]
 
 const user: AuthUser = {
@@ -75,7 +76,7 @@ describe('App shell', () => {
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Memories' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
+    expect(primaryNavigation.getByRole('link', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('searchbox', { name: /search family circle/i })).toBeNull()
     expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
 
