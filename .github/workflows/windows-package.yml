@@ -666,6 +666,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.package.outputs.release_version }}
           RELEASE_TAG: ${{ needs.package.outputs.release_tag }}
         run: |
@@ -697,15 +698,29 @@ jobs:
             echo "Tag $RELEASE_TAG already points to this commit; continuing idempotently."
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$installer" "$checksum_path" --clobber
-          else
+          expected_installer="$(basename "$installer")"
+          expected_checksum="$(basename "$checksum_path")"
+          release_exists="false"
+          existing_assets=""
+
+          if existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+            release_exists="true"
+          fi
+
+          if [[ "$release_exists" == "false" ]]; then
             gh release create "$RELEASE_TAG" \
               --verify-tag \
               --target "$GITHUB_SHA" \
               --title "Family Circle $RELEASE_TAG" \
               --generate-notes \
               "$installer" "$checksum_path"
+          else
+            if ! grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release upload "$RELEASE_TAG" "$installer"
+            fi
+            if ! grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release upload "$RELEASE_TAG" "$checksum_path"
+            fi
           fi
 
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
