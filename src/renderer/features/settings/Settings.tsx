@@ -78,7 +78,8 @@ export function Settings({
   const [passwordError, setPasswordError] = useState<string | null>(null)
 
   const [aiStatus, setAiStatus] = useState<PrivateAiStatus | null>(null)
-  const [aiBusy, setAiBusy] = useState(false)
+  const [aiSetupPending, setAiSetupPending] = useState(false)
+  const [aiCommandBusy, setAiCommandBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const [confirmRemoveAi, setConfirmRemoveAi] = useState(false)
 
@@ -183,7 +184,8 @@ export function Settings({
   }
 
   async function runAiAction(action: 'setup' | 'pause' | 'repair' | 'remove') {
-    setAiBusy(true)
+    if (action === 'setup') setAiSetupPending(true)
+    else setAiCommandBusy(true)
     setAiError(null)
     try {
       const status = action === 'setup'
@@ -198,7 +200,8 @@ export function Settings({
     } catch (error) {
       setAiError(messageOf(error, 'Private AI action failed.'))
     } finally {
-      setAiBusy(false)
+      if (action === 'setup') setAiSetupPending(false)
+      else setAiCommandBusy(false)
     }
   }
 
@@ -312,31 +315,31 @@ export function Settings({
             </div>
             <div className="settings-actions">
               {canSetupAi ? (
-                <button className="settings-button settings-button--primary" type="button" disabled={aiBusy} onClick={() => void runAiAction('setup')}>
+                <button className="settings-button settings-button--primary" type="button" disabled={aiSetupPending || aiCommandBusy} onClick={() => void runAiAction('setup')}>
                   <Play size={16} aria-hidden="true" /> {aiState === 'paused' ? 'Continue setup' : 'Set up Private AI'}
                 </button>
               ) : null}
               {canPauseAi ? (
-                <button className="settings-button" type="button" disabled={aiBusy} onClick={() => void runAiAction('pause')}>
+                <button className="settings-button" type="button" disabled={aiCommandBusy} onClick={() => void runAiAction('pause')}>
                   <Pause size={16} aria-hidden="true" /> Pause download
                 </button>
               ) : null}
               {canRepairAi ? (
-                <button className="settings-button" type="button" disabled={aiBusy} onClick={() => void runAiAction('repair')}>
+                <button className="settings-button" type="button" disabled={aiSetupPending || aiCommandBusy} onClick={() => void runAiAction('repair')}>
                   <Wrench size={16} aria-hidden="true" /> Repair
                 </button>
               ) : null}
               {canRemoveAi && !confirmRemoveAi ? (
-                <button className="settings-button settings-button--danger-quiet" type="button" disabled={aiBusy} onClick={() => setConfirmRemoveAi(true)}>
+                <button className="settings-button settings-button--danger-quiet" type="button" disabled={aiSetupPending || aiCommandBusy} onClick={() => setConfirmRemoveAi(true)}>
                   <Trash2 size={16} aria-hidden="true" /> Remove Private AI
                 </button>
               ) : null}
               {confirmRemoveAi ? (
                 <>
-                  <button className="settings-button settings-button--danger" type="button" disabled={aiBusy} onClick={() => void runAiAction('remove')}>
+                  <button className="settings-button settings-button--danger" type="button" disabled={aiSetupPending || aiCommandBusy} onClick={() => void runAiAction('remove')}>
                     Remove downloaded AI files
                   </button>
-                  <button className="settings-button" type="button" disabled={aiBusy} onClick={() => setConfirmRemoveAi(false)}>Cancel</button>
+                  <button className="settings-button" type="button" disabled={aiSetupPending || aiCommandBusy} onClick={() => setConfirmRemoveAi(false)}>Cancel</button>
                 </>
               ) : null}
             </div>
