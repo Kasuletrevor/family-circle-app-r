@@ -37,7 +37,7 @@ describe('SettingsPage', () => {
     }))
     const privateAi: PrivateAiClient = {
       getStatus: vi.fn(async () => ({
-        state: 'not_installed',
+        state: 'not_installed' as const,
         ready: false,
         repairRequired: false,
         totalSizeBytes: 704 * 1024 * 1024,
@@ -46,11 +46,11 @@ describe('SettingsPage', () => {
       })),
       startSetup,
       pauseSetup: vi.fn(async () => ({
-        state: 'paused', ready: false, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
+        state: 'paused' as const, ready: false, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
         version: 'qwen3.5-0.8b', message: 'Private AI setup paused',
       })),
       repair: vi.fn(async () => ({
-        state: 'ready', ready: true, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
+        state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
         version: 'qwen3.5-0.8b', message: 'Private AI is ready',
       })),
       onProgress: vi.fn(() => () => undefined),
@@ -122,7 +122,7 @@ describe('SettingsPage', () => {
     } as unknown as AuthClient
     const privateAi: PrivateAiClient = {
       getStatus: vi.fn(async () => ({
-        state: 'ready', ready: true, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null,
+        state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null,
       })),
       startSetup: vi.fn(),
       pauseSetup: vi.fn(),
