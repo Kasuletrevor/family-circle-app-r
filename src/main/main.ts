@@ -18,6 +18,8 @@ import { CircleService } from './circle/CircleService'
 import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
 import { prepareDatabase } from './database/database'
+import { SettingsService } from './settings/SettingsService'
+import { registerSettingsIpc } from './settings/settingsIpc'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
 import { StoryChunkRepository } from './story/StoryChunkRepository'
 import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'
@@ -46,6 +48,7 @@ interface AppServices extends StoryServices {
   vaultService: VaultService
   vaultQueryService: VaultQueryService
   privateAiService: OfflineAiAssetService
+  settingsService: SettingsService
   vaultIndexService: VaultIndexService
   sessions: SessionStore
 }
@@ -56,6 +59,7 @@ function registerDesktopIpc(services: AppServices) {
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
   registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)
+  registerSettingsIpc(ipcMain, services.settingsService)
   registerStoryIpc(ipcMain, {
     story: services.storyService,
     media: services.storyMediaService,
@@ -93,6 +97,21 @@ async function createAppServices(): Promise<AppServices> {
     manifestPath: join(app.getAppPath(), 'config', 'offline-ai-manifest.json'),
   })
   aiRuntimeManager = new AiRuntimeManager({ assets: privateAiService })
+
+  const settingsService = new SettingsService({
+    db: database,
+    userDataPath,
+    appVersion: app.getVersion(),
+    picker: {
+      async chooseDestination() {
+        const result = await dialog.showOpenDialog({
+          title: 'Choose where to save your Family Circle backup',
+          properties: ['openDirectory', 'createDirectory'],
+        })
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
+    },
+  })
 
   const vaultRepository = new VaultRepository(database)
   const vaultChunkRepository = new VaultChunkRepository(database)
@@ -171,6 +190,7 @@ async function createAppServices(): Promise<AppServices> {
     vaultService,
     vaultQueryService,
     privateAiService,
+    settingsService,
     vaultIndexService,
     sessions,
     ...storyServices,
