@@ -81,7 +81,7 @@ async function makeFixture() {
     await writeMarker()
   }
 
-  return { service, manifest, offlineAiRoot, write, writeMarker, writeValidInstalledAssets }
+  return { service, manifest, offlineAiRoot, downloader, write, writeMarker, writeValidInstalledAssets }
 }
 
 afterEach(async () => {
@@ -123,6 +123,16 @@ describe('OfflineAiAssetService installed asset state', () => {
       generationModel: join(offlineAiRoot, 'models/qwen.gguf'),
       nomicModel: join(offlineAiRoot, 'models/nomic.gguf'),
     })
+  })
+
+  it('removes installed Private AI assets and returns to not_installed', async () => {
+    const { service, downloader, writeValidInstalledAssets } = await makeFixture()
+    await writeValidInstalledAssets()
+    await expect(service.getStatus()).resolves.toMatchObject({ state: 'ready' })
+
+    await expect(service.remove()).resolves.toMatchObject({ state: 'not_installed', ready: false })
+    expect(downloader.pause).toHaveBeenCalledTimes(1)
+    await expect(service.getInstalledPaths()).resolves.toBeNull()
   })
 
   it('reports manifest total bytes', async () => {
