@@ -21,7 +21,6 @@ export interface AuthClient {
   changePassword(input: ChangePasswordInput): Promise<AuthState>
   getOnboardingState(): Promise<AuthState>
   setInitialPassword(newPassword: string): Promise<AuthState>
-  updateProfile(name: string): Promise<AuthState>
   getCircleContext(): Promise<CircleContext>
   completeOnboarding(nextAction: OnboardingNextAction): Promise<AuthState>
 }
