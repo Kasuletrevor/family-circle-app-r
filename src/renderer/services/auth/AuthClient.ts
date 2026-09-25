@@ -1,5 +1,6 @@
 import type {
   AuthState,
+  ChangePasswordInput,
   CircleContext,
   InvitationCheckResult,
   OnboardingNextAction,
@@ -14,6 +15,8 @@ export interface AuthClient {
   checkInvitation(email: string): Promise<InvitationCheckResult>
   register(input: RegisterInput): Promise<AuthState>
   signOut(): Promise<{ success: true }>
+  updateProfile(name: string): Promise<AuthState>
+  changePassword(input: ChangePasswordInput): Promise<AuthState>
   requestPasswordReset(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
   resetPassword(input: ResetPasswordInput): Promise<{ success: true }>
   getOnboardingState(): Promise<AuthState>
