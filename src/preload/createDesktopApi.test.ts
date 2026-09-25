@@ -87,6 +87,10 @@ describe('createDesktopApi', () => {
 
     await expect(api.app.getVersion()).resolves.toBe('0.1.0')
     await expect(api.app.getPlatform()).resolves.toBe('win32')
+    await expect(api.app.createDatabaseBackup()).resolves.toEqual({ canceled: false, fileName: 'Family-Circle-backup.db' })
+    expect(invoke).toHaveBeenCalledWith('app:create-database-backup')
+    await expect(api.app.openDataFolder()).resolves.toEqual({ success: true })
+    expect(invoke).toHaveBeenCalledWith('app:open-data-folder')
     await api.auth.restore()
     expect(invoke).toHaveBeenCalledWith('auth:restore')
     await api.auth.signIn({ email: 'a@example.com', password: '123456789012' })
@@ -149,6 +153,8 @@ describe('createDesktopApi', () => {
     expect(JSON.stringify(answer)).not.toMatch(/embedding|modelPath|localUserId|storedRelativePath|extractedText/)
     await api.privateAi.getStatus()
     expect(invoke).toHaveBeenCalledWith('private-ai:get-status')
+    await api.privateAi.remove()
+    expect(invoke).toHaveBeenCalledWith('private-ai:remove')
   })
 
   it('subscribes to safe Vault progress and returns the exact unsubscribe function', () => {
