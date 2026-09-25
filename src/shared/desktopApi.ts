@@ -76,6 +76,18 @@ export interface ResetPasswordInput {
   newPassword: string
 }
 
+export interface ChangePasswordInput {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface LocalBackupResult {
+  canceled: boolean
+  folderName: string | null
+  createdAt: number | null
+}
+
+
 export interface InvitationCheckResult {
   hasPendingInvite: boolean
   groupName: string | null
@@ -361,6 +373,8 @@ export interface DesktopApi {
     signOut(): Promise<{ success: true }>
     requestPasswordReset(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
     resetPassword(input: ResetPasswordInput): Promise<{ success: true }>
+    updateProfile(name: string): Promise<AuthState>
+    changePassword(input: ChangePasswordInput): Promise<AuthState>
   }
   onboarding: {
     getState(): Promise<AuthState>
@@ -394,6 +408,9 @@ export interface DesktopApi {
     deleteDocument(input: { documentId: number }): Promise<{ success: true }>
     ask(input: { question: string; scope: VaultQueryScope }): Promise<VaultAnswer>
     onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
+  }
+  settings: {
+    createBackup(): Promise<LocalBackupResult>
   }
   privateAi: {
     getStatus(): Promise<PrivateAiPublicStatus>
