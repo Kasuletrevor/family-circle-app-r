@@ -133,7 +133,7 @@ export function registerVaultIpc(
   ipc.handle('vault:retry-extraction', async (_event, payload) => {
     return mutationLock.runExclusive(async () => safeSummary(await service.retryExtraction(documentIdOf(payload))))
   })
-  ipc.handle('vault:retry-indexing', (_event, payload) => mutationLock.runExclusive(() => service.retryIndexing(documentIdOf(payload))))
+  ipc.handle('vault:retry-indexing', (_event, payload) => service.retryIndexing(documentIdOf(payload)))
   ipc.handle('vault:delete', (_event, payload) => mutationLock.runExclusive(() => service.deleteDocument(documentIdOf(payload))))
   if (queryService) {
     ipc.handle('vault:ask', async (_event, payload) => safeAnswer(await queryService.ask(queryInputOf(payload))))
