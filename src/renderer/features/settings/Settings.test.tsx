@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthState, AuthUser, DesktopApi } from '../../../shared/desktopApi'
 import type { AuthClient } from '../../services/auth/AuthClient'
@@ -179,17 +179,19 @@ describe('Settings', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Private AI' }))
     await waitFor(() => expect(startSetup).toHaveBeenCalledTimes(1))
 
-    listener?.({
-      state: 'downloading',
-      percent: 12,
-      fileIndex: 1,
-      fileCount: 3,
-      fileName: 'Private AI component 1 of 3',
-      bytesDownloaded: 10,
-      totalSizeBytes: 100,
-      fileBytesDownloaded: 10,
-      fileSizeBytes: 50,
-      message: 'Downloading Private AI',
+    act(() => {
+      listener?.({
+        state: 'downloading',
+        percent: 12,
+        fileIndex: 1,
+        fileCount: 3,
+        fileName: 'Private AI component 1 of 3',
+        bytesDownloaded: 10,
+        totalSizeBytes: 100,
+        fileBytesDownloaded: 10,
+        fileSizeBytes: 50,
+        message: 'Downloading Private AI',
+      })
     })
 
     const pause = await screen.findByRole('button', { name: 'Pause download' })
@@ -197,7 +199,7 @@ describe('Settings', () => {
     fireEvent.click(pause)
     await waitFor(() => expect(pauseSetup).toHaveBeenCalledTimes(1))
 
-    resolveSetup?.(paused)
+    await act(async () => { resolveSetup?.(paused); await Promise.resolve() })
   })
 
   it('backs up local data and only removes Private AI after confirmation', async () => {
