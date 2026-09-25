@@ -425,6 +425,8 @@ jobs:
           public_base_path="/electron-releases/demo"
           public_path="$public_base_path/latest/$installer"
           public_url="https://familycircle.o2gventures.com$public_path"
+          immutable_public_path="$public_base_path/$RELEASE_VERSION/$installer"
+          immutable_public_url="https://familycircle.o2gventures.com$immutable_public_path"
 
           echo "installer=$installer" >> "$GITHUB_OUTPUT"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
@@ -434,6 +436,7 @@ jobs:
           echo "public_base_path=$public_base_path" >> "$GITHUB_OUTPUT"
           echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
           echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
+          echo "immutable_public_url=$immutable_public_url" >> "$GITHUB_OUTPUT"
           echo "Semantic server release: $RELEASE_TAG ($build_id)"
       - name: Validate demo deployment credentials
         id: credentials
@@ -530,53 +533,95 @@ jobs:
           EXPECTED_TAG: ${{ steps.meta.outputs.release_tag }}
           EXPECTED_BUILD: ${{ steps.meta.outputs.build_id }}
           PUBLIC_URL: ${{ steps.meta.outputs.public_url }}
+          IMMUTABLE_PUBLIC_URL: ${{ steps.meta.outputs.immutable_public_url }}
         run: |
           set -euo pipefail
 
           cache_buster="${GITHUB_SHA:0:12}"
           curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
-            -H 'Cache-Control: no-cache' "${PUBLIC_URL}?build=${cache_buster}" \
+            -H 'Cache-Control: no-cache' "${IMMUTABLE_PUBLIC_URL}?build=${cache_buster}" \
             -o /tmp/family-circle-public.exe
 
           actual_sha256="$(sha256sum /tmp/family-circle-public.exe | awk '{print $1}')"
           if [[ "$actual_sha256" != "$EXPECTED_SHA256" ]]; then
-            echo "Public installer checksum mismatch" >&2
+            echo "Immutable public installer checksum mismatch" >&2
             exit 1
           fi
+
+          immutable_release_url="${IMMUTABLE_PUBLIC_URL%/*}/release.json"
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' "${immutable_release_url}?build=${cache_buster}" \
+            -o /tmp/immutable-release.json
 
           curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
             -H 'Cache-Control: no-cache' \
             "https://familycircle.o2gventures.com/electron-releases/demo/current.json?build=${cache_buster}" \
             -o /tmp/current.json
 
-          node - <<'NODE'
+          current_state="$(node - <<'NODE'
           const fs = require('node:fs')
+
+          function parseSemver(value) {
+            const match = String(value || '').match(/^(\d+)\.(\d+)\.(\d+)(?:-|$)/)
+            if (!match) throw new Error(`Invalid semantic version: ${value}`)
+            return match.slice(1).map(Number)
+          }
+
+          function compare(a, b) {
+            for (let i = 0; i < 3; i += 1) {
+              if (a[i] !== b[i]) return a[i] - b[i]
+            }
+            return 0
+          }
+
+          function verifyTarget(record, label) {
+            const expected = {
+              version: process.env.EXPECTED_VERSION,
+              sha256: process.env.EXPECTED_SHA256,
+              tag: process.env.EXPECTED_TAG,
+              build: process.env.EXPECTED_BUILD,
+              commit: process.env.EXPECTED_COMMIT,
+              type: process.env.EXPECTED_RELEASE_TYPE,
+              title: Buffer.from(process.env.EXPECTED_RELEASE_TITLE_B64 || '', 'base64').toString('utf8'),
+            }
+            for (const [key, value] of Object.entries(expected)) {
+              if (record[key] !== value) {
+                throw new Error(`${label} ${key} mismatch: expected ${value}, got ${record[key]}`)
+              }
+            }
+          }
+
+          const immutableRelease = JSON.parse(fs.readFileSync('/tmp/immutable-release.json', 'utf8'))
           const current = JSON.parse(fs.readFileSync('/tmp/current.json', 'utf8'))
-          if (current.version !== process.env.EXPECTED_VERSION) {
-            throw new Error(`Unexpected public demo version: ${current.version}`)
+          verifyTarget(immutableRelease, 'Immutable release')
+
+          const order = compare(parseSemver(current.version), parseSemver(process.env.EXPECTED_VERSION))
+          if (order < 0) {
+            throw new Error(`Current release ${current.version} is older than verified target ${process.env.EXPECTED_VERSION}`)
           }
-          if (current.sha256 !== process.env.EXPECTED_SHA256) {
-            throw new Error('Public demo metadata checksum mismatch')
-          }
-          if (current.tag !== process.env.EXPECTED_TAG) {
-            throw new Error(`Unexpected public demo tag: ${current.tag}`)
-          }
-          if (current.build !== process.env.EXPECTED_BUILD) {
-            throw new Error(`Unexpected public demo build: ${current.build}`)
-          }
-          if (current.commit !== process.env.EXPECTED_COMMIT) {
-            throw new Error(`Unexpected public demo commit: ${current.commit}`)
-          }
-          if (current.type !== process.env.EXPECTED_RELEASE_TYPE) {
-            throw new Error(`Unexpected public demo release type: ${current.type}`)
-          }
-          const expectedTitle = Buffer.from(process.env.EXPECTED_RELEASE_TITLE_B64 || '', 'base64').toString('utf8')
-          if (current.title !== expectedTitle) {
-            throw new Error(`Unexpected public demo release title: ${current.title}`)
+          if (order === 0) {
+            verifyTarget(current, 'Current release')
+            process.stdout.write('current')
+          } else {
+            process.stdout.write('superseded')
           }
           NODE
+          )"
 
-          echo "Public demo verified: $PUBLIC_URL"
+          if [[ "$current_state" == "current" ]]; then
+            curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+              -H 'Cache-Control: no-cache' "${PUBLIC_URL}?build=${cache_buster}" \
+              -o /tmp/family-circle-latest.exe
+            latest_sha256="$(sha256sum /tmp/family-circle-latest.exe | awk '{print $1}')"
+            if [[ "$latest_sha256" != "$EXPECTED_SHA256" ]]; then
+              echo "Latest installer checksum mismatch" >&2
+              exit 1
+            fi
+            echo "Public demo verified and current: $PUBLIC_URL"
+          else
+            echo "Immutable release verified; a newer semantic release remains current."
+          fi
+
           echo "SHA256: $EXPECTED_SHA256"
 
       - name: Report deploy stage
