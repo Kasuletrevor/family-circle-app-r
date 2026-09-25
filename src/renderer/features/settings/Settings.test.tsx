@@ -38,7 +38,7 @@ function authClient(): AuthClient {
   }
 }
 
-function privateAiClient(): PrivateAiClient {
+function privateAiClient(overrides: Partial<PrivateAiClient> = {}): PrivateAiClient {
   const ready: PrivateAiStatus = {
     state: 'ready',
     ready: true,
@@ -56,6 +56,7 @@ function privateAiClient(): PrivateAiClient {
     repair: vi.fn(async () => ready),
     remove: vi.fn(async () => notInstalled),
     onProgress: vi.fn(() => () => undefined),
+    ...overrides,
   }
 }
 
@@ -141,6 +142,62 @@ describe('Settings', () => {
       newPassword: 'new-credential-value-123',
     }))
     expect(await screen.findByText(/fresh protected session/i)).toBeInTheDocument()
+  })
+
+  it('keeps Pause available while setup is still downloading', async () => {
+    let listener: ((progress: Parameters<Parameters<PrivateAiClient['onProgress']>[0]>[0]) => void) | null = null
+    let resolveSetup: ((status: PrivateAiStatus) => void) | null = null
+    const paused: PrivateAiStatus = {
+      state: 'paused',
+      ready: false,
+      repairRequired: false,
+      totalSizeBytes: 704 * 1024 * 1024,
+      version: 'private-ai-v2',
+      message: 'Private AI setup paused',
+    }
+    const startSetup = vi.fn(() => new Promise<PrivateAiStatus>((resolve) => { resolveSetup = resolve }))
+    const pauseSetup = vi.fn(async () => paused)
+    const ai = privateAiClient({
+      getStatus: vi.fn(async () => ({ ...paused, state: 'not_installed', message: 'Private AI is not installed' })),
+      startSetup,
+      pauseSetup,
+      onProgress: vi.fn((next) => {
+        listener = next
+        return () => undefined
+      }),
+    })
+
+    render(
+      <Settings
+        user={user}
+        authClient={authClient()}
+        privateAiClient={ai}
+        appClient={appClient()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up Private AI' }))
+    await waitFor(() => expect(startSetup).toHaveBeenCalledTimes(1))
+
+    listener?.({
+      state: 'downloading',
+      percent: 12,
+      fileIndex: 1,
+      fileCount: 3,
+      fileName: 'Private AI component 1 of 3',
+      bytesDownloaded: 10,
+      totalSizeBytes: 100,
+      fileBytesDownloaded: 10,
+      fileSizeBytes: 50,
+      message: 'Downloading Private AI',
+    })
+
+    const pause = await screen.findByRole('button', { name: 'Pause download' })
+    expect(pause).toBeEnabled()
+    fireEvent.click(pause)
+    await waitFor(() => expect(pauseSetup).toHaveBeenCalledTimes(1))
+
+    resolveSetup?.(paused)
   })
 
   it('backs up local data and only removes Private AI after confirmation', async () => {
