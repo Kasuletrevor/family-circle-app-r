@@ -43,6 +43,13 @@ describe('demo server publish contract', () => {
     expect(workflow).toContain('if (current.title !== expectedTitle)')
   })
 
+  it('reuses an existing immutable release only when retry metadata and checksum match', () => {
+    expect(publisher).toContain('Reusing existing verified release destination: $DEST_DIR')
+    expect(publisher).toContain('Existing release does not match retry payload')
+    expect(publisher).toContain('Existing release installer checksum mismatch')
+    expect(publisher).not.toContain('Release destination already exists: $DEST_DIR')
+  })
+
   it('checks the staged installer and updates the stable release atomically', () => {
     expect(publisher).toContain('sha256sum "$SOURCE"')
     expect(publisher).toContain('Staged installer checksum mismatch')
