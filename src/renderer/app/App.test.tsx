@@ -34,6 +34,13 @@ describe('App shell', () => {
     Object.defineProperty(window, 'familyCircle', {
       configurable: true,
       value: {
+        app: {
+          getVersion: async () => '0.2.3',
+          getPlatform: async () => 'win32',
+        },
+        settings: {
+          createBackup: async () => ({ canceled: true, folderName: null, createdAt: null }),
+        },
         vault: {
           listDocuments: async () => [],
           chooseAndUploadDocuments: async () => ({ canceled: true, items: [] }),
@@ -109,6 +116,11 @@ describe('App shell', () => {
     expect(await screen.findByRole('heading', { name: 'Vault' })).toBeInTheDocument()
     expect(screen.getByText('Your private documents stay on this computer.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
+
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Settings' }))
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(await screen.findByText('v0.2.3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create backup' })).toBeInTheDocument()
   })
 
   it('routes /stories to the real private My Story studio instead of the Stories placeholder', async () => {
