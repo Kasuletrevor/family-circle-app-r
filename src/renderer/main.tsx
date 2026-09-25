@@ -27,6 +27,8 @@ createRoot(root).render(
         renderAuthenticated={(state, onStateChange) => (
           <AuthenticatedApp
             user={state.user}
+            auth={authClient}
+            onAuthStateChange={onStateChange}
             onSignOut={async () => {
               await authClient.signOut()
               onStateChange({ status: 'unauthenticated' })
