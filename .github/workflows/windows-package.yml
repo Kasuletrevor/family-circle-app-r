@@ -132,11 +132,33 @@ jobs:
           expected_checksum="$expected_installer.sha256"
           release_exists="false"
           existing_assets=""
+          existing_dir="/tmp/github-release-existing"
+          rm -rf "$existing_dir"
+          mkdir -p "$existing_dir"
 
           if existing_assets="$(gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null)"; then
             release_exists="true"
+
+            if grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release download "$tag" --pattern "$expected_installer" --dir "$existing_dir"
+              github_installer_sha="$(sha256sum "$existing_dir/$expected_installer" | awk '{print $1}')"
+              if [[ "${github_installer_sha,,}" != "${sha256,,}" ]]; then
+                echo "Existing GitHub Release installer checksum mismatch for $tag" >&2
+                exit 1
+              fi
+            fi
+
+            if grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release download "$tag" --pattern "$expected_checksum" --dir "$existing_dir"
+              read -r github_checksum github_checksum_name < "$existing_dir/$expected_checksum"
+              if [[ "${github_checksum,,}" != "${sha256,,}" || "$github_checksum_name" != "$expected_installer" ]]; then
+                echo "Existing GitHub Release checksum asset mismatch for $tag" >&2
+                exit 1
+              fi
+            fi
+
             if grep -Fxq "$expected_installer" <<<"$existing_assets" && grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
-              echo "Tag $tag and both GitHub Release assets are already complete; recovery is a no-op."
+              echo "Tag $tag and both GitHub Release assets are byte-verified; recovery is a no-op."
               exit 0
             fi
           fi
@@ -744,9 +766,30 @@ jobs:
           expected_checksum="$(basename "$checksum_path")"
           release_exists="false"
           existing_assets=""
+          existing_dir="/tmp/finalizer-existing"
+          rm -rf "$existing_dir"
+          mkdir -p "$existing_dir"
 
           if existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null)"; then
             release_exists="true"
+
+            if grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release download "$RELEASE_TAG" --pattern "$expected_installer" --dir "$existing_dir"
+              existing_installer_sha="$(sha256sum "$existing_dir/$expected_installer" | awk '{print $1}')"
+              if [[ "$existing_installer_sha" != "$checksum" ]]; then
+                echo "Existing GitHub Release installer checksum mismatch for $RELEASE_TAG" >&2
+                exit 1
+              fi
+            fi
+
+            if grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release download "$RELEASE_TAG" --pattern "$expected_checksum" --dir "$existing_dir"
+              read -r existing_checksum existing_checksum_name < "$existing_dir/$expected_checksum"
+              if [[ "$existing_checksum" != "$checksum" || "$existing_checksum_name" != "$expected_installer" ]]; then
+                echo "Existing GitHub Release checksum asset mismatch for $RELEASE_TAG" >&2
+                exit 1
+              fi
+            fi
           fi
 
           if [[ "$release_exists" == "false" ]]; then
