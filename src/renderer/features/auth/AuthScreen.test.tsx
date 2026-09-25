@@ -34,6 +34,7 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
     getOnboardingState: vi.fn(),
     setInitialPassword: vi.fn(),
     updateProfile: vi.fn(),
+    changePassword: vi.fn(),
     getCircleContext: vi.fn(),
     completeOnboarding: vi.fn(),
     ...overrides,
