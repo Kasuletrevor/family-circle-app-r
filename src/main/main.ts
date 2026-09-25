@@ -92,8 +92,8 @@ function registerDesktopIpc(services: AppServices) {
       services.vaultIndexService,
       services.storyIndexService,
     ).catch(() => undefined)
-  }, () => {
-    aiRuntimeManager?.stopAll()
+  }, async () => {
+    await aiRuntimeManager?.stopAllAndWait()
   })
 }
 
