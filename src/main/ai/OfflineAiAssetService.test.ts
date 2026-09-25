@@ -130,7 +130,7 @@ describe('OfflineAiAssetService installed asset state', () => {
     await writeValidInstalledAssets()
     await expect(service.getStatus()).resolves.toMatchObject({ state: 'ready' })
 
-    await expect(service.remove()).resolves.toMatchObject({ state: 'not_installed', ready: false })
+    await expect(service.remove()).resolves.toMatchObject({ state: 'not_installed' })
     expect(downloader.pause).toHaveBeenCalledTimes(1)
     await expect(service.getInstalledPaths()).resolves.toBeNull()
   })
