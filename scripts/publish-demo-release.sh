@@ -55,6 +55,11 @@ LATEST_PATH="$PUBLIC_BASE_PATH/latest/$INSTALLER"
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 
+cleanup_tmp() {
+  rm -rf "$TMP_DIR"
+}
+trap cleanup_tmp EXIT
+
 install -m 0644 "$SOURCE" "$TMP_DIR/$INSTALLER"
 printf '%s  %s\n' "$EXPECTED_SHA" "$INSTALLER" > "$TMP_DIR/$INSTALLER.sha256"
 printf '%s\n' "$VERSION" > "$TMP_DIR/VERSION"
