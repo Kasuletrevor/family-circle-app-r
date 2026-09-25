@@ -71,14 +71,14 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
           current_url="https://familycircle.o2gventures.com/electron-releases/demo/current.json"
-          if ! curl --fail --location --silent --show-error --retry 5 --retry-delay 2 -H 'Cache-Control: no-cache' "${current_url}?recover=${GITHUB_SHA:0:12}" -o /tmp/current-release.json; then
-            echo "No recoverable server release metadata; continuing."
-            exit 0
-          fi
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+            -H 'Cache-Control: no-cache' "${current_url}?recover=${GITHUB_SHA:0:12}" \
+            -o /tmp/current-release.json
 
           readarray -t meta < <(node - <<'NODE'
           const fs = require('node:fs')
@@ -124,9 +124,25 @@ jobs:
             existing_sha=""
           fi
 
-          installer="/tmp/Family-Circle-Setup-$version.exe"
-          checksum_path="$installer.sha256"
-          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors -H 'Cache-Control: no-cache' "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}" -o "$installer"
+          expected_installer="Family-Circle-Setup-$version.exe"
+          expected_checksum="$expected_installer.sha256"
+          release_exists="false"
+          existing_assets=""
+
+          if existing_assets="$(gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+            release_exists="true"
+            if grep -Fxq "$expected_installer" <<<"$existing_assets" && grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              echo "GitHub Release $tag is already complete; recovery is a no-op."
+              exit 0
+            fi
+          fi
+
+          installer="/tmp/$expected_installer"
+          checksum_path="/tmp/$expected_checksum"
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' \
+            "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}" \
+            -o "$installer"
 
           actual_sha="$(sha256sum "$installer" | awk '{print $1}')"
           if [[ "${actual_sha,,}" != "${sha256,,}" ]]; then
@@ -142,10 +158,15 @@ jobs:
             echo "Tag $tag already points to verified commit $commit."
           fi
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$installer" "$checksum_path" --clobber
-          else
+          if [[ "$release_exists" == "false" ]]; then
             gh release create "$tag" --verify-tag --target "$commit" --title "Family Circle $tag" --generate-notes "$installer" "$checksum_path"
+          else
+            if ! grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release upload "$tag" "$installer"
+            fi
+            if ! grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release upload "$tag" "$checksum_path"
+            fi
           fi
 
           echo "Verified semantic release finalization for $tag."
