@@ -131,6 +131,7 @@ async function createAppServices(): Promise<AppServices> {
     runtime: aiRuntimeManager,
     nomic: nomicClient,
     assets: privateAiService,
+    mutationLock,
   })
   const vaultService = new VaultService({
     session: sessions,
@@ -174,6 +175,7 @@ async function createAppServices(): Promise<AppServices> {
     opener: {
       openPath: (absolutePath) => shell.openPath(absolutePath),
     },
+    mutationLock,
   })
 
   const storyQueryHistory = new StoryHistoryRepository(database)
