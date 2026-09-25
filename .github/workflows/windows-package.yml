@@ -114,6 +114,24 @@ jobs:
             exit 1
           }
 
+          expected_installer="Family-Circle-Setup-$version.exe"
+          expected_checksum="$expected_installer.sha256"
+          installer="/tmp/$expected_installer"
+          checksum_path="/tmp/$expected_checksum"
+
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' \
+            "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}" \
+            -o "$installer"
+
+          actual_sha="$(sha256sum "$installer" | awk '{print $1}')"
+          if [[ "${actual_sha,,}" != "${sha256,,}" ]]; then
+            echo "Recoverable installer checksum mismatch" >&2
+            exit 1
+          fi
+          printf '%s  %s\n' "${sha256,,}" "$(basename "$installer")" > "$checksum_path"
+          echo "Verified server installer bytes for $tag before GitHub recovery."
+
           tag_ref="$(git ls-remote --tags origin "refs/tags/$tag")"
           existing_sha=""
           if [[ -n "$tag_ref" ]]; then
@@ -128,8 +146,6 @@ jobs:
             echo "Recovered $tag -> $commit"
           fi
 
-          expected_installer="Family-Circle-Setup-$version.exe"
-          expected_checksum="$expected_installer.sha256"
           release_exists="false"
           existing_assets=""
           existing_dir="/tmp/github-release-existing"
@@ -158,24 +174,10 @@ jobs:
             fi
 
             if grep -Fxq "$expected_installer" <<<"$existing_assets" && grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
-              echo "Tag $tag and both GitHub Release assets are byte-verified; recovery is a no-op."
+              echo "Server bytes, tag, and both GitHub Release assets are verified; recovery is a no-op."
               exit 0
             fi
           fi
-
-          installer="/tmp/$expected_installer"
-          checksum_path="/tmp/$expected_checksum"
-          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
-            -H 'Cache-Control: no-cache' \
-            "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}" \
-            -o "$installer"
-
-          actual_sha="$(sha256sum "$installer" | awk '{print $1}')"
-          if [[ "${actual_sha,,}" != "${sha256,,}" ]]; then
-            echo "Recoverable installer checksum mismatch" >&2
-            exit 1
-          fi
-          printf '%s  %s\n' "${sha256,,}" "$(basename "$installer")" > "$checksum_path"
 
           if [[ "$release_exists" == "false" ]]; then
             gh release create "$tag" --verify-tag --target "$commit" --title "Family Circle $tag" --generate-notes "$installer" "$checksum_path"
