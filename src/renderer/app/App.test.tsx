@@ -15,6 +15,7 @@ const navigationLabels = [
   'Stories',
   'Vault',
   'AI Assistant',
+  'Settings',
 ]
 
 const user: AuthUser = {
@@ -33,6 +34,12 @@ describe('App shell', () => {
     Object.defineProperty(window, 'familyCircle', {
       configurable: true,
       value: {
+        app: {
+          getVersion: async () => '0.2.3',
+          getPlatform: async () => 'win32',
+          createDatabaseBackup: async () => ({ canceled: true, fileName: null }),
+          openDataFolder: async () => ({ success: true }),
+        },
         vault: {
           listDocuments: async () => [],
           chooseAndUploadDocuments: async () => ({ canceled: true, items: [] }),
@@ -53,6 +60,7 @@ describe('App shell', () => {
           startSetup: async () => { throw new Error('not used') },
           pauseSetup: async () => { throw new Error('not used') },
           repair: async () => { throw new Error('not used') },
+          remove: async () => ({ state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null }),
           onProgress: () => () => undefined,
         },
       },
@@ -75,7 +83,7 @@ describe('App shell', () => {
     expect(screen.getByText('Ada Example')).toBeInTheDocument()
     expect(primaryNavigation.getByRole('link', { name: 'Family Tree' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Memories' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
+    expect(primaryNavigation.getByRole('link', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('searchbox', { name: /search family circle/i })).toBeNull()
     expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
 
@@ -108,6 +116,11 @@ describe('App shell', () => {
     expect(await screen.findByRole('heading', { name: 'Vault' })).toBeInTheDocument()
     expect(screen.getByText('Your private documents stay on this computer.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
+
+    fireEvent.click(primaryNavigation.getByRole('link', { name: 'Settings' }))
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByText('0.2.3')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Private AI' })).toBeInTheDocument()
   })
 
   it('routes /stories to the real private My Story studio instead of the Stories placeholder', async () => {
