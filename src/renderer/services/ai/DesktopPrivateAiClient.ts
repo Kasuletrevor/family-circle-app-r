@@ -5,6 +5,7 @@ export interface PrivateAiDesktopOperations {
   startSetup(): Promise<PrivateAiStatus>
   pauseSetup(): Promise<PrivateAiStatus>
   repair(): Promise<PrivateAiStatus>
+  remove(): Promise<PrivateAiStatus>
   onProgress(listener: (progress: PrivateAiProgress) => void): () => void
 }
 
@@ -35,6 +36,10 @@ export class DesktopPrivateAiClient implements PrivateAiClient {
 
   async repair(): Promise<PrivateAiStatus> {
     return this.operations().repair()
+  }
+
+  async remove(): Promise<PrivateAiStatus> {
+    return this.operations().remove()
   }
 
   onProgress(listener: (progress: PrivateAiProgress) => void): () => void {
