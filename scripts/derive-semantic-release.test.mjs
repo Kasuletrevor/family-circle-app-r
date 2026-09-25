@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bumpVersion,
   deriveNextRelease,
+  isAlreadyReleased,
   parseConventionalSubject,
   parseSemver,
 } from './derive-semantic-release.mjs'
@@ -77,6 +78,12 @@ describe('semantic release derivation', () => {
         'docs: update help',
       ],
     })).toEqual({ impact: 'major', version: '1.0.0' })
+  })
+
+  it('treats a retry of an already-tagged HEAD as already released', () => {
+    expect(isAlreadyReleased('abc123', 'abc123')).toBe(true)
+    expect(isAlreadyReleased('abc123', 'def456')).toBe(false)
+    expect(isAlreadyReleased('', 'abc123')).toBe(false)
   })
 
   it('parses only stable vMAJOR.MINOR.PATCH tags', () => {

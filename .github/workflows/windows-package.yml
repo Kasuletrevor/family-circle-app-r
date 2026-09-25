@@ -71,14 +71,14 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
           current_url="https://familycircle.o2gventures.com/electron-releases/demo/current.json"
-          if ! curl --fail --location --silent --show-error --retry 5 --retry-delay 2 -H 'Cache-Control: no-cache' "${current_url}?recover=${GITHUB_SHA:0:12}" -o /tmp/current-release.json; then
-            echo "No recoverable server release metadata; continuing."
-            exit 0
-          fi
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+            -H 'Cache-Control: no-cache' "${current_url}?recover=${GITHUB_SHA:0:12}" \
+            -o /tmp/current-release.json
 
           readarray -t meta < <(node - <<'NODE'
           const fs = require('node:fs')
@@ -114,19 +114,15 @@ jobs:
             exit 1
           }
 
-          existing_sha=""
-          if existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null)"; then
-            if [[ "$existing_sha" != "$commit" ]]; then
-              echo "Tag $tag already points to $existing_sha instead of verified commit $commit" >&2
-              exit 1
-            fi
-          else
-            existing_sha=""
-          fi
+          expected_installer="Family-Circle-Setup-$version.exe"
+          expected_checksum="$expected_installer.sha256"
+          installer="/tmp/$expected_installer"
+          checksum_path="/tmp/$expected_checksum"
 
-          installer="/tmp/Family-Circle-Setup-$version.exe"
-          checksum_path="$installer.sha256"
-          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors -H 'Cache-Control: no-cache' "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}" -o "$installer"
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' \
+            "https://familycircle.o2gventures.com${installer_path}?recover=${commit:0:12}" \
+            -o "$installer"
 
           actual_sha="$(sha256sum "$installer" | awk '{print $1}')"
           if [[ "${actual_sha,,}" != "${sha256,,}" ]]; then
@@ -134,18 +130,64 @@ jobs:
             exit 1
           fi
           printf '%s  %s\n' "${sha256,,}" "$(basename "$installer")" > "$checksum_path"
+          echo "Verified server installer bytes for $tag before GitHub recovery."
 
-          if [[ -z "$existing_sha" ]]; then
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$tag" -f "sha=$commit" >/dev/null
-            echo "Recovered $tag -> $commit"
+          tag_ref="$(git ls-remote --tags origin "refs/tags/$tag")"
+          existing_sha=""
+          if [[ -n "$tag_ref" ]]; then
+            existing_sha="${tag_ref%%[[:space:]]*}"
+            if [[ "$existing_sha" != "$commit" ]]; then
+              echo "Tag $tag already points to $existing_sha instead of verified commit $commit" >&2
+              exit 1
+            fi
           else
-            echo "Tag $tag already points to verified commit $commit."
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$tag" -f "sha=$commit" >/dev/null
+            existing_sha="$commit"
+            echo "Recovered $tag -> $commit"
           fi
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$installer" "$checksum_path" --clobber
-          else
+          release_exists="false"
+          existing_assets=""
+          existing_dir="/tmp/github-release-existing"
+          rm -rf "$existing_dir"
+          mkdir -p "$existing_dir"
+
+          if existing_assets="$(gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+            release_exists="true"
+
+            if grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release download "$tag" --pattern "$expected_installer" --dir "$existing_dir"
+              github_installer_sha="$(sha256sum "$existing_dir/$expected_installer" | awk '{print $1}')"
+              if [[ "${github_installer_sha,,}" != "${sha256,,}" ]]; then
+                echo "Existing GitHub Release installer checksum mismatch for $tag" >&2
+                exit 1
+              fi
+            fi
+
+            if grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release download "$tag" --pattern "$expected_checksum" --dir "$existing_dir"
+              read -r github_checksum github_checksum_name < "$existing_dir/$expected_checksum"
+              if [[ "${github_checksum,,}" != "${sha256,,}" || "$github_checksum_name" != "$expected_installer" ]]; then
+                echo "Existing GitHub Release checksum asset mismatch for $tag" >&2
+                exit 1
+              fi
+            fi
+
+            if grep -Fxq "$expected_installer" <<<"$existing_assets" && grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              echo "Server bytes, tag, and both GitHub Release assets are verified; recovery is a no-op."
+              exit 0
+            fi
+          fi
+
+          if [[ "$release_exists" == "false" ]]; then
             gh release create "$tag" --verify-tag --target "$commit" --title "Family Circle $tag" --generate-notes "$installer" "$checksum_path"
+          else
+            if ! grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release upload "$tag" "$installer"
+            fi
+            if ! grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release upload "$tag" "$checksum_path"
+            fi
           fi
 
           echo "Verified semantic release finalization for $tag."
@@ -404,6 +446,8 @@ jobs:
           public_base_path="/electron-releases/demo"
           public_path="$public_base_path/latest/$installer"
           public_url="https://familycircle.o2gventures.com$public_path"
+          immutable_public_path="$public_base_path/$RELEASE_VERSION/$installer"
+          immutable_public_url="https://familycircle.o2gventures.com$immutable_public_path"
 
           echo "installer=$installer" >> "$GITHUB_OUTPUT"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
@@ -413,6 +457,7 @@ jobs:
           echo "public_base_path=$public_base_path" >> "$GITHUB_OUTPUT"
           echo "public_path=$public_path" >> "$GITHUB_OUTPUT"
           echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
+          echo "immutable_public_url=$immutable_public_url" >> "$GITHUB_OUTPUT"
           echo "Semantic server release: $RELEASE_TAG ($build_id)"
       - name: Validate demo deployment credentials
         id: credentials
@@ -509,53 +554,95 @@ jobs:
           EXPECTED_TAG: ${{ steps.meta.outputs.release_tag }}
           EXPECTED_BUILD: ${{ steps.meta.outputs.build_id }}
           PUBLIC_URL: ${{ steps.meta.outputs.public_url }}
+          IMMUTABLE_PUBLIC_URL: ${{ steps.meta.outputs.immutable_public_url }}
         run: |
           set -euo pipefail
 
           cache_buster="${GITHUB_SHA:0:12}"
           curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
-            -H 'Cache-Control: no-cache' "${PUBLIC_URL}?build=${cache_buster}" \
+            -H 'Cache-Control: no-cache' "${IMMUTABLE_PUBLIC_URL}?build=${cache_buster}" \
             -o /tmp/family-circle-public.exe
 
           actual_sha256="$(sha256sum /tmp/family-circle-public.exe | awk '{print $1}')"
           if [[ "$actual_sha256" != "$EXPECTED_SHA256" ]]; then
-            echo "Public installer checksum mismatch" >&2
+            echo "Immutable public installer checksum mismatch" >&2
             exit 1
           fi
+
+          immutable_release_url="${IMMUTABLE_PUBLIC_URL%/*}/release.json"
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+            -H 'Cache-Control: no-cache' "${immutable_release_url}?build=${cache_buster}" \
+            -o /tmp/immutable-release.json
 
           curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
             -H 'Cache-Control: no-cache' \
             "https://familycircle.o2gventures.com/electron-releases/demo/current.json?build=${cache_buster}" \
             -o /tmp/current.json
 
-          node - <<'NODE'
+          current_state="$(node - <<'NODE'
           const fs = require('node:fs')
+
+          function parseSemver(value) {
+            const match = String(value || '').match(/^(\d+)\.(\d+)\.(\d+)(?:-|$)/)
+            if (!match) throw new Error(`Invalid semantic version: ${value}`)
+            return match.slice(1).map(Number)
+          }
+
+          function compare(a, b) {
+            for (let i = 0; i < 3; i += 1) {
+              if (a[i] !== b[i]) return a[i] - b[i]
+            }
+            return 0
+          }
+
+          function verifyTarget(record, label) {
+            const expected = {
+              version: process.env.EXPECTED_VERSION,
+              sha256: process.env.EXPECTED_SHA256,
+              tag: process.env.EXPECTED_TAG,
+              build: process.env.EXPECTED_BUILD,
+              commit: process.env.EXPECTED_COMMIT,
+              type: process.env.EXPECTED_RELEASE_TYPE,
+              title: Buffer.from(process.env.EXPECTED_RELEASE_TITLE_B64 || '', 'base64').toString('utf8'),
+            }
+            for (const [key, value] of Object.entries(expected)) {
+              if (record[key] !== value) {
+                throw new Error(`${label} ${key} mismatch: expected ${value}, got ${record[key]}`)
+              }
+            }
+          }
+
+          const immutableRelease = JSON.parse(fs.readFileSync('/tmp/immutable-release.json', 'utf8'))
           const current = JSON.parse(fs.readFileSync('/tmp/current.json', 'utf8'))
-          if (current.version !== process.env.EXPECTED_VERSION) {
-            throw new Error(`Unexpected public demo version: ${current.version}`)
+          verifyTarget(immutableRelease, 'Immutable release')
+
+          const order = compare(parseSemver(current.version), parseSemver(process.env.EXPECTED_VERSION))
+          if (order < 0) {
+            throw new Error(`Current release ${current.version} is older than verified target ${process.env.EXPECTED_VERSION}`)
           }
-          if (current.sha256 !== process.env.EXPECTED_SHA256) {
-            throw new Error('Public demo metadata checksum mismatch')
-          }
-          if (current.tag !== process.env.EXPECTED_TAG) {
-            throw new Error(`Unexpected public demo tag: ${current.tag}`)
-          }
-          if (current.build !== process.env.EXPECTED_BUILD) {
-            throw new Error(`Unexpected public demo build: ${current.build}`)
-          }
-          if (current.commit !== process.env.EXPECTED_COMMIT) {
-            throw new Error(`Unexpected public demo commit: ${current.commit}`)
-          }
-          if (current.type !== process.env.EXPECTED_RELEASE_TYPE) {
-            throw new Error(`Unexpected public demo release type: ${current.type}`)
-          }
-          const expectedTitle = Buffer.from(process.env.EXPECTED_RELEASE_TITLE_B64 || '', 'base64').toString('utf8')
-          if (current.title !== expectedTitle) {
-            throw new Error(`Unexpected public demo release title: ${current.title}`)
+          if (order === 0) {
+            verifyTarget(current, 'Current release')
+            process.stdout.write('current')
+          } else {
+            process.stdout.write('superseded')
           }
           NODE
+          )"
 
-          echo "Public demo verified: $PUBLIC_URL"
+          if [[ "$current_state" == "current" ]]; then
+            curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+              -H 'Cache-Control: no-cache' "${PUBLIC_URL}?build=${cache_buster}" \
+              -o /tmp/family-circle-latest.exe
+            latest_sha256="$(sha256sum /tmp/family-circle-latest.exe | awk '{print $1}')"
+            if [[ "$latest_sha256" != "$EXPECTED_SHA256" ]]; then
+              echo "Latest installer checksum mismatch" >&2
+              exit 1
+            fi
+            echo "Public demo verified and current: $PUBLIC_URL"
+          else
+            echo "Immutable release verified; a newer semantic release remains current."
+          fi
+
           echo "SHA256: $EXPECTED_SHA256"
 
       - name: Report deploy stage
@@ -645,6 +732,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.package.outputs.release_version }}
           RELEASE_TAG: ${{ needs.package.outputs.release_tag }}
         run: |
@@ -676,15 +764,50 @@ jobs:
             echo "Tag $RELEASE_TAG already points to this commit; continuing idempotently."
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$installer" "$checksum_path" --clobber
-          else
+          expected_installer="$(basename "$installer")"
+          expected_checksum="$(basename "$checksum_path")"
+          release_exists="false"
+          existing_assets=""
+          existing_dir="/tmp/finalizer-existing"
+          rm -rf "$existing_dir"
+          mkdir -p "$existing_dir"
+
+          if existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+            release_exists="true"
+
+            if grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release download "$RELEASE_TAG" --pattern "$expected_installer" --dir "$existing_dir"
+              existing_installer_sha="$(sha256sum "$existing_dir/$expected_installer" | awk '{print $1}')"
+              if [[ "$existing_installer_sha" != "$checksum" ]]; then
+                echo "Existing GitHub Release installer checksum mismatch for $RELEASE_TAG" >&2
+                exit 1
+              fi
+            fi
+
+            if grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release download "$RELEASE_TAG" --pattern "$expected_checksum" --dir "$existing_dir"
+              read -r existing_checksum existing_checksum_name < "$existing_dir/$expected_checksum"
+              if [[ "$existing_checksum" != "$checksum" || "$existing_checksum_name" != "$expected_installer" ]]; then
+                echo "Existing GitHub Release checksum asset mismatch for $RELEASE_TAG" >&2
+                exit 1
+              fi
+            fi
+          fi
+
+          if [[ "$release_exists" == "false" ]]; then
             gh release create "$RELEASE_TAG" \
               --verify-tag \
               --target "$GITHUB_SHA" \
               --title "Family Circle $RELEASE_TAG" \
               --generate-notes \
               "$installer" "$checksum_path"
+          else
+            if ! grep -Fxq "$expected_installer" <<<"$existing_assets"; then
+              gh release upload "$RELEASE_TAG" "$installer"
+            fi
+            if ! grep -Fxq "$expected_checksum" <<<"$existing_assets"; then
+              gh release upload "$RELEASE_TAG" "$checksum_path"
+            fi
           fi
 
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
