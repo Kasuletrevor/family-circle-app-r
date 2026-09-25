@@ -43,6 +43,7 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
       user: { ...invitedState.user, mustChangePassword: false },
     })),
     updateProfile: vi.fn(async (): Promise<AuthState> => ({
+    changePassword: vi.fn(),
       ...invitedState,
       user: { ...invitedState.user, name: 'Trevor Kasule', mustChangePassword: false },
     })),
