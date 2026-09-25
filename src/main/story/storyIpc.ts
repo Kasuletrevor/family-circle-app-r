@@ -10,6 +10,7 @@ import type { IpcHandleRegistrar } from '../auth/authIpc'
 import { MAX_VOICE_WAV_BYTES } from '../voice/VoiceTranscriptionService'
 import { VOICE_PACK_VERSION, type VoiceProgress, type VoiceStatus } from '../voice/voiceModels'
 import type { StoryMediaAddResult as InternalStoryMediaAddResult, StoryMediaPublicItem as InternalStoryMediaPublicItem } from './StoryMediaService'
+import { noMutationLock, type MutationLock } from '../storage/MutationLock'
 
 export interface StoryIpcService {
   get(): Promise<StoryPublicState>
@@ -44,6 +45,7 @@ interface StoryIpcDependencies {
   media: StoryMediaIpcService
   voiceAssets: StoryVoiceAssetIpcService
   transcription: StoryTranscriptionIpcService
+  mutationLock?: MutationLock
 }
 
 interface StoryIpcEvent {
@@ -225,28 +227,29 @@ function senderOf(event: unknown): StoryIpcEvent['sender'] {
 }
 
 export function registerStoryIpc(ipc: IpcHandleRegistrar, dependencies: StoryIpcDependencies): void {
+  const mutationLock = dependencies.mutationLock ?? noMutationLock
   ipc.handle('story:get', async () => safeStoryState(await dependencies.story.get()))
   ipc.handle('story:save-draft', async (_event, payload) => {
     const raw = recordInput(payload)
-    return safeStoryState(await dependencies.story.saveDraft({
+    return mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.saveDraft({
       fieldKey: safeFieldKey(raw.fieldKey),
       answer: typeof raw.answer === 'string' ? raw.answer : '',
       language: normalizeStoryLanguage(raw.language).code,
-    }))
+    })))
   })
-  ipc.handle('story:confirm-field', async (_event, payload) => safeStoryState(await dependencies.story.confirmField({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) })))
-  ipc.handle('story:retry-indexing', async (_event, payload) => safeStoryState(await dependencies.story.retryIndexing({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) })))
-  ipc.handle('story:save-now', async () => safeStoryState(await dependencies.story.saveNow()))
+  ipc.handle('story:confirm-field', async (_event, payload) => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.confirmField({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) }))))
+  ipc.handle('story:retry-indexing', async (_event, payload) => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.retryIndexing({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) }))))
+  ipc.handle('story:save-now', async () => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.saveNow())))
   ipc.handle('story:get-history', async () => safeHistory(await dependencies.story.getHistory()))
-  ipc.handle('story:restore-version', async (_event, payload) => safeStoryState(await dependencies.story.restoreVersion({ versionId: versionIdOf(payload) })))
+  ipc.handle('story:restore-version', async (_event, payload) => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.restoreVersion({ versionId: versionIdOf(payload) }))))
   ipc.handle('story:choose-add-media', async (_event, payload) => {
     const raw = recordInput(payload)
     const mediaType = raw.mediaType === 'audio' ? 'audio' : raw.mediaType === 'photo' ? 'photo' : (() => { throw new Error('Invalid Story media type') })()
-    return safeMediaAdd(await dependencies.media.chooseAndAdd({ fieldKey: safeFieldKey(raw.fieldKey), mediaType }))
+    return mutationLock.runExclusive(async () => safeMediaAdd(await dependencies.media.chooseAndAdd({ fieldKey: safeFieldKey(raw.fieldKey), mediaType })))
   })
   ipc.handle('story:list-media', async () => safeMediaList(await dependencies.media.list()))
   ipc.handle('story:open-media', (_event, payload) => dependencies.media.open({ mediaId: mediaIdOf(payload) }))
-  ipc.handle('story:delete-media', (_event, payload) => dependencies.media.delete({ mediaId: mediaIdOf(payload) }))
+  ipc.handle('story:delete-media', (_event, payload) => mutationLock.runExclusive(() => dependencies.media.delete({ mediaId: mediaIdOf(payload) })))
   ipc.handle('story:transcribe-recording', async (_event, payload) => {
     const result = await dependencies.transcription.transcribe(recordingInputOf(payload))
     return { transcript: String(recordOf(result).transcript ?? '') }
