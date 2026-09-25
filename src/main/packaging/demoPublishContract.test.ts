@@ -48,6 +48,8 @@ describe('demo server publish contract', () => {
     expect(publisher).toContain('Reusing existing verified release destination: $DEST_DIR')
     expect(publisher).toContain('Existing release does not match retry payload')
     expect(publisher).toContain('Existing release installer checksum mismatch')
+    expect(publisher).toContain('trap cleanup_tmp EXIT')
+    expect(publisher).toContain('rm -rf "$TMP_DIR"')
     expect(publisher).not.toContain('Release destination already exists: $DEST_DIR')
   })
 
