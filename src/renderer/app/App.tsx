@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import type { AuthState, AuthUser } from '../../shared/desktopApi'
 import type { AuthClient } from '../services/auth/AuthClient'
+import { DesktopAuthClient } from '../services/auth/DesktopAuthClient'
 import { CircleManagement } from '../features/circles/CircleManagement'
 import { MyCircles } from '../features/circles/MyCircles'
 import { Home } from '../features/home/Home'
@@ -21,10 +22,13 @@ export function AuthenticatedApp({
   onSignOut,
 }: {
   user: AuthUser
-  auth: AuthClient
-  onAuthStateChange(state: AuthState): void
+  auth?: AuthClient
+  onAuthStateChange?(state: AuthState): void
   onSignOut: () => Promise<void>
 }) {
+  const settingsAuth = auth ?? new DesktopAuthClient(window.familyCircle)
+  const updateAuthState = onAuthStateChange ?? (() => undefined)
+
   return (
     <div className="app-shell">
       <Sidebar />
@@ -40,7 +44,7 @@ export function AuthenticatedApp({
             <Route path="/stories" element={<MyStory />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/ai" element={<AskVault />} />
-            <Route path="/settings" element={<SettingsPage user={user} auth={auth} onAuthStateChange={onAuthStateChange} />} />
+            <Route path="/settings" element={<SettingsPage user={user} auth={settingsAuth} onAuthStateChange={updateAuthState} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
