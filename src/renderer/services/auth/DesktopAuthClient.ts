@@ -32,6 +32,14 @@ export class DesktopAuthClient implements AuthClient {
     return this.desktop.auth.resetPassword(input)
   }
 
+  updateProfile(name: string) {
+    return this.desktop.auth.updateProfile(name)
+  }
+
+  changePassword(input: Parameters<AuthClient['changePassword']>[0]) {
+    return this.desktop.auth.changePassword(input)
+  }
+
   getOnboardingState() {
     return this.desktop.onboarding.getState()
   }
