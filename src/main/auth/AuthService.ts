@@ -23,6 +23,7 @@ export interface CircleAuthPort {
 export interface RecoveryPort {
   request(email: string): Promise<{ success: true; message: string; expiresInMinutes: number }>
   reset(input: ResetPasswordInput): Promise<{ success: true }>
+  invalidateOutstanding(userId: number): Promise<void>
 }
 
 export function stateFor(user: AuthUser): AuthState {
@@ -129,6 +130,7 @@ export class AuthService {
       throw new Error('Current password is incorrect.')
     }
     const updated = await this.users.replacePassword(current.id, String(input.newPassword ?? ''))
+    await this.recovery.invalidateOutstanding(current.id)
     await this.sessions.save(updated.id)
     return stateFor(updated)
   }

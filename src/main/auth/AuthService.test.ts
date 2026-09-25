@@ -57,6 +57,7 @@ function createHarness(overrides: {
       expiresInMinutes: 10,
     })),
     reset: vi.fn(async (_input: ResetPasswordInput) => ({ success: true as const })),
+    invalidateOutstanding: vi.fn(async () => undefined),
   }
   const service = new AuthService(users, sessions, recovery, circle)
   return { db, users, sessions, recovery, circle, service }
@@ -187,6 +188,24 @@ describe('AuthService', () => {
       status: 'authenticated',
       user: { name: 'Trevor Kasule' },
     })
+  })
+
+  it('invalidates outstanding recovery codes when the password changes', async () => {
+    const { service, users, recovery } = createHarness()
+    await service.register({
+      name: 'Trevor',
+      email: 'owner@example.com',
+      password: 'correct horse battery staple',
+    })
+    await service.complete('home')
+    const record = await users.getRecordByEmail('owner@example.com')
+
+    await service.changePassword({
+      currentPassword: 'correct horse battery staple',
+      newPassword: 'another secure password 123',
+    })
+
+    expect(recovery.invalidateOutstanding).toHaveBeenCalledWith(record!.user.id)
   })
 
   it('confirms invited Circle context and rejects completion when expected membership disappears', async () => {
