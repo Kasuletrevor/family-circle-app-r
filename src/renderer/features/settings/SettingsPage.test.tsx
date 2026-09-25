@@ -168,6 +168,11 @@ describe('SettingsPage', () => {
       bytesDownloaded: 10,
       totalSizeBytes: 100,
       percent: 10,
+      fileIndex: 1,
+      fileCount: 3,
+      fileName: 'model.gguf',
+      fileBytesDownloaded: 10,
+      fileSizeBytes: 100,
     })
 
     const pauseButton = await screen.findByRole('button', { name: 'Pause download' })
