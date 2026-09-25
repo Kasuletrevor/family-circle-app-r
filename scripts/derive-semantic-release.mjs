@@ -64,6 +64,11 @@ export function deriveNextRelease({ baseVersion, subjects }) {
   return { impact, version: bumpVersion(baseVersion, impact) }
 }
 
+export function isAlreadyReleased(latestCommit, headCommit) {
+  return Boolean(latestCommit) && latestCommit === headCommit
+}
+
+
 function git(args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim()
 }
@@ -103,7 +108,7 @@ async function main() {
   const baselineRef = latest?.tag ?? INITIAL_BASELINE_COMMIT
   const subjects = git(['log', '--reverse', '--format=%s', `${baselineRef}..HEAD`]).split(/\r?\n/).filter(Boolean)
 
-  if (latest && latestCommit === git(['rev-parse', 'HEAD'])) {
+  if (latest && isAlreadyReleased(latestCommit, git(['rev-parse', 'HEAD']))) {
     const output = {
       release_eligible: 'false',
       release_type: current.eligible ? current.type : '',
