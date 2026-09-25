@@ -3,6 +3,7 @@ import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AuthUser, LocalBackupResult } from '../../shared/desktopApi'
+import { noMutationLock, type MutationLock } from '../storage/MutationLock'
 
 export interface SettingsBackupPicker {
   chooseDestination(): Promise<string | null>
@@ -15,6 +16,7 @@ interface SettingsServiceDependencies {
   picker: SettingsBackupPicker
   session: { restore(): Promise<AuthUser | null> }
   now?: () => number
+  mutationLock?: MutationLock
 }
 
 interface LocalBackupManifest {
@@ -46,6 +48,11 @@ export class SettingsService {
   }
 
   async createBackup(): Promise<LocalBackupResult> {
+    const mutationLock = this.dependencies.mutationLock ?? noMutationLock
+    return mutationLock.runExclusive(() => this.createBackupSnapshot())
+  }
+
+  private async createBackupSnapshot(): Promise<LocalBackupResult> {
     const current = await this.dependencies.session.restore()
     if (!current) throw new Error('Sign in before creating a local backup.')
 
