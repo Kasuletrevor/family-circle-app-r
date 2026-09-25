@@ -150,13 +150,24 @@ describe('registerPrivateAiIpc', () => {
       repair: vi.fn(async () => internalStatus('ready')),
       remove: vi.fn(async () => internalStatus('not_installed')),
     }
-    const beforeRemove = vi.fn()
+    const order: string[] = []
+    const beforeRemove = vi.fn(async () => { order.push('stopped') })
+    service.remove.mockImplementation(async () => {
+      order.push('removed')
+      return internalStatus('not_installed')
+    })
     registerPrivateAiIpc(ipc as never, service as never, undefined, beforeRemove)
+    const send = vi.fn()
 
-    const result = await handlers.get('private-ai:remove')?.({})
+    const result = await handlers.get('private-ai:remove')?.({ sender: { send } })
 
     expect(beforeRemove).toHaveBeenCalledTimes(1)
     expect(service.remove).toHaveBeenCalledTimes(1)
+    expect(order).toEqual(['stopped', 'removed'])
+    expect(send).toHaveBeenCalledWith('private-ai:progress', expect.objectContaining({
+      state: 'not_installed',
+      percent: 0,
+    }))
     expect(result).toMatchObject({ state: 'not_installed', ready: false })
   })
 
