@@ -150,6 +150,45 @@ describe('AuthService', () => {
     await expect(service.getState()).resolves.toMatchObject({ user: { name: 'Trevor Kasule' } })
   })
 
+  it('updates an authenticated profile and changes password only after verifying the current password', async () => {
+    const { service, users } = createHarness()
+    const state = await service.register({
+      name: 'Trevor',
+      email: 'owner@example.com',
+      password: 'correct horse battery staple',
+    })
+    expect(state.status).toBe('onboarding')
+    await service.complete('home')
+
+    await expect(service.updateProfile('Trevor Kasule')).resolves.toMatchObject({
+      status: 'authenticated',
+      user: { name: 'Trevor Kasule' },
+    })
+
+    const before = await users.getRecordByEmail('owner@example.com')
+    await expect(service.changePassword({
+      currentPassword: 'wrong password',
+      newPassword: 'another secure password 123',
+    })).rejects.toThrow('Current password is incorrect')
+
+    await expect(service.changePassword({
+      currentPassword: 'correct horse battery staple',
+      newPassword: 'another secure password 123',
+    })).resolves.toMatchObject({
+      status: 'authenticated',
+      user: { email: 'owner@example.com' },
+    })
+
+    const after = await users.getRecordByEmail('owner@example.com')
+    expect(after!.sessionVersion).toBe(before!.sessionVersion + 1)
+    await expect(users.verifyPassword(after!.user.id, 'correct horse battery staple')).resolves.toBe(false)
+    await expect(users.verifyPassword(after!.user.id, 'another secure password 123')).resolves.toBe(true)
+    await expect(service.restore()).resolves.toMatchObject({
+      status: 'authenticated',
+      user: { name: 'Trevor Kasule' },
+    })
+  })
+
   it('confirms invited Circle context and rejects completion when expected membership disappears', async () => {
     const success = createHarness()
     await success.service.signIn({ email: 'invite@example.com', password: 'temporary password 123' })
