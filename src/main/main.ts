@@ -102,6 +102,7 @@ async function createAppServices(): Promise<AppServices> {
     db: database,
     userDataPath,
     appVersion: app.getVersion(),
+    session: sessions,
     picker: {
       async chooseDestination() {
         const result = await dialog.showOpenDialog({
