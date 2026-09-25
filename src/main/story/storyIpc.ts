@@ -237,11 +237,11 @@ export function registerStoryIpc(ipc: IpcHandleRegistrar, dependencies: StoryIpc
       language: normalizeStoryLanguage(raw.language).code,
     })))
   })
-  ipc.handle('story:confirm-field', async (_event, payload) => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.confirmField({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) }))))
-  ipc.handle('story:retry-indexing', async (_event, payload) => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.retryIndexing({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) }))))
+  ipc.handle('story:confirm-field', async (_event, payload) => safeStoryState(await dependencies.story.confirmField({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) })))
+  ipc.handle('story:retry-indexing', async (_event, payload) => safeStoryState(await dependencies.story.retryIndexing({ fieldKey: safeFieldKey(recordInput(payload).fieldKey) })))
   ipc.handle('story:save-now', async () => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.saveNow())))
   ipc.handle('story:get-history', async () => safeHistory(await dependencies.story.getHistory()))
-  ipc.handle('story:restore-version', async (_event, payload) => mutationLock.runExclusive(async () => safeStoryState(await dependencies.story.restoreVersion({ versionId: versionIdOf(payload) }))))
+  ipc.handle('story:restore-version', async (_event, payload) => safeStoryState(await dependencies.story.restoreVersion({ versionId: versionIdOf(payload) })))
   ipc.handle('story:choose-add-media', async (_event, payload) => {
     const raw = recordInput(payload)
     const mediaType = raw.mediaType === 'audio' ? 'audio' : raw.mediaType === 'photo' ? 'photo' : (() => { throw new Error('Invalid Story media type') })()
