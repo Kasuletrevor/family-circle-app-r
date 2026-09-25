@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { AuthUser } from '../../shared/desktopApi'
+import type { AuthState, AuthUser } from '../../shared/desktopApi'
+import type { AuthClient } from '../services/auth/AuthClient'
 import { CircleManagement } from '../features/circles/CircleManagement'
 import { MyCircles } from '../features/circles/MyCircles'
 import { Home } from '../features/home/Home'
+import { SettingsPage } from '../features/settings/SettingsPage'
 import { FamilyTreePage } from '../features/family-tree/FamilyTreePage'
 import { MyStory } from '../features/story/MyStory'
 import { AskVault } from '../features/vault/AskVault'
@@ -12,7 +14,17 @@ import { TopBar } from './TopBar'
 import './App.css'
 
 
-export function AuthenticatedApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => Promise<void> }) {
+export function AuthenticatedApp({
+  user,
+  auth,
+  onAuthStateChange,
+  onSignOut,
+}: {
+  user: AuthUser
+  auth: AuthClient
+  onAuthStateChange(state: AuthState): void
+  onSignOut: () => Promise<void>
+}) {
   return (
     <div className="app-shell">
       <Sidebar />
@@ -28,6 +40,7 @@ export function AuthenticatedApp({ user, onSignOut }: { user: AuthUser; onSignOu
             <Route path="/stories" element={<MyStory />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/ai" element={<AskVault />} />
+            <Route path="/settings" element={<SettingsPage user={user} auth={auth} onAuthStateChange={onAuthStateChange} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
