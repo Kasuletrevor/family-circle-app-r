@@ -27,6 +27,21 @@ describe('AsyncMutationLock', () => {
     expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
   })
 
+  it('allows nested work from the current mutation without deadlocking', async () => {
+    const lock = new AsyncMutationLock()
+    const events: string[] = []
+
+    await lock.runExclusive(async () => {
+      events.push('outer:start')
+      await lock.runExclusive(async () => {
+        events.push('inner')
+      })
+      events.push('outer:end')
+    })
+
+    expect(events).toEqual(['outer:start', 'inner', 'outer:end'])
+  })
+
   it('releases the queue after a failed mutation', async () => {
     const lock = new AsyncMutationLock()
     await expect(lock.runExclusive(async () => {
