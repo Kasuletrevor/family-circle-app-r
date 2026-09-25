@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
-import { join } from 'node:path'
+import { copyFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
 import { NomicClient } from './ai/NomicClient'
@@ -17,7 +18,7 @@ import { registerCircleIpc } from './circle/circleIpc'
 import { CircleService } from './circle/CircleService'
 import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
-import { prepareDatabase } from './database/database'
+import { prepareDatabase, resolveDatabasePaths } from './database/database'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
 import { StoryChunkRepository } from './story/StoryChunkRepository'
 import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'
@@ -36,6 +37,7 @@ import { createWindowOptions } from './windowOptions'
 
 let mainWindow: BrowserWindow | null = null
 let database: DatabaseSync | null = null
+let databasePath: string | null = null
 let aiRuntimeManager: AiRuntimeManager | null = null
 
 type StoryServices = ReturnType<typeof createStoryServices>
@@ -53,6 +55,28 @@ interface AppServices extends StoryServices {
 function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-version', () => app.getVersion())
   ipcMain.handle('app:get-platform', () => process.platform)
+  ipcMain.handle('app:create-database-backup', async () => {
+    if (!database || !databasePath) throw new Error('Local data is unavailable')
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const options = {
+      title: 'Back up Family Circle data',
+      defaultPath: join(app.getPath('documents'), `Family-Circle-backup-${stamp}.db`),
+      filters: [{ name: 'Family Circle database backup', extensions: ['db'] }],
+    }
+    const result = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, options)
+      : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return { canceled: true, fileName: null as null }
+
+    database.exec('PRAGMA wal_checkpoint(FULL)')
+    copyFileSync(databasePath, result.filePath)
+    return { canceled: false, fileName: basename(result.filePath) }
+  })
+  ipcMain.handle('app:open-data-folder', async () => {
+    const result = await shell.openPath(app.getPath('userData'))
+    if (result) throw new Error('Could not open the Family Circle data folder')
+    return { success: true }
+  })
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
   registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService)
@@ -68,14 +92,18 @@ function registerDesktopIpc(services: AppServices) {
       services.vaultIndexService,
       services.storyIndexService,
     ).catch(() => undefined)
+  }, () => {
+    aiRuntimeManager?.stopAll()
   })
 }
 
 async function createAppServices(): Promise<AppServices> {
   const userDataPath = app.getPath('userData')
+  const appDataPath = app.getPath('appData')
+  databasePath = resolveDatabasePaths({ userDataPath, appDataPath }).activePath
   database = await prepareDatabase({
     userDataPath,
-    appDataPath: app.getPath('appData'),
+    appDataPath,
   })
 
   const users = new UserRepository(database)
@@ -218,6 +246,7 @@ app.on('before-quit', () => {
   aiRuntimeManager = null
   database?.close()
   database = null
+  databasePath = null
 })
 
 app.on('window-all-closed', () => {
