@@ -43,10 +43,10 @@ function createClient(overrides: Partial<AuthClient> = {}): AuthClient {
       user: { ...invitedState.user, mustChangePassword: false },
     })),
     updateProfile: vi.fn(async (): Promise<AuthState> => ({
-    changePassword: vi.fn(),
       ...invitedState,
       user: { ...invitedState.user, name: 'Trevor Kasule', mustChangePassword: false },
     })),
+    changePassword: vi.fn(),
     getCircleContext: vi.fn(async () => ({
       accountOrigin: 'invited' as const,
       invitation: { groupId: 'g-1', groupName: 'Kasule Family', role: 'Member' },
