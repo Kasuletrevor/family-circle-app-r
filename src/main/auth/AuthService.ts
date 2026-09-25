@@ -1,6 +1,7 @@
 import type {
   AuthState,
   AuthUser,
+  ChangePasswordInput,
   CircleContext,
   InvitationCheckResult,
   OnboardingNextAction,
@@ -118,6 +119,18 @@ export class AuthService {
   async updateProfile(name: string): Promise<AuthState> {
     const current = await this.requireUser()
     const updated = await this.users.updateProfile(current.id, name)
+    await this.sessions.save(updated.id)
+    return stateFor(updated)
+  }
+
+  async changePassword(input: ChangePasswordInput): Promise<AuthState> {
+    const current = await this.requireUser()
+    const currentPassword = String(input.currentPassword ?? '')
+    const newPassword = String(input.newPassword ?? '')
+    if (!await this.users.verifyPassword(current.id, currentPassword)) {
+      throw new Error('Current password is incorrect.')
+    }
+    const updated = await this.users.replacePassword(current.id, newPassword)
     await this.sessions.save(updated.id)
     return stateFor(updated)
   }
