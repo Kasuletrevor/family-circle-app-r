@@ -117,6 +117,18 @@ If it finds one, it:
 
 Only after that recovery succeeds does the next `main` commit calculate its own semantic version. This prevents a failed finalizer from causing the next run to reuse the same semantic version or overwrite an immutable server release.
 
+## Retry and idempotency guarantees
+
+Release retries are deliberately non-destructive:
+
+- if an immutable server version directory already exists, the publisher validates its commit, tag, build identifier, title/type, installer path, and SHA-256; a matching retry reuses it, while any mismatch fails;
+- failure to fetch live `current.json` is a recovery failure, not "nothing to recover", so a server/DNS/TLS outage cannot let version derivation run past an unknown pending release;
+- if a GitHub Release already contains both expected assets, recovery exits without touching them;
+- if an existing GitHub Release is incomplete, only missing assets are uploaded; existing assets are never replaced with `--clobber`;
+- rerunning a commit whose stable tag already points at `HEAD` is treated as already released and becomes a clean no-publication run rather than deriving another semantic version.
+
+These rules make retries safe after partial failures between server publication, public verification, tag creation, and GitHub Release finalization.
+
 ## Release ordering
 
 Main release runs share the same workflow concurrency group and are not cancelled when a newer `main` push arrives. Pull-request runs may still cancel older PR runs.
