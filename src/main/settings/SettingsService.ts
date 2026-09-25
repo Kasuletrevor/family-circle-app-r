@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { LocalBackupResult } from '../../shared/desktopApi'
+import type { AuthUser, LocalBackupResult } from '../../shared/desktopApi'
 
 export interface SettingsBackupPicker {
   chooseDestination(): Promise<string | null>
@@ -13,6 +13,7 @@ interface SettingsServiceDependencies {
   userDataPath: string
   appVersion: string
   picker: SettingsBackupPicker
+  session: { restore(): Promise<AuthUser | null> }
   now?: () => number
 }
 
@@ -45,6 +46,17 @@ export class SettingsService {
   }
 
   async createBackup(): Promise<LocalBackupResult> {
+    const current = await this.dependencies.session.restore()
+    if (!current) throw new Error('Sign in before creating a local backup.')
+
+    const row = this.dependencies.db.prepare('SELECT COUNT(*) AS count, MIN(id) AS only_id FROM users').get() as {
+      count: number
+      only_id: number | null
+    } | undefined
+    if (!row || Number(row.count) !== 1 || Number(row.only_id) !== current.id) {
+      throw new Error('Local backup is available only when this Windows profile contains one Family Circle account.')
+    }
+
     const destinationRoot = await this.dependencies.picker.chooseDestination()
     if (!destinationRoot) return { canceled: true, folderName: null, createdAt: null }
 
