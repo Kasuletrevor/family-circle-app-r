@@ -99,8 +99,24 @@ async function main() {
 
   const baseVersion = latest?.parsed.version ?? INITIAL_BASELINE_VERSION
   const baseTag = latest?.tag ?? ''
+  const latestCommit = latest ? git(['rev-list', '-n', '1', latest.tag]) : ''
   const baselineRef = latest?.tag ?? INITIAL_BASELINE_COMMIT
   const subjects = git(['log', '--reverse', '--format=%s', `${baselineRef}..HEAD`]).split(/\r?\n/).filter(Boolean)
+
+  if (latest && latestCommit === git(['rev-parse', 'HEAD'])) {
+    const output = {
+      release_eligible: 'false',
+      release_type: current.eligible ? current.type : '',
+      release_impact: '',
+      release_version: baseVersion,
+      release_tag: baseTag,
+      release_base_tag: baseTag,
+      release_title_b64: Buffer.from(subject, 'utf8').toString('base64'),
+    }
+    for (const [name, value] of Object.entries(output)) writeOutput(name, value)
+    process.stdout.write(`Semantic release already finalized at ${baseTag}; nothing to publish.\n`)
+    return
+  }
 
   if (!latest && packageVersion !== INITIAL_BASELINE_VERSION) {
     throw new Error(
