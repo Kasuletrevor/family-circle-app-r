@@ -139,6 +139,21 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(children.every((child) => child.killed)).toBe(true)
   })
 
+  it('waits for managed runtime exit before resolving removal shutdown', async () => {
+    const { manager, children } = makeHarness({ health: [true, true] })
+    await manager.ensureEmbeddingRuntime()
+    await manager.ensureGenerationRuntime()
+
+    const stopping = manager.stopAllAndWait()
+    expect(children.every((child) => child.killed)).toBe(true)
+
+    for (const child of children) {
+      for (const listener of child.listeners) listener()
+    }
+
+    await expect(stopping).resolves.toBeUndefined()
+  })
+
   it('kills only the failed managed child after the 60-second startup timeout', async () => {
     const { manager, process, children, health, sleep } = makeHarness({ health: Array(130).fill(false) })
 
