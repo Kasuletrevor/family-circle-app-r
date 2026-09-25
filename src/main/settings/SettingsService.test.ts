@@ -2,7 +2,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { runMigrations } from '../database/migrations'
+import { UserRepository } from '../auth/UserRepository'
 import { SettingsService } from './SettingsService'
 
 const roots: string[] = []
@@ -33,8 +35,13 @@ describe('SettingsService', () => {
     await writeFile(join(userDataPath, 'protected-session.bin'), 'secret session')
 
     const db = new DatabaseSync(join(userDataPath, 'family.db'))
-    db.exec('CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT NOT NULL)')
-    db.prepare('INSERT INTO sample (value) VALUES (?)').run('kept in backup')
+    runMigrations(db)
+    const users = new UserRepository(db)
+    const user = await users.createRegisteredUser({
+      name: 'Ada Example',
+      email: 'ada@example.test',
+      password: 'correct horse battery staple',
+    })
 
     const createdAt = Date.parse('2026-09-25T10:00:00.000Z')
     const service = new SettingsService({
@@ -42,6 +49,7 @@ describe('SettingsService', () => {
       userDataPath,
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => destination },
+      session: { restore: async () => user },
       now: () => createdAt,
     })
 
@@ -68,8 +76,46 @@ describe('SettingsService', () => {
     })
 
     const backupDb = new DatabaseSync(join(backupRoot, 'family.db'), { readOnly: true })
-    expect(backupDb.prepare('SELECT value FROM sample').get()).toEqual({ value: 'kept in backup' })
+    expect(backupDb.prepare('SELECT email, name FROM users').get()).toEqual({
+      email: 'ada@example.test',
+      name: 'Ada Example',
+    })
     backupDb.close()
+    db.close()
+  })
+
+  it('refuses device-wide backup when more than one local account exists', async () => {
+    const root = await tempRoot()
+    const userDataPath = join(root, 'user-data')
+    const destination = join(root, 'backups')
+    await mkdir(userDataPath, { recursive: true })
+    await mkdir(destination, { recursive: true })
+
+    const db = new DatabaseSync(join(userDataPath, 'family.db'))
+    runMigrations(db)
+    const users = new UserRepository(db)
+    const first = await users.createRegisteredUser({
+      name: 'Ada Example',
+      email: 'ada@example.test',
+      password: 'correct horse battery staple',
+    })
+    await users.createRegisteredUser({
+      name: 'Second Person',
+      email: 'second@example.test',
+      password: 'another secure password 123',
+    })
+
+    const chooseDestination = vi.fn(async () => destination)
+    const service = new SettingsService({
+      db,
+      userDataPath,
+      appVersion: '0.2.3',
+      picker: { chooseDestination },
+      session: { restore: async () => first },
+    })
+
+    await expect(service.createBackup()).rejects.toThrow('one Family Circle account')
+    expect(chooseDestination).not.toHaveBeenCalled()
     db.close()
   })
 
@@ -78,13 +124,20 @@ describe('SettingsService', () => {
     const userDataPath = join(root, 'user-data')
     await mkdir(userDataPath, { recursive: true })
     const db = new DatabaseSync(join(userDataPath, 'family.db'))
-    db.exec('CREATE TABLE sample (id INTEGER PRIMARY KEY)')
+    runMigrations(db)
+    const users = new UserRepository(db)
+    const user = await users.createRegisteredUser({
+      name: 'Ada Example',
+      email: 'ada@example.test',
+      password: 'correct horse battery staple',
+    })
 
     const service = new SettingsService({
       db,
       userDataPath,
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => null },
+      session: { restore: async () => user },
     })
 
     await expect(service.createBackup()).resolves.toEqual({
