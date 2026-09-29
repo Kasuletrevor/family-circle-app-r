@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { StoryMediaPublicItem, StoryMediaType, VoicePublicProgress, VoicePublicStatus } from '../../../shared/desktopApi'
 import {
   STORY_FIELDS,
   STORY_LANGUAGES,
@@ -7,9 +8,14 @@ import {
   type StoryLanguage,
   type StorySection,
 } from '../../../shared/story'
-import type { StoryPublicAnswer, StoryPublicState } from '../../../shared/storyPublic'
+import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../../../shared/storyPublic'
 import { DesktopStoryClient } from '../../services/story/DesktopStoryClient'
 import type { StoryClient } from '../../services/story/StoryClient'
+import { HistoryStoryView } from './HistoryStoryView'
+import { ReviewStoryView } from './ReviewStoryView'
+import { StoryMedia } from './StoryMedia'
+import { StoryVoiceRecorder, type StoryVoiceRecorderLike } from './StoryVoiceRecorder'
+import { StoryVoiceSetup } from './StoryVoiceSetup'
 import './MyStory.css'
 
 const defaultClient = new DesktopStoryClient()
@@ -43,8 +49,9 @@ const FOLLOW_UPS: Partial<Record<StoryFieldKey, readonly string[]>> = {
   futureMessage: ['Who do you imagine hearing this?', 'What do you most want them to remember?'],
 }
 
-type StudioView = 'guided' | 'chapters'
+type StudioView = 'guided' | 'chapters' | 'review' | 'history'
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+type VoiceState = 'idle' | 'starting' | 'recording' | 'transcribing' | 'success' | 'error'
 
 function answerFor(state: StoryPublicState, fieldKey: StoryFieldKey): StoryPublicAnswer | undefined {
   return state.answers.find((answer) => answer.fieldKey === fieldKey)
@@ -145,17 +152,36 @@ function fieldControl(
   )
 }
 
-export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
+export function MyStory({
+  client = defaultClient,
+  createVoiceRecorder = () => new StoryVoiceRecorder(),
+}: {
+  client?: StoryClient
+  createVoiceRecorder?: () => StoryVoiceRecorderLike
+}) {
   const [story, setStory] = useState<StoryPublicState | null>(null)
+  const [media, setMedia] = useState<StoryMediaPublicItem[]>([])
   const [view, setView] = useState<StudioView>('guided')
   const [guidedKey, setGuidedKey] = useState<StoryFieldKey>(STORY_FIELDS[0].key)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [loadingError, setLoadingError] = useState(false)
   const [activeFollowUp, setActiveFollowUp] = useState<string | null>(null)
+  const [history, setHistory] = useState<StoryVersionSummary[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState(false)
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle')
+  const [voiceFieldKey, setVoiceFieldKey] = useState<StoryFieldKey | null>(null)
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null)
+  const [voiceStatus, setVoiceStatus] = useState<VoicePublicStatus | null>(null)
+  const [voiceProgress, setVoiceProgress] = useState<VoicePublicProgress | null>(null)
+  const [voiceSetupFieldKey, setVoiceSetupFieldKey] = useState<StoryFieldKey | null>(null)
+  const [voiceSetupBusy, setVoiceSetupBusy] = useState(false)
+  const [voiceSetupError, setVoiceSetupError] = useState<string | null>(null)
   const timers = useRef(new Map<StoryFieldKey, ReturnType<typeof setTimeout>>())
   const revisions = useRef(new Map<StoryFieldKey, number>())
   const dirtyFields = useRef(new Set<StoryFieldKey>())
   const storyRef = useRef<StoryPublicState | null>(null)
+  const voiceRecorderRef = useRef<StoryVoiceRecorderLike | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -169,10 +195,37 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
       .catch(() => {
         if (!cancelled) setLoadingError(true)
       })
+    void client.listMedia()
+      .then((items) => { if (!cancelled) setMedia(items) })
+      .catch(() => { if (!cancelled) setMedia([]) })
+    void client.getVoiceStatus()
+      .then((status) => { if (!cancelled) setVoiceStatus(status) })
+      .catch(() => { if (!cancelled) setVoiceStatus(null) })
+    let unsubscribeVoice: () => void = () => undefined
+    try {
+      unsubscribeVoice = client.onVoiceSetupProgress((progress) => {
+        if (cancelled) return
+        setVoiceProgress(progress)
+        setVoiceStatus((current) => current ? {
+          ...current,
+          state: progress.state,
+          ready: progress.state === 'ready',
+          repairRequired: progress.state === 'repair_required',
+          message: progress.message,
+        } : current)
+      })
+    } catch {
+      // Hosts without the voice bridge fall back to the status request above.
+    }
+
     return () => {
       cancelled = true
+      unsubscribeVoice()
       for (const timer of timers.current.values()) clearTimeout(timer)
       timers.current.clear()
+      const recorder = voiceRecorderRef.current
+      voiceRecorderRef.current = null
+      if (recorder) void recorder.cancel()
     }
   }, [client])
 
@@ -208,20 +261,26 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
     }
   }
 
-  function scheduleDraft(field: StoryFieldDefinition, value: string, language: StoryLanguage) {
+  function prepareDraft(field: StoryFieldDefinition, value: string, language: StoryLanguage) {
     const current = storyRef.current
-    if (!current) return
-    const existing = answerFor(current, field.key)
-    const wasConfirmed = existing?.confirmed ?? false
+    if (!current) return null
     const revision = (revisions.current.get(field.key) ?? 0) + 1
     revisions.current.set(field.key, revision)
     dirtyFields.current.add(field.key)
     commitLocal(optimisticDraft(current, field, value, language))
     setSaveStatus('saving')
-
     const oldTimer = timers.current.get(field.key)
     if (oldTimer) clearTimeout(oldTimer)
     timers.current.delete(field.key)
+    return revision
+  }
+
+  function scheduleDraft(field: StoryFieldDefinition, value: string, language: StoryLanguage) {
+    const current = storyRef.current
+    if (!current) return
+    const wasConfirmed = answerFor(current, field.key)?.confirmed ?? false
+    const revision = prepareDraft(field, value, language)
+    if (revision === null) return
 
     if (wasConfirmed) {
       void persistDraft(field.key, value, language, revision)
@@ -297,12 +356,193 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
     }
   }
 
-  function jumpToSection(section: StorySection) {
-    const first = STORY_FIELDS.find((field) => field.section === section)
-    if (!first) return
-    setGuidedKey(first.key)
+  async function cancelVoiceRecording() {
+    const recorder = voiceRecorderRef.current
+    voiceRecorderRef.current = null
+    if (recorder) await recorder.cancel()
+    setVoiceState('idle')
+    setVoiceFieldKey(null)
+    setVoiceMessage(null)
+  }
+
+  function changeView(nextView: StudioView) {
+    if (voiceRecorderRef.current) void cancelVoiceRecording()
+    setView(nextView)
+    setActiveFollowUp(null)
+    if (nextView === 'history') void loadHistory()
+  }
+
+  function jumpToField(fieldKey: StoryFieldKey) {
+    if (voiceRecorderRef.current) void cancelVoiceRecording()
+    setGuidedKey(fieldKey)
     setView('guided')
     setActiveFollowUp(null)
+  }
+
+  function jumpToSection(section: StorySection) {
+    const first = STORY_FIELDS.find((field) => field.section === section)
+    if (first) jumpToField(first.key)
+  }
+
+  async function loadHistory() {
+    setHistoryLoading(true)
+    setHistoryError(false)
+    try {
+      setHistory(await client.getHistory())
+    } catch {
+      setHistoryError(true)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  async function restoreVersion(versionId: number) {
+    const next = await client.restoreVersion(versionId)
+    commitLocal(next)
+    setSaveStatus('saved')
+    await loadHistory()
+  }
+
+  async function addMedia(fieldKey: StoryFieldKey, mediaType: StoryMediaType) {
+    const result = await client.chooseAndAddMedia(fieldKey, mediaType)
+    if (result.canceled) return
+    const added = result.items.filter((item): item is StoryMediaPublicItem => 'id' in item)
+    if (added.length === 0) return
+    setMedia((current) => {
+      const byId = new Map(current.map((item) => [item.id, item]))
+      for (const item of added) byId.set(item.id, item)
+      return [...byId.values()]
+    })
+  }
+
+  async function openMedia(mediaId: number) {
+    await client.openMedia(mediaId)
+  }
+
+  async function deleteMedia(mediaId: number) {
+    await client.deleteMedia(mediaId)
+    setMedia((current) => current.filter((item) => item.id !== mediaId))
+  }
+
+  async function runVoiceSetup(action: 'start' | 'pause' | 'repair') {
+    setVoiceSetupBusy(true)
+    setVoiceSetupError(null)
+    try {
+      const status = action === 'start'
+        ? await client.startVoiceSetup()
+        : action === 'pause'
+          ? await client.pauseVoiceSetup()
+          : await client.repairVoiceSetup()
+      setVoiceStatus(status)
+      if (status.state !== 'downloading' && status.state !== 'verifying') setVoiceProgress(null)
+    } catch {
+      setVoiceSetupError('Offline voice setup could not continue. Please try again.')
+    } finally {
+      setVoiceSetupBusy(false)
+    }
+  }
+
+  async function startVoiceRecording(field: StoryFieldDefinition) {
+    if (voiceRecorderRef.current) return
+    // Transcription runs locally, so recording is pointless until offline voice is installed.
+    if (voiceStatus && !voiceStatus.ready) {
+      setVoiceSetupFieldKey(field.key)
+      return
+    }
+    const recorder = createVoiceRecorder()
+    voiceRecorderRef.current = recorder
+    setVoiceFieldKey(field.key)
+    setVoiceState('starting')
+    setVoiceMessage(null)
+    try {
+      await recorder.start()
+      setVoiceState('recording')
+    } catch {
+      try { await recorder.cancel() } catch { /* cleanup is best effort */ }
+      voiceRecorderRef.current = null
+      setVoiceState('error')
+      setVoiceMessage('Microphone access was not available. Check your permission and try again.')
+    }
+  }
+
+  async function saveTranscriptDraft(field: StoryFieldDefinition, transcript: string, language: StoryLanguage) {
+    // Dictation adds to what the person already wrote; it never replaces their words.
+    const existing = (storyRef.current ? answerFor(storyRef.current, field.key)?.answer ?? '' : '').trim()
+    const value = existing ? `${existing} ${transcript}` : transcript
+    const revision = prepareDraft(field, value, language)
+    if (revision === null) return false
+    return persistDraft(field.key, value, language, revision)
+  }
+
+  async function stopAndTranscribe(field: StoryFieldDefinition) {
+    const recorder = voiceRecorderRef.current
+    if (!recorder || voiceFieldKey !== field.key) return
+    setVoiceState('transcribing')
+    setVoiceMessage(null)
+    try {
+      const wavBytes = await recorder.stop()
+      voiceRecorderRef.current = null
+      const current = storyRef.current
+      const language = current ? answerFor(current, field.key)?.language ?? 'en' : 'en'
+      const result = await client.transcribeRecording(wavBytes, language)
+      const transcript = result.transcript.trim()
+      if (!transcript) {
+        setVoiceState('error')
+        setVoiceMessage('No speech was transcribed. Try recording again.')
+        return
+      }
+      const saved = await saveTranscriptDraft(field, transcript, language)
+      if (!saved) {
+        setVoiceState('error')
+        setVoiceMessage('The transcript was captured but could not be saved yet. Try again.')
+        return
+      }
+      setVoiceState('success')
+      setVoiceMessage('Transcript added as draft')
+    } catch {
+      try { await recorder.cancel() } catch { /* cleanup is best effort */ }
+      voiceRecorderRef.current = null
+      setVoiceState('error')
+      setVoiceMessage('Voice transcription failed. Try again.')
+    }
+  }
+
+  function renderVoiceControls(field: StoryFieldDefinition) {
+    const activeForField = voiceFieldKey === field.key
+    const anotherFieldBusy = voiceFieldKey !== null && !activeForField && ['starting', 'recording', 'transcribing'].includes(voiceState)
+    return (
+      <div className="my-story__voice">
+        {activeForField && voiceState === 'recording' ? (
+          <button type="button" onClick={() => void stopAndTranscribe(field)}>Stop recording</button>
+        ) : (
+          <button
+            type="button"
+            disabled={anotherFieldBusy || (activeForField && ['starting', 'transcribing'].includes(voiceState))}
+            onClick={() => void startVoiceRecording(field)}
+          >
+            {activeForField && voiceState === 'starting' ? 'Starting microphone…' : 'Record voice'}
+          </button>
+        )}
+        {activeForField && voiceState === 'recording' && <span aria-live="polite">Recording…</span>}
+        {activeForField && voiceState === 'transcribing' && <span aria-live="polite">Transcribing…</span>}
+        {activeForField && voiceState === 'success' && <span aria-live="polite">{voiceMessage}</span>}
+        {activeForField && voiceState === 'error' && <p role="alert">{voiceMessage}</p>}
+        {voiceSetupFieldKey === field.key && voiceStatus && !voiceStatus.ready ? (
+          <StoryVoiceSetup
+            status={voiceStatus}
+            progress={voiceProgress}
+            busy={voiceSetupBusy}
+            error={voiceSetupError}
+            onSetup={() => void runVoiceSetup('start')}
+            onPause={() => void runVoiceSetup('pause')}
+            onRepair={() => void runVoiceSetup('repair')}
+          />
+        ) : null}
+        {voiceSetupFieldKey === field.key && voiceStatus?.ready && voiceState === 'idle' ? (
+          <span aria-live="polite">Offline voice is ready. Press Record voice to start.</span>
+        ) : null}
+      </div>
+    )
   }
 
   function renderEditor(field: StoryFieldDefinition, guided: boolean) {
@@ -311,6 +551,7 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
     const value = answer?.answer ?? ''
     const language = answer?.language ?? 'en'
     const followUps = FOLLOW_UPS[field.key] ?? []
+    const fieldMedia = media.filter((item) => item.fieldKey === field.key)
     return (
       <article className={`my-story__memory ${guided ? 'my-story__memory--guided' : ''}`} data-testid="story-field-editor" key={field.key}>
         <div className="my-story__memory-heading">
@@ -334,6 +575,14 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
         {guided && activeFollowUp && followUps.includes(activeFollowUp) && (
           <p className="my-story__followup-note">Consider: {activeFollowUp}</p>
         )}
+        <StoryMedia
+          fieldKey={field.key}
+          items={fieldMedia}
+          onAdd={addMedia}
+          onOpen={openMedia}
+          onDelete={deleteMedia}
+        />
+        {renderVoiceControls(field)}
         <div className="my-story__memory-footer">
           <p>{statusText(answer)}</p>
           <div className="my-story__actions">
@@ -381,19 +630,23 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
       </header>
 
       <div className="my-story__tabs" role="group" aria-label="Story view">
-        <button type="button" aria-pressed={view === 'guided'} onClick={() => setView('guided')}>Guided</button>
-        <button type="button" aria-pressed={view === 'chapters'} onClick={() => setView('chapters')}>Chapters</button>
+        <button type="button" aria-pressed={view === 'guided'} onClick={() => changeView('guided')}>Guided</button>
+        <button type="button" aria-pressed={view === 'chapters'} onClick={() => changeView('chapters')}>Chapters</button>
+        <button type="button" aria-pressed={view === 'review'} onClick={() => changeView('review')}>Review</button>
+        <button type="button" aria-pressed={view === 'history'} onClick={() => changeView('history')}>History</button>
       </div>
 
-      <nav className="my-story__chapters" aria-label="Story chapters">
-        {STORY_SECTIONS.map((section) => (
-          <button type="button" key={section} onClick={() => jumpToSection(section)} aria-label={`Go to ${section} chapter`}>
-            {section}
-          </button>
-        ))}
-      </nav>
+      {view !== 'history' && (
+        <nav className="my-story__chapters" aria-label="Story chapters">
+          {STORY_SECTIONS.map((section) => (
+            <button type="button" key={section} onClick={() => jumpToSection(section)} aria-label={`Go to ${section} chapter`}>
+              {section}
+            </button>
+          ))}
+        </nav>
+      )}
 
-      {view === 'guided' ? (
+      {view === 'guided' && (
         <div className="my-story__guided">
           <p className="my-story__counter">Memory {guidedIndex + 1} of {STORY_FIELDS.length}</p>
           {renderEditor(guidedField, true)}
@@ -401,20 +654,22 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
             <button
               type="button"
               disabled={guidedIndex === 0}
-              onClick={() => { setGuidedKey(STORY_FIELDS[Math.max(0, guidedIndex - 1)].key); setActiveFollowUp(null) }}
+              onClick={() => jumpToField(STORY_FIELDS[Math.max(0, guidedIndex - 1)].key)}
             >
               Previous
             </button>
             <button
               type="button"
               disabled={guidedIndex === STORY_FIELDS.length - 1}
-              onClick={() => { setGuidedKey(STORY_FIELDS[Math.min(STORY_FIELDS.length - 1, guidedIndex + 1)].key); setActiveFollowUp(null) }}
+              onClick={() => jumpToField(STORY_FIELDS[Math.min(STORY_FIELDS.length - 1, guidedIndex + 1)].key)}
             >
               Next
             </button>
           </div>
         </div>
-      ) : (
+      )}
+
+      {view === 'chapters' && (
         <div className="my-story__chapter-list">
           {STORY_SECTIONS.map((section) => (
             <section className="my-story__chapter" key={section}>
@@ -423,6 +678,19 @@ export function MyStory({ client = defaultClient }: { client?: StoryClient }) {
             </section>
           ))}
         </div>
+      )}
+
+      {view === 'review' && (
+        <ReviewStoryView story={story} media={media} onEdit={jumpToField} />
+      )}
+
+      {view === 'history' && (
+        <HistoryStoryView
+          versions={history}
+          loading={historyLoading}
+          error={historyError}
+          onRestore={restoreVersion}
+        />
       )}
     </section>
   )
