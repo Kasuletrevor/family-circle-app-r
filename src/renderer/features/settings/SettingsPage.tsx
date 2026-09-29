@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   CheckCircle2,
   DatabaseBackup,
+  FolderOpen,
   Info,
   KeyRound,
   Pause,
@@ -244,6 +245,16 @@ export function SettingsPage({
     }
   }
 
+  async function openDataFolder() {
+    setBackupMessage(null)
+    setBackupError(null)
+    try {
+      await desktop.settings.openDataFolder()
+    } catch (error) {
+      setBackupError(error instanceof Error ? error.message : 'Could not open the Family Circle data folder.')
+    }
+  }
+
   async function createBackup() {
     setBackupBusy(true)
     setBackupMessage(null)
@@ -388,6 +399,9 @@ export function SettingsPage({
           <div className="settings-actions">
             <button className="settings-button settings-button--secondary" type="button" disabled={backupBusy} onClick={() => void createBackup()}>
               <DatabaseBackup size={15} /> {backupBusy ? 'Creating backup…' : 'Create backup'}
+            </button>
+            <button className="settings-button settings-button--secondary" type="button" onClick={() => void openDataFolder()}>
+              <FolderOpen size={15} /> Open data folder
             </button>
           </div>
           {backupMessage ? <p className="settings-notice" role="status"><CheckCircle2 size={15} /> {backupMessage}</p> : null}

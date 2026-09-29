@@ -40,6 +40,7 @@ describe('App shell', () => {
         },
         settings: {
           createBackup: async () => ({ canceled: true, folderName: null, createdAt: null }),
+          openDataFolder: async () => ({ success: true as const }),
         },
         vault: {
           listDocuments: async () => [],

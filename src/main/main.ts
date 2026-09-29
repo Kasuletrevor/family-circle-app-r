@@ -132,6 +132,12 @@ async function createAppServices(): Promise<AppServices> {
         return result.canceled ? null : result.filePaths[0] ?? null
       },
     },
+    folderOpener: {
+      async open(path) {
+        const failure = await shell.openPath(path)
+        if (failure) throw new Error('Could not open the Family Circle data folder.')
+      },
+    },
   })
 
   const vaultRepository = new VaultRepository(database)
