@@ -25,6 +25,7 @@ function service(createCircle: CircleClient['createCircle']): CircleClient {
     leaveCircle: vi.fn(async () => undefined),
     renameCircle: vi.fn(async () => undefined),
     deleteCircle: vi.fn(async () => undefined),
+    onChange: vi.fn(() => () => undefined),
   }
 }
 

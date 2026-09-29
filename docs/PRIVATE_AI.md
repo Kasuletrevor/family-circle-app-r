@@ -6,15 +6,19 @@ The Private AI path is owned by the Electron main process. React receives only s
 
 ## Runtime contract
 
-Private AI uses `config/offline-ai-manifest.json`. Manifest version `1.2.0` requires exactly three verified assets:
+Private AI uses `config/offline-ai-manifest.json`. Manifest version `1.3.0` requires exactly three verified assets:
 
 | Friendly name | Asset | Expected bytes | Expected SHA-256 |
 | --- | --- | ---: | --- |
-| AI engine | llama.cpp b8772 Windows CPU x64 runtime ZIP | 39,870,081 | `1C18C414B86E8F84D61D003F8605159ACF97492EEECF6891B2D879AF4A0DBFD2` |
+| AI engine | llama.cpp b11243 Windows CPU x64 runtime ZIP | 19,161,151 | `29F91327F4E98FCAC93E3B44E6CC54BEDA26468EB9FFEB804A08CFA67BDA8C5B` |
 | AI answers | Qwen3.5-0.8B Q4_K_M GGUF | 579,615,840 | `FB044E93939A70469C905781334F5DE1E6C8B608CED6CBC8C9249BD4127D9526` |
 | AI search | Nomic Embed Text v1.5 Q4_K_M GGUF | 84,106,624 | `D4E388894E09CF3816E8B0896D81D265B55E7A9FFF9AB03FE8BF4EF5E11295AC` |
 
-The required transfer is **703,592,545 bytes (about 671 MiB / 0.66 GiB)**. Granite 4.0 H-Micro and Granite 4.0 350M are no longer required assets.
+The required transfer is **682,883,615 bytes (about 651 MiB / 0.64 GiB)**. Granite 4.0 H-Micro and Granite 4.0 350M are no longer required assets.
+
+**Engine/model compatibility.** The Qwen3.5-0.8B GGUF carries a next-token-prediction layer (`block_count = 25`, `nextn_predict_layers = 1`). llama.cpp b8772 (manifest `1.2.0`) treated it as a regular layer and failed with `missing tensor 'blk.24.ssm_conv1d.weight'`, so no answer could be generated. b11243 loads it. Before changing either asset, run `llama-server --model <qwen.gguf>` from the candidate engine and confirm `/health` returns `ok`. The unit tests cannot catch this pairing because they never start the real runtime.
+
+**Engine upgrades.** An existing `1.2.0` install reports `repair_required`. *Repair* downloads only the new engine and re-verifies the unchanged models (about 7 seconds with a local mirror). The previous `bin/llama-b8772-…` folder is not removed yet.
 
 ### Local layout
 
@@ -22,13 +26,13 @@ The required transfer is **703,592,545 bytes (about 671 MiB / 0.66 GiB)**. Grani
 <userData>/offline-ai/
 ├── installed-version.json
 ├── bin/
-│   └── llama-b8772-bin-win-cpu-x64/
+│   └── llama-b11243-bin-win-cpu-x64/
 │       └── llama-server.exe
 ├── models/
 │   ├── Qwen_Qwen3.5-0.8B-Q4_K_M.gguf
 │   └── nomic-embed-text-v1.5.Q4_K_M.gguf
 └── .staging/
-    └── 1.2.0/
+    └── 1.3.0/
         └── ... resumable .part downloads ...
 ```
 

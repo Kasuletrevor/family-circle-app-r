@@ -29,4 +29,6 @@ export interface CircleClient {
   leaveCircle(): Promise<void>
   renameCircle(name: string): Promise<void>
   deleteCircle(confirmationName: string): Promise<void>
+  /** Notifies after any Circle change made through this client (select, create, leave, rename, delete…). */
+  onChange(listener: () => void): () => void
 }

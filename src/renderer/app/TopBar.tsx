@@ -40,6 +40,9 @@ export function TopBar({ user, onSignOut }: { user: AuthUser; onSignOut: () => P
     void loadShell()
   }, [loadShell])
 
+  // Circle changes made elsewhere (My Circles, Circle management, Family Tree) update the header.
+  useEffect(() => circle.onChange(() => void loadShell()), [circle, loadShell])
+
   const displayName = String(user.name ?? '').trim() || user.email
   const profileInitials = useMemo(() => initials(displayName), [displayName])
   const activeCircleName = shell?.activeCircleName ?? null

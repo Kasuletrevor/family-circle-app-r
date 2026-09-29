@@ -93,4 +93,23 @@ describe('DesktopCircleClient management surface', () => {
     await client.getCircleDetails()
     expect(getCircleDetails).toHaveBeenCalledTimes(2)
   })
+
+  it('notifies change listeners after Circle mutations, even failed ones, until unsubscribed', async () => {
+    const renameCircle = vi.fn(async () => ({ success: true as const }))
+    const deleteCircle = vi.fn(async () => { throw new Error('Type the Circle name exactly to confirm deletion') })
+    const selectCircle = vi.fn(async () => ({ success: true as const }))
+    const client = new DesktopCircleClient(async () => overview, Date.now, { renameCircle, deleteCircle, selectCircle })
+    const listener = vi.fn()
+
+    const unsubscribe = client.onChange(listener)
+    await client.renameCircle('New Name')
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    await expect(client.deleteCircle('wrong')).rejects.toThrow('Type the Circle name exactly')
+    expect(listener).toHaveBeenCalledTimes(2)
+
+    unsubscribe()
+    await client.selectCircle('g-2')
+    expect(listener).toHaveBeenCalledTimes(2)
+  })
 })

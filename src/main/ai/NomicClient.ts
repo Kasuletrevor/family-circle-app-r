@@ -69,6 +69,13 @@ function numericVector(response: unknown): number[] | null {
     candidate = (response as { embedding?: unknown }).embedding
   }
 
+  // Newer llama-server builds (including the shipped b8772) wrap the pooled vector
+  // one level deeper: { embedding: [[...]] }. Several nested vectors would be
+  // unpooled per-token output, which is not a single embedding.
+  if (Array.isArray(candidate) && candidate.length === 1 && Array.isArray(candidate[0])) {
+    candidate = candidate[0]
+  }
+
   if (!Array.isArray(candidate) || candidate.length === 0) return null
   if (!candidate.every((value) => typeof value === 'number' && Number.isFinite(value))) return null
   return candidate as number[]

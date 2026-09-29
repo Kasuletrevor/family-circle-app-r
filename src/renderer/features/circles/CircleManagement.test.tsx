@@ -49,6 +49,7 @@ function service(overrides: Partial<CircleClient> = {}): CircleClient {
     leaveCircle: vi.fn(async () => undefined),
     renameCircle: vi.fn(async () => undefined),
     deleteCircle: vi.fn(async () => undefined),
+    onChange: vi.fn(() => () => undefined),
     ...overrides,
   }
 }

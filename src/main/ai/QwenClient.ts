@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http'
 
 const GENERATION_PORT = 8080
-const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources.'
+const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources. Reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
 const TRANSLATION_INSTRUCTION = 'Translate the search question into English for retrieval. Return only the translated question. Preserve every name, date, number, and place exactly.'
 
 export interface QwenHttpPort {
@@ -74,6 +74,16 @@ function responseText(response: unknown): string | null {
   return typeof content === 'string' && content.trim() ? content.trim() : null
 }
 
+// Answers are shown as plain text, so drop Markdown emphasis and turn list markers into bullets.
+function plainAnswer(value: string): string {
+  return value
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/^[ \t]*[*-][ \t]+/gm, '• ')
+    .replace(/^#{1,6}[ \t]+/gm, '')
+    .trim()
+}
+
 function cleanTranslation(value: string): string {
   return value
     .replace(/^```(?:text)?\s*/i, '')
@@ -114,7 +124,7 @@ export class QwenClient {
   }
 
   private async generate(question: string, context: string, maxTokens: number): Promise<string> {
-    return this.complete({
+    const answer = await this.complete({
       messages: [
         { role: 'system', content: SYSTEM_INSTRUCTION },
         { role: 'user', content: `Private source context:\n${context}\n\nQuestion:\n${question}` },
@@ -125,6 +135,7 @@ export class QwenClient {
       top_p: 0.95,
       stream: false,
     })
+    return plainAnswer(answer)
   }
 
   private async complete(body: unknown): Promise<string> {

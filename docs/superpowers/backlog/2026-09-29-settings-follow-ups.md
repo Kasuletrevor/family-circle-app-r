@@ -111,11 +111,39 @@ Status key: `[ ]` open · `[x]` done
 
 **Done (this branch).** The `pull_request` paths now include `src/main/**`, `src/preload/**` and `src/shared/**` (replacing the per-folder main entries and `src/shared/story.ts`). `windowsPackageWorkflow.test.ts` now asserts these paths on the `pull_request` block specifically. Renderer-only changes still skip the packaged build; the Desktop shell CI `npm run check` build covers them.
 
-### 12. [ ] Top bar shows a stale Circle name
+### 12. [x] Top bar shows a stale Circle name
 
 **Problem.** `TopBar` loads the active Circle name once on mount (`src/renderer/app/TopBar.tsx`, `loadShell`). After switching, leaving, deleting or renaming a Circle, the top bar keeps showing the old name until the app reloads.
 
 **Suggested direction.** Have `DesktopCircleClient` notify subscribers when a Circle mutation succeeds (or reload the shell snapshot on route change), and have `TopBar` refresh its shell snapshot then.
+
+**Done.** `CircleClient.onChange` notifies after every Circle mutation made through the client (select, create, leave, rename, delete, …), and `TopBar` reloads its shell snapshot when it fires.
+
+---
+
+## Private AI (found while testing v0.6.1 end to end, 2026-09-29)
+
+Tested against the manual acceptance list in `docs/PRIVATE_AI.md` using the published 0.6.1 build and then the fixed source build, in an isolated profile.
+
+Blocking bugs, fixed on `fix/private-ai-runtime-extraction`:
+- [x] **Setup always failed on Windows** with "Private AI runtime extraction failed". `Expand-Archive` got no paths (arguments after `-Command` are not `$args`) and also rejects `*.zip.part` names.
+- [x] **Indexing and every question failed** with "Local embedding failed". llama.cpp b8772 returns `{ embedding: [[…]] }` and `NomicClient` rejected the nested vector.
+- [x] **No answer could ever be generated.** llama.cpp b8772 cannot load the Qwen3.5 GGUF (`missing tensor 'blk.24.ssm_conv1d.weight'`). The engine was bumped to b11243 (manifest `1.3.0`). **Requires uploading `llama-b11243-bin-win-cpu-x64.zip` to `familycircle.o2gventures.com/private-ai/bin/`.**
+- [x] Answers showed raw Markdown (`**bold**`, `*   ` bullets) in a plain-text box. The prompt now asks for short plain text and `QwenClient` strips leftover Markdown.
+
+### 13. [ ] My Story questions are not reachable from the app
+`PrivateArchiveQueryService` supports `story` and `combined` scopes (including the direct-fact fast path and the 384-token "complex" budget), but the desktop API only exposes Vault scopes and the AI Assistant page only asks the Vault. Confirmed Story memories are indexed but cannot be asked about. Acceptance steps 8 and 10 cannot be run.
+
+### 14. [ ] "Not found" answers still list sources
+When the model answers that it could not find something, the Sources panel still shows the retrieved chunks, which suggests the answer came from them.
+
+### 15. [ ] Old engine folder is left behind after an engine upgrade
+After repairing from `1.2.0` to `1.3.0`, `offline-ai/bin/llama-b8772-bin-win-cpu-x64` (about 130 MB) stays on disk.
+
+### 16. [ ] Smaller findings
+- PDF extraction keeps page markers such as `-- 1 of 1 --` in the text, and they get indexed.
+- Sign-up surfaces raw IPC errors to users (for example `Error invoking remote method 'auth:check-invitation': Error: Circle service authentication failed`).
+- Answers are still somewhat wordy for a 0.8B model. Consider tightening the prompt further and adding a benchmark fixture set (`scripts/benchmark-private-ai.mjs`).
 
 ---
 
