@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { VaultDocumentSummary } from '../../../shared/desktopApi'
+import type { VaultAnswer, VaultDocumentSummary } from '../../../shared/desktopApi'
 import type { VaultClient } from '../../services/vault/VaultClient'
 import { AskVault } from './AskVault'
 
@@ -38,20 +38,53 @@ describe('AskVault', () => {
     const ask = vi.fn()
     render(<AskVault client={client({ ask })} />)
 
-    expect(screen.getByRole('heading', { name: 'Ask your Vault' })).toBeInTheDocument()
-    expect(screen.getByText('Ask questions using only your indexed private documents on this computer.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Private AI' })).toBeInTheDocument()
+    expect(screen.getByText(/Ask about your confirmed My Story memories and indexed Vault documents/)).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Question' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ask Private AI' })).toBeDisabled()
     expect(ask).not.toHaveBeenCalled()
   })
 
-  it('asks across all indexed documents and renders the answer with safe sources', async () => {
-    const ask = vi.fn(async () => ({
-      answer: 'Grandmother was born in Jinja.',
-      sources: [{ documentId: 4, fileName: 'Family History.pdf', excerpt: 'She was born in Jinja.' }],
+  it('asks My Story and the Vault together by default and labels both kinds of source', async () => {
+    const ask = vi.fn(async (): Promise<VaultAnswer> => ({
+      answer: 'Grandmother was born in Jinja and cooked luwombo every Christmas.',
+      sources: [
+        { sourceType: 'document', documentId: 4, fileName: 'Family History.pdf', excerpt: 'She was born in Jinja.' },
+        { sourceType: 'story', chapter: 'Values & Wishes', label: 'Traditions to preserve', excerpt: 'Cooking luwombo every Christmas.' },
+      ],
     }))
     render(<AskVault client={client({ ask })} />)
 
+    expect(screen.getByRole('radio', { name: 'My Story and Vault' })).toBeChecked()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Tell me about grandmother' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
+
+    expect(await screen.findByText('Grandmother was born in Jinja and cooked luwombo every Christmas.')).toBeInTheDocument()
+    expect(screen.getByText('Family History.pdf')).toBeInTheDocument()
+    expect(screen.getByText(/My Story · Traditions to preserve/)).toBeInTheDocument()
+    expect(ask).toHaveBeenCalledWith('Tell me about grandmother', { type: 'story-and-vault' })
+  })
+
+  it('can ask only My Story', async () => {
+    const ask = vi.fn(async (): Promise<VaultAnswer> => ({ answer: 'I studied at Makerere University.', sources: [] }))
+    render(<AskVault client={client({ ask })} />)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'My Story' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Where did I study?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
+
+    await waitFor(() => expect(ask).toHaveBeenCalledWith('Where did I study?', { type: 'story' }))
+    expect(await screen.findByText('I studied at Makerere University.')).toBeInTheDocument()
+  })
+
+  it('asks across all indexed Vault documents and renders the answer with safe sources', async () => {
+    const ask = vi.fn(async (): Promise<VaultAnswer> => ({
+      answer: 'Grandmother was born in Jinja.',
+      sources: [{ sourceType: 'document', documentId: 4, fileName: 'Family History.pdf', excerpt: 'She was born in Jinja.' }],
+    }))
+    render(<AskVault client={client({ ask })} />)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'All Vault documents' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Where was grandmother born?' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
 
@@ -66,8 +99,8 @@ describe('AskVault', () => {
     const ask = vi.fn(async () => ({ answer: 'Answer', sources: [] }))
     render(<AskVault client={client({ ask })} />)
 
-    await screen.findByText('All indexed documents')
-    fireEvent.click(screen.getByRole('radio', { name: 'Choose documents' }))
+    await screen.findByText('All Vault documents')
+    fireEvent.click(screen.getByRole('radio', { name: 'Choose Vault documents' }))
     expect(await screen.findByRole('checkbox', { name: 'Family History.pdf' })).toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Letters.txt' })).toBeNull()
 
@@ -85,7 +118,7 @@ describe('AskVault', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Private AI could not answer from your Vault. Please try again.')
+    expect(alert).toHaveTextContent('Private AI could not answer right now. Please try again.')
     expect(alert.textContent).not.toMatch(/C:\\|gguf|127\.0\.0\.1|8080/)
   })
 })
