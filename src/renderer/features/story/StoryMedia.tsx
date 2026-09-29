@@ -23,6 +23,7 @@ export function StoryMedia({
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   async function perform(key: string, operation: () => Promise<void>) {
     if (busy) return
@@ -72,11 +73,27 @@ export function StoryMedia({
                   type="button"
                   aria-label={`Delete ${item.fileName}`}
                   disabled={busy !== null}
-                  onClick={() => void perform(`delete-${item.id}`, () => onDelete(item.id))}
+                  onClick={() => setConfirmDeleteId(item.id)}
                 >
                   Delete
                 </button>
               </div>
+              {confirmDeleteId === item.id ? (
+                <div className="my-story__media-confirm" role="group" aria-label={`Confirm deleting ${item.fileName}`}>
+                  <span>Delete {item.fileName} from this computer? This cannot be undone.</span>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void perform(`delete-${item.id}`, async () => {
+                      await onDelete(item.id)
+                      setConfirmDeleteId(null)
+                    })}
+                  >
+                    {busy === `delete-${item.id}` ? 'Deleting…' : 'Delete permanently'}
+                  </button>
+                  <button type="button" disabled={busy !== null} onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
