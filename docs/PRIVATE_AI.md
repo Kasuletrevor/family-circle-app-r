@@ -166,6 +166,12 @@ For supported non-English retrieval planning, the same Qwen runtime can produce 
 
 No conversation transcript is automatically injected. Qwen receives only the current request and the selected retrieved private-source context. If no usable context is found, the service returns a scope-appropriate local not-found answer and does not start generation.
 
+### Asking from the app
+
+The AI Assistant ("Ask Private AI") exposes four scopes over the desktop `vault.ask` contract: `story-and-vault` (default, the engine's `combined`), `story`, `all` (all Vault documents) and `documents` (selected Vault documents). Sources are `{ sourceType: 'document', documentId, fileName, excerpt }` or `{ sourceType: 'story', chapter, label, excerpt }`.
+
+When the retrieved context does not answer the question, Qwen is asked to reply `NOT_FOUND`. The service then returns the scope's local not-found answer with **no sources**. A worded refusal in the first sentence also drops the sources, but keeps the text.
+
 ## Persistent vector stores
 
 Vault chunks live in `vault_chunks` and derive ownership through `vault_documents.local_user_id`. Story chunks live in `story_chunks` and derive ownership/confirmation state through their `story_answers` row.

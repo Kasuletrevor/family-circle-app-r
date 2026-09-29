@@ -41,8 +41,30 @@ describe('Vault ask IPC', () => {
     })
     expect(result).toEqual({
       answer: 'Grounded answer',
-      sources: [{ documentId: 4, fileName: 'History.pdf', excerpt: 'Safe excerpt' }],
+      sources: [{ sourceType: 'document', documentId: 4, fileName: 'History.pdf', excerpt: 'Safe excerpt' }],
     })
+  })
+
+  it('accepts My Story scopes and strips private fields from Story sources', async () => {
+    const { ipc, handlers } = registrar()
+    const ask = vi.fn(async () => ({
+      answer: 'I studied at Makerere.',
+      sources: [{ sourceType: 'story', chapter: 'Life Story', label: 'Learning and education', excerpt: 'Makerere', localUserId: 7, fieldKey: 'secret' }],
+    }))
+    ;(registerVaultIpc as unknown as (ipc: unknown, vault: unknown, query: { ask: typeof ask }) => void)(ipc, {}, { ask })
+    const handler = handlers.get('vault:ask')
+
+    await handler?.({}, { question: 'Where?', scope: { type: 'story', documentIds: [1], localUserId: 9 } })
+    expect(ask).toHaveBeenLastCalledWith({ question: 'Where?', scope: { type: 'story' } })
+
+    const result = await handler?.({}, { question: 'Where?', scope: { type: 'story-and-vault' } })
+    expect(ask).toHaveBeenLastCalledWith({ question: 'Where?', scope: { type: 'story-and-vault' } })
+    expect(result).toEqual({
+      answer: 'I studied at Makerere.',
+      sources: [{ sourceType: 'story', chapter: 'Life Story', label: 'Learning and education', excerpt: 'Makerere' }],
+    })
+
+    await expect(Promise.resolve(handler?.({}, { question: 'Where?', scope: { type: 'everything-else' } }))).rejects.toThrow()
   })
 
   it('rejects selected scopes containing non-numeric ids before query service', async () => {

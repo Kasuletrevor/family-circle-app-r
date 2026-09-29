@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -166,5 +166,43 @@ describe('OfflineAiAssetService installed asset state', () => {
     await write('bin/runtime/llama-server.exe', 'fake executable')
     await writeMarker()
     await expect(service.getStatus()).resolves.toMatchObject({ state: 'ready', pendingDownloadBytes: 0 })
+  })
+
+  it('removes engines, models and staging left over from older manifests once Private AI is ready', async () => {
+    const { service, offlineAiRoot, write, writeValidInstalledAssets } = await makeFixture()
+    await writeValidInstalledAssets()
+    await write('bin/llama-b8772-bin-win-cpu-x64/llama-server.exe', 'old engine')
+    await write('models/granite-4.0-h-micro.gguf', 'old model')
+    await write('.staging/test-1/models/qwen.gguf.part', 'old partial')
+    await write('.staging/test-2/models/nomic.gguf.part', 'current partial')
+
+    await expect(service.getStatus()).resolves.toMatchObject({ state: 'ready' })
+
+    const exists = async (relativePath: string) => stat(join(offlineAiRoot, relativePath)).then(() => true, () => false)
+    await vi.waitFor(async () => expect(await exists('bin/llama-b8772-bin-win-cpu-x64')).toBe(false))
+    expect(await exists('models/granite-4.0-h-micro.gguf')).toBe(false)
+    expect(await exists('.staging/test-1')).toBe(false)
+    // Current assets, the current staging version and the marker are kept.
+    expect(await exists('bin/runtime/llama-server.exe')).toBe(true)
+    expect(await exists('models/qwen.gguf')).toBe(true)
+    expect(await exists('models/nomic.gguf')).toBe(true)
+    expect(await exists('.staging/test-2')).toBe(true)
+    expect(await exists('installed-version.json')).toBe(true)
+  })
+
+  it('cleans up leftovers after a successful setup', async () => {
+    const { service, offlineAiRoot, write, downloader, manifest } = await makeFixture()
+    await write('bin/llama-b8772-bin-win-cpu-x64/llama-server.exe', 'old engine')
+    downloader.downloadAll.mockImplementation(async () => {
+      await write('bin/runtime/llama-server.exe', 'fake executable')
+      await write('models/qwen.gguf', 'qwen-test-bytes')
+      await write('models/nomic.gguf', 'nomic-test-bytes')
+      return { paused: false }
+    })
+
+    await expect(service.startSetup()).resolves.toMatchObject({ state: 'ready' })
+    expect(manifest.version).toBe('test-2')
+    await expect(stat(join(offlineAiRoot, 'bin/llama-b8772-bin-win-cpu-x64'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(stat(join(offlineAiRoot, 'bin/runtime/llama-server.exe'))).resolves.toBeTruthy()
   })
 })

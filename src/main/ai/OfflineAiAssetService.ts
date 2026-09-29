@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { estimatePendingDownloadBytes, OfflineAiDownloadError, OfflineAiDownloader } from './OfflineAiDownloader'
 import type {
   InstalledAiPaths,
@@ -89,6 +89,7 @@ export class OfflineAiAssetService {
   private readonly markerPath: string
   private readonly downloader: OfflineAiDownloaderPort
   private transientStatus: PrivateAiSetupStatus | null = null
+  private staleAssetsRemoved = false
 
   constructor(private readonly dependencies: OfflineAiAssetServiceDependencies) {
     this.rootPath = join(dependencies.userDataPath, 'offline-ai')
@@ -116,6 +117,7 @@ export class OfflineAiAssetService {
     if (marker.version !== manifest.version) return statusFor('repair_required', totalBytes, 'Private AI needs repair', await pending())
 
     const paths = await this.verifyRequiredAssets(manifest)
+    if (paths && !this.staleAssetsRemoved) await this.removeStaleAssets(manifest)
     return paths
       ? statusFor('ready', totalBytes, 'Private AI is ready')
       : statusFor('repair_required', totalBytes, 'Private AI needs repair', await pending())
@@ -170,6 +172,7 @@ export class OfflineAiAssetService {
         }
 
         await this.writeMarkerAtomically(manifest.version)
+        await this.removeStaleAssets(manifest)
         this.transientStatus = null
         const ready = statusFor('ready', totalBytes, 'Private AI is ready')
         onProgress?.(ready)
@@ -229,6 +232,32 @@ export class OfflineAiAssetService {
       throw new Error('Invalid offline AI manifest')
     }
     return parsed
+  }
+
+  /**
+   * Deletes engines, models and staging left behind by older manifests (for example
+   * the previous llama.cpp engine after an upgrade). Only paths inside the offline-ai
+   * folder are touched, and failures are ignored: a file may still be locked.
+   */
+  private async removeStaleAssets(manifest: OfflineAiManifest): Promise<void> {
+    this.staleAssetsRemoved = true
+    const keep = new Set(manifest.files.map((file) => resolve(this.rootPath, file.targetPath)))
+    keep.add(resolve(this.rootPath, '.staging', manifest.version))
+
+    for (const folder of ['bin', 'models', '.staging']) {
+      const folderPath = resolve(this.rootPath, folder)
+      let entries: string[]
+      try {
+        entries = await readdir(folderPath)
+      } catch {
+        continue
+      }
+      for (const entry of entries) {
+        const entryPath = resolve(folderPath, entry)
+        if (keep.has(entryPath)) continue
+        await rm(entryPath, { recursive: true, force: true }).catch(() => undefined)
+      }
+    }
   }
 
   private totalBytes(manifest: OfflineAiManifest): number {

@@ -133,14 +133,23 @@ Blocking bugs, fixed on `fix/private-ai-runtime-extraction`:
 - [x] **No answer could ever be generated.** llama.cpp b8772 cannot load the Qwen3.5 GGUF (`missing tensor 'blk.24.ssm_conv1d.weight'`). The engine was bumped to b11243 (manifest `1.3.0`). **Requires uploading `llama-b11243-bin-win-cpu-x64.zip` to `familycircle.o2gventures.com/private-ai/bin/`.**
 - [x] Answers showed raw Markdown (`**bold**`, `*   ` bullets) in a plain-text box. The prompt now asks for short plain text and `QwenClient` strips leftover Markdown.
 
-### 13. [ ] My Story questions are not reachable from the app
+### 13. [x] My Story questions are not reachable from the app
 `PrivateArchiveQueryService` supports `story` and `combined` scopes (including the direct-fact fast path and the 384-token "complex" budget), but the desktop API only exposes Vault scopes and the AI Assistant page only asks the Vault. Confirmed Story memories are indexed but cannot be asked about. Acceptance steps 8 and 10 cannot be run.
 
-### 14. [ ] "Not found" answers still list sources
+**Done.** The AI Assistant is now "Ask Private AI", with four scopes: My Story and Vault (default), My Story, All Vault documents, Choose Vault documents. Public scopes `story` / `story-and-vault` map to the engine's `story` / `combined`, and Story sources come back as `{ sourceType: 'story', chapter, label, excerpt }`. Real-model test: direct Story facts in 0.3 s; memory questions and combined Story + Vault answers correct in 2–6 s.
+
+### 14. [x] "Not found" answers still list sources
 When the model answers that it could not find something, the Sources panel still shows the retrieved chunks, which suggests the answer came from them.
 
-### 15. [ ] Old engine folder is left behind after an engine upgrade
+**Done.** The prompt asks for `NOT_FOUND`, which is replaced by the scope's local not-found answer with no sources. If the model words it instead ("there is no information…" in the first sentence), the text is kept but the sources are dropped. Real-model test: unanswerable questions show no sources in every scope, and real answers keep theirs.
+
+### 15. [x] Old engine folder is left behind after an engine upgrade
 After repairing from `1.2.0` to `1.3.0`, `offline-ai/bin/llama-b8772-bin-win-cpu-x64` (about 130 MB) stays on disk.
+
+**Done.** After a successful setup, and once per run when Private AI is ready (so existing installs are cleaned too), engines, models and staging inside `offline-ai` that the current manifest does not reference are deleted. Verified in the app: the old 115 MB b8772 folder was removed on launch.
+
+### 17. [ ] Sources always show the top three matches
+Answers list the three highest-ranked chunks even when one is barely relevant (for example "My Story · What I do" under a question about the family doctor). Consider a similarity threshold, or showing only the sources the answer used.
 
 ### 16. [ ] Smaller findings
 - PDF extraction keeps page markers such as `-- 1 of 1 --` in the text, and they get indexed.

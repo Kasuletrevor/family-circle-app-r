@@ -255,6 +255,9 @@
 }
 
 .ask-vault__sources strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--kk-navy);
   font-size: 10.5px;
 }

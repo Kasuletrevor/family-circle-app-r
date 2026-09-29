@@ -1,23 +1,12 @@
+import type { VaultAnswer, VaultQueryScope } from '../../shared/desktopApi'
 import {
   PrivateArchiveQueryServiceError,
   type PrivateArchiveAnswer,
   type PrivateArchiveQueryService,
+  type PrivateArchiveScope,
 } from '../ai/PrivateArchiveQueryService'
 
-export type VaultQueryScope =
-  | { type: 'all' }
-  | { type: 'documents'; documentIds: number[] }
-
-export interface VaultAnswerSource {
-  documentId: number
-  fileName: string
-  excerpt: string
-}
-
-export interface VaultAnswer {
-  answer: string
-  sources: VaultAnswerSource[]
-}
+export type { VaultAnswer, VaultAnswerSource, VaultQueryScope } from '../../shared/desktopApi'
 
 type VaultArchiveQueryPort = Pick<PrivateArchiveQueryService, 'ask'>
 
@@ -38,9 +27,17 @@ export class VaultQueryServiceError extends Error {
 function safeVaultAnswer(result: PrivateArchiveAnswer): VaultAnswer {
   return {
     answer: result.answer,
-    sources: result.sources.flatMap((source) => source.sourceType === 'document'
-      ? [{ documentId: source.documentId, fileName: source.fileName, excerpt: source.excerpt }]
-      : []),
+    sources: result.sources.map((source) => source.sourceType === 'document'
+      ? { sourceType: 'document', documentId: source.documentId, fileName: source.fileName, excerpt: source.excerpt }
+      : { sourceType: 'story', chapter: source.chapter, label: source.label, excerpt: source.excerpt }),
+  }
+}
+
+function archiveScope(scope: VaultQueryScope): PrivateArchiveScope {
+  switch (scope.type) {
+    case 'story': return { type: 'story' }
+    case 'story-and-vault': return { type: 'combined', vault: { type: 'all' } }
+    default: return { type: 'vault', vault: scope }
   }
 }
 
@@ -51,7 +48,7 @@ export class VaultQueryService {
     try {
       const result = await this.archive.ask({
         question: input.question,
-        scope: { type: 'vault', vault: input.scope },
+        scope: archiveScope(input.scope),
       })
       return safeVaultAnswer(result)
     } catch (error) {

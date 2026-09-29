@@ -217,19 +217,22 @@ function safeAnswer(value: unknown): VaultAnswer {
   const sources = Array.isArray(raw.sources) ? raw.sources : []
   return {
     answer: String(raw.answer ?? ''),
-    sources: sources.map((source) => {
+    sources: sources.flatMap((source): VaultAnswer['sources'] => {
       const row = recordOf(source)
-      return {
-        documentId: Number(row.documentId),
-        fileName: String(row.fileName ?? ''),
-        excerpt: String(row.excerpt ?? '').slice(0, 320),
+      const excerpt = String(row.excerpt ?? '').slice(0, 320)
+      if (row.sourceType === 'story') {
+        return [{ sourceType: 'story', chapter: String(row.chapter ?? ''), label: String(row.label ?? ''), excerpt }]
       }
-    }).filter((source) => Number.isSafeInteger(source.documentId) && source.documentId > 0),
+      const documentId = Number(row.documentId)
+      return Number.isSafeInteger(documentId) && documentId > 0
+        ? [{ sourceType: 'document', documentId, fileName: String(row.fileName ?? ''), excerpt }]
+        : []
+    }),
   }
 }
 
 function safeQueryScope(scope: VaultQueryScope): VaultQueryScope {
-  if (scope.type === 'all') return { type: 'all' }
+  if (scope.type === 'all' || scope.type === 'story' || scope.type === 'story-and-vault') return { type: scope.type }
   return {
     type: 'documents',
     documentIds: scope.documentIds.filter((id) => Number.isSafeInteger(id) && id > 0),

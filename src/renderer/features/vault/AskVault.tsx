@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BrainCircuit, FileText, LockKeyhole, Sparkles } from 'lucide-react'
+import { BookOpen, BrainCircuit, FileText, LockKeyhole, Sparkles } from 'lucide-react'
 import type { VaultAnswer, VaultDocumentSummary, VaultQueryScope } from '../../../shared/desktopApi'
 import { DesktopVaultClient } from '../../services/vault/DesktopVaultClient'
 import type { VaultClient } from '../../services/vault/VaultClient'
@@ -7,11 +7,23 @@ import './AskVault.css'
 
 const defaultClient = new DesktopVaultClient()
 
-type ScopeMode = 'all' | 'documents'
+type ScopeMode = 'story-and-vault' | 'story' | 'all' | 'documents'
+
+const SCOPE_OPTIONS: Array<{ mode: ScopeMode; title: string; hint: string }> = [
+  { mode: 'story-and-vault', title: 'My Story and Vault', hint: 'Search your confirmed memories and indexed documents together.' },
+  { mode: 'story', title: 'My Story', hint: 'Search only your confirmed My Story memories.' },
+  { mode: 'all', title: 'All Vault documents', hint: 'Search every document currently ready to ask.' },
+  { mode: 'documents', title: 'Choose Vault documents', hint: 'Limit this question to selected indexed files.' },
+]
+
+function scopeFor(mode: ScopeMode, documentIds: number[]): VaultQueryScope {
+  if (mode === 'documents') return { type: 'documents', documentIds }
+  return { type: mode }
+}
 
 export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
   const [documents, setDocuments] = useState<VaultDocumentSummary[]>([])
-  const [scopeMode, setScopeMode] = useState<ScopeMode>('all')
+  const [scopeMode, setScopeMode] = useState<ScopeMode>('story-and-vault')
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<VaultAnswer | null>(null)
@@ -45,7 +57,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
 
   const canAsk = question.trim().length > 0
     && !asking
-    && (scopeMode === 'all' || selectedIds.length > 0)
+    && (scopeMode !== 'documents' || selectedIds.length > 0)
 
   function toggleDocument(documentId: number): void {
     setSelectedIds((current) => current.includes(documentId)
@@ -57,9 +69,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
     const cleanQuestion = question.trim()
     if (!canAsk || !cleanQuestion) return
 
-    const scope: VaultQueryScope = scopeMode === 'all'
-      ? { type: 'all' }
-      : { type: 'documents', documentIds: selectedIds }
+    const scope = scopeFor(scopeMode, selectedIds)
 
     setAsking(true)
     setError(null)
@@ -67,7 +77,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
     try {
       setAnswer(await client.ask(cleanQuestion, scope))
     } catch {
-      setError('Private AI could not answer from your Vault. Please try again.')
+      setError('Private AI could not answer right now. Please try again.')
     } finally {
       setAsking(false)
     }
@@ -78,41 +88,30 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
       <header className="ask-vault__header">
         <div>
           <div className="ask-vault__eyebrow"><LockKeyhole size={14} aria-hidden="true" /> Local Private AI</div>
-          <h1 id="ask-vault-title">Ask your Vault</h1>
-          <p>Ask questions using only your indexed private documents on this computer.</p>
+          <h1 id="ask-vault-title">Ask Private AI</h1>
+          <p>Ask about your confirmed My Story memories and indexed Vault documents. Everything stays on this computer.</p>
         </div>
-        <div className="ask-vault__privacy"><BrainCircuit size={18} aria-hidden="true" /> Grounded in your Vault only</div>
+        <div className="ask-vault__privacy"><BrainCircuit size={18} aria-hidden="true" /> Answers only from your private sources</div>
       </header>
 
       <div className="ask-vault__layout">
-        <aside className="ask-vault__scope" aria-label="Vault question scope">
+        <aside className="ask-vault__scope" aria-label="Question scope">
           <h2>Search scope</h2>
-          <label className="ask-vault__scope-option">
-            <input
-              type="radio"
-              name="vault-scope"
-              aria-label="All indexed documents"
-              checked={scopeMode === 'all'}
-              onChange={() => setScopeMode('all')}
-            />
-            <span>
-              <strong>All indexed documents</strong>
-              <small>Search everything currently ready to ask.</small>
-            </span>
-          </label>
-          <label className="ask-vault__scope-option">
-            <input
-              type="radio"
-              name="vault-scope"
-              aria-label="Choose documents"
-              checked={scopeMode === 'documents'}
-              onChange={() => setScopeMode('documents')}
-            />
-            <span>
-              <strong>Choose documents</strong>
-              <small>Limit this question to selected indexed files.</small>
-            </span>
-          </label>
+          {SCOPE_OPTIONS.map((option) => (
+            <label className="ask-vault__scope-option" key={option.mode}>
+              <input
+                type="radio"
+                name="vault-scope"
+                aria-label={option.title}
+                checked={scopeMode === option.mode}
+                onChange={() => setScopeMode(option.mode)}
+              />
+              <span>
+                <strong>{option.title}</strong>
+                <small>{option.hint}</small>
+              </span>
+            </label>
+          ))}
 
           {scopeMode === 'documents' ? (
             <div className="ask-vault__documents">
@@ -140,7 +139,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
               id="vault-question"
               rows={4}
               value={question}
-              placeholder="Ask something contained in your family documents…"
+              placeholder="Ask something from your memories or family documents…"
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -150,7 +149,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
               }}
             />
             <div className="ask-vault__composer-footer">
-              <span>Answers stay local and use only retrieved Vault context.</span>
+              <span>Answers stay local and use only what your private sources say.</span>
               <button type="button" disabled={!canAsk} onClick={() => void submit()}>
                 <Sparkles size={16} aria-hidden="true" />
                 {asking ? 'Thinking locally…' : 'Ask Private AI'}
@@ -172,8 +171,12 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
                 <div className="ask-vault__sources">
                   <h3>Sources</h3>
                   {answer.sources.map((source, index) => (
-                    <article key={`${source.documentId}-${index}`}>
-                      <strong>{source.fileName}</strong>
+                    <article key={`${source.sourceType}-${index}`}>
+                      <strong>
+                        {source.sourceType === 'story'
+                          ? <><BookOpen size={14} aria-hidden="true" /> My Story · {source.label}</>
+                          : <><FileText size={14} aria-hidden="true" /> {source.fileName}</>}
+                      </strong>
                       <p>{source.excerpt}</p>
                     </article>
                   ))}

@@ -83,8 +83,9 @@ function safeUploadResult(result: InternalVaultUploadBatchResult): VaultUploadBa
 function queryInputOf(payload: unknown): { question: string; scope: VaultQueryScope } {
   const raw = recordOf(payload)
   const scope = recordOf(raw.scope)
-  if (scope.type === 'all') {
-    return { question: typeof raw.question === 'string' ? raw.question : '', scope: { type: 'all' } }
+  const question = typeof raw.question === 'string' ? raw.question : ''
+  if (scope.type === 'all' || scope.type === 'story' || scope.type === 'story-and-vault') {
+    return { question, scope: { type: scope.type } }
   }
   if (scope.type !== 'documents' || !Array.isArray(scope.documentIds) || scope.documentIds.length === 0) {
     throw new Error('invalid-scope')
@@ -99,19 +100,26 @@ function queryInputOf(payload: unknown): { question: string; scope: VaultQuerySc
   }
 }
 
+function safeAnswerSources(value: unknown): VaultAnswer['sources'] {
+  const sources = Array.isArray(value) ? value : []
+  return sources.flatMap((source): VaultAnswer['sources'] => {
+    const row = recordOf(source)
+    const excerpt = String(row.excerpt ?? '').slice(0, 320)
+    if (row.sourceType === 'story') {
+      return [{ sourceType: 'story', chapter: String(row.chapter ?? ''), label: String(row.label ?? ''), excerpt }]
+    }
+    const documentId = Number(row.documentId)
+    return Number.isSafeInteger(documentId) && documentId > 0
+      ? [{ sourceType: 'document', documentId, fileName: String(row.fileName ?? ''), excerpt }]
+      : []
+  })
+}
+
 function safeAnswer(value: unknown): VaultAnswer {
   const raw = recordOf(value)
-  const sources = Array.isArray(raw.sources) ? raw.sources : []
   return {
     answer: String(raw.answer ?? ''),
-    sources: sources.map((source) => {
-      const row = recordOf(source)
-      return {
-        documentId: Number(row.documentId),
-        fileName: String(row.fileName ?? ''),
-        excerpt: String(row.excerpt ?? '').slice(0, 320),
-      }
-    }).filter((source) => Number.isSafeInteger(source.documentId) && source.documentId > 0),
+    sources: safeAnswerSources(raw.sources),
   }
 }
 
