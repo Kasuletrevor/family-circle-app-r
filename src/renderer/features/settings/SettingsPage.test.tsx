@@ -68,7 +68,7 @@ describe('SettingsPage', () => {
         getVersion: vi.fn(async () => '0.2.3'),
         getPlatform: vi.fn(async () => 'win32' as const),
       },
-      settings: { createBackup, openDataFolder },
+      settings: { createBackup, openDataFolder, restoreBackup: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     const onAuthStateChange = vi.fn()
@@ -115,7 +115,7 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open data folder' }))
     await waitFor(() => expect(openDataFolder).toHaveBeenCalledTimes(1))
 
-    expect(screen.queryByRole('button', { name: /restore/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Restore from backup…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Private AI' })).toBeInTheDocument()
   })
 
@@ -153,7 +153,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn(), restoreBackup: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
     const auth = {
       updateProfile: vi.fn(async () => authenticated()),
@@ -214,7 +214,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn(), restoreBackup: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     render(
@@ -248,7 +248,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn(), restoreBackup: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     render(
@@ -287,7 +287,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn(), restoreBackup: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     const { unmount } = render(
@@ -325,6 +325,7 @@ describe('SettingsPage', () => {
       settings: {
         createBackup: vi.fn(),
         openDataFolder: vi.fn(async () => { throw new Error('Could not open the Family Circle data folder.') }),
+        restoreBackup: vi.fn(),
       },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
@@ -334,5 +335,73 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open data folder' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not open the Family Circle data folder.')
+  })
+
+  it('restores a backup only after confirmation and reports the restart', async () => {
+    const restoreBackup = vi.fn(async () => ({ canceled: false as const, restarting: true as const }))
+    const privateAi: PrivateAiClient = {
+      getStatus: vi.fn(async () => ({
+        state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null,
+      })),
+      startSetup: vi.fn(),
+      pauseSetup: vi.fn(),
+      repair: vi.fn(),
+      remove: vi.fn(),
+      onProgress: vi.fn(() => () => undefined),
+    }
+    const desktop = {
+      app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn(), restoreBackup },
+    } as Pick<DesktopApi, 'app' | 'settings'>
+
+    render(
+      <SettingsPage user={user} auth={{} as AuthClient} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore from backup…' }))
+    expect(restoreBackup).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('button', { name: 'Choose backup and restore' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore from backup…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose backup and restore' }))
+
+    await waitFor(() => expect(restoreBackup).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText(/restarting to restore it/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restoring…' })).toBeDisabled()
+  })
+
+  it('shows restore validation errors and allows retry; a canceled picker changes nothing', async () => {
+    const restoreBackup = vi.fn()
+      .mockResolvedValueOnce({ canceled: true as const })
+      .mockRejectedValueOnce(new Error('This backup belongs to a different Family Circle account.'))
+    const privateAi: PrivateAiClient = {
+      getStatus: vi.fn(async () => ({
+        state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null,
+      })),
+      startSetup: vi.fn(),
+      pauseSetup: vi.fn(),
+      repair: vi.fn(),
+      remove: vi.fn(),
+      onProgress: vi.fn(() => () => undefined),
+    }
+    const desktop = {
+      app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn(), restoreBackup },
+    } as Pick<DesktopApi, 'app' | 'settings'>
+
+    render(
+      <SettingsPage user={user} auth={{} as AuthClient} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore from backup…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose backup and restore' }))
+    await waitFor(() => expect(restoreBackup).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose backup and restore' })).toBeEnabled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose backup and restore' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This backup belongs to a different Family Circle account.')
+    expect(screen.getByRole('button', { name: 'Choose backup and restore' })).toBeEnabled()
   })
 })

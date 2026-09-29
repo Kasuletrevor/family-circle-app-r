@@ -170,22 +170,23 @@ describe('Windows packaging workflow', () => {
     expect(source).toMatch(/pull_request:\n\s+branches:\n\s+- main/)
     expect(source).toContain("scripts/derive-semantic-release*.mjs")
 
+    const pullBlock = source.slice(pullStart, source.indexOf('\npermissions:'))
+    // Main-process, preload and shared-contract changes can break the packaged app,
+    // so pull requests touching them must build the installer before merge.
     for (const path of [
       'config/offline-voice-manifest.json',
       'third_party/whisper.cpp-LICENSE.txt',
       'scripts/write-demo-mail-config.mjs',
       'scripts/write-demo-circle-config.mjs',
-      'src/main/auth/**',
-      'src/main/circle/**',
-      'src/main/story/**',
-      'src/main/voice/**',
+      'src/main/**',
+      'src/preload/**',
+      'src/shared/**',
       'src/renderer/features/story/**',
       'src/renderer/services/story/**',
       'src/renderer/design-system/**',
       'src/renderer/assets/**',
-      'src/shared/story.ts',
     ]) {
-      expect(source).toContain(`- '${path}'`)
+      expect(pullBlock).toContain(`- '${path}'`)
     }
   })
 

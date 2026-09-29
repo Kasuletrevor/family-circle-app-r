@@ -81,6 +81,10 @@ export interface ChangePasswordInput {
   newPassword: string
 }
 
+export type LocalRestoreResult =
+  | { canceled: true }
+  | { canceled: false; restarting: true }
+
 export interface LocalBackupResult {
   canceled: boolean
   folderName: string | null
@@ -398,6 +402,8 @@ export interface DesktopApi {
     cancelInvitation(input: { personId: string }): Promise<{ success: true }>
     removeMember(input: { personId: string }): Promise<{ success: true }>
     leaveCircle(): Promise<{ success: true }>
+    renameCircle(input: { name: string }): Promise<{ success: true }>
+    deleteCircle(input: { confirmationName: string }): Promise<{ success: true }>
   }
   vault: {
     listDocuments(): Promise<VaultDocumentSummary[]>
@@ -412,6 +418,7 @@ export interface DesktopApi {
   settings: {
     createBackup(): Promise<LocalBackupResult>
     openDataFolder(): Promise<{ success: true }>
+    restoreBackup(): Promise<LocalRestoreResult>
   }
   privateAi: {
     getStatus(): Promise<PrivateAiPublicStatus>

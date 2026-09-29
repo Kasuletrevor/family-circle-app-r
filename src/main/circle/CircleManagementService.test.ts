@@ -73,6 +73,8 @@ function setup(options: {
     cancelInvitation: vi.fn(async () => ({ success: true as const })),
     removeMember: vi.fn(async () => ({ success: true as const })),
     leaveCircle: vi.fn(async () => ({ success: true as const })),
+    renameCircle: vi.fn(async () => ({ success: true as const })),
+    deleteCircle: vi.fn(async () => ({ success: true as const })),
   }
   const mailer = { sendInvitation: vi.fn(async () => undefined) }
   return { users, circle, mailer, service: new CircleService(sessions, users, circle, mailer) }
@@ -195,5 +197,48 @@ describe('CircleService management boundary', () => {
     const { service, circle } = setup()
     await expect(service.leaveCircle()).rejects.toThrow('Circle owners cannot leave')
     expect(circle.leaveCircle).not.toHaveBeenCalled()
+  })
+
+  it('lets the owner rename the active Circle with a trimmed name', async () => {
+    const { service, circle } = setup()
+    await expect(service.renameCircle({ name: '  The New Family  ' })).resolves.toEqual({ success: true })
+    expect(circle.renameCircle).toHaveBeenCalledWith({ serverUserId: '88', circleId: 'g-1', name: 'The New Family' })
+  })
+
+  it('validates Circle names and skips unchanged renames', async () => {
+    const { service, circle } = setup()
+    await expect(service.renameCircle({ name: '   ' })).rejects.toThrow('Circle name is required')
+    await expect(service.renameCircle({ name: 'x'.repeat(121) })).rejects.toThrow('Circle name is too long')
+    await expect(service.renameCircle({ name: 'Test Family' })).resolves.toEqual({ success: true })
+    expect(circle.renameCircle).not.toHaveBeenCalled()
+  })
+
+  it('refuses to delete the Circle unless the owner types its exact name', async () => {
+    const { service, circle } = setup()
+    await expect(service.deleteCircle({ confirmationName: 'test family' })).rejects.toThrow('Type the Circle name exactly')
+    expect(circle.deleteCircle).not.toHaveBeenCalled()
+  })
+
+  it('deletes the active Circle after exact-name confirmation, then selects a fallback', async () => {
+    const fallback: Group = { id: 'g-2', name: 'Other Family', ownerId: '77', role: 'Sibling' }
+    const { service, users, circle } = setup({ groupsAfterLeave: [fallback] })
+
+    await expect(service.deleteCircle({ confirmationName: ' Test Family ' })).resolves.toEqual({ success: true })
+    expect(circle.deleteCircle).toHaveBeenCalledWith({ serverUserId: '88', circleId: 'g-1', confirmationName: 'Test Family' })
+    expect(users.setActiveCircleId).toHaveBeenLastCalledWith(7, 'g-2')
+  })
+
+  it('clears the active Circle after deleting the last one', async () => {
+    const { service, users } = setup({ groupsAfterLeave: [] })
+    await expect(service.deleteCircle({ confirmationName: 'Test Family' })).resolves.toEqual({ success: true })
+    expect(users.setActiveCircleId).toHaveBeenLastCalledWith(7, null)
+  })
+
+  it('rejects rename and delete for non-owners without calling legacy writes', async () => {
+    const { service, circle } = setup({ serverUserId: '99', ownerId: '88' })
+    await expect(service.renameCircle({ name: 'Hijacked' })).rejects.toThrow('Only the Circle owner can rename')
+    await expect(service.deleteCircle({ confirmationName: 'Test Family' })).rejects.toThrow('Only the Circle owner can delete')
+    expect(circle.renameCircle).not.toHaveBeenCalled()
+    expect(circle.deleteCircle).not.toHaveBeenCalled()
   })
 })

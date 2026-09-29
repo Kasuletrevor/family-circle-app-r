@@ -50,6 +50,7 @@ describe('SettingsService', () => {
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => destination },
       folderOpener: { open: vi.fn(async () => undefined) },
+      restoreHost: { chooseBackupFolder: async () => null, scheduleRelaunch: vi.fn() },
       session: { restore: async () => user },
       now: () => createdAt,
     })
@@ -113,6 +114,7 @@ describe('SettingsService', () => {
       appVersion: '0.2.3',
       picker: { chooseDestination },
       folderOpener: { open: vi.fn(async () => undefined) },
+      restoreHost: { chooseBackupFolder: async () => null, scheduleRelaunch: vi.fn() },
       session: { restore: async () => first },
     })
 
@@ -140,6 +142,7 @@ describe('SettingsService', () => {
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => null },
       folderOpener: { open: vi.fn(async () => undefined) },
+      restoreHost: { chooseBackupFolder: async () => null, scheduleRelaunch: vi.fn() },
       session: { restore: async () => user },
     })
 
@@ -161,6 +164,7 @@ describe('SettingsService', () => {
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => null },
       folderOpener: { open },
+      restoreHost: { chooseBackupFolder: async () => null, scheduleRelaunch: vi.fn() },
       session: { restore },
     })
 
@@ -170,5 +174,87 @@ describe('SettingsService', () => {
     restore.mockResolvedValueOnce(null)
     await expect(service.openDataFolder()).rejects.toThrow('Sign in before opening the Family Circle data folder.')
     expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('stages a validated restore under the signed-in account and only then relaunches', async () => {
+    const root = await tempRoot()
+    const userDataPath = join(root, 'user-data')
+    const destination = join(root, 'backups')
+    await mkdir(join(userDataPath, 'vault'), { recursive: true })
+    await mkdir(destination, { recursive: true })
+    const db = new DatabaseSync(join(userDataPath, 'family.db'))
+    runMigrations(db)
+    const user = await new UserRepository(db).createRegisteredUser({
+      name: 'Ada Example',
+      email: 'ada@example.test',
+      password: 'correct horse battery staple',
+    })
+    const scheduleRelaunch = vi.fn()
+    const chooseBackupFolder = vi.fn(async (): Promise<string | null> => null)
+    const service = new SettingsService({
+      db,
+      userDataPath,
+      appVersion: '0.2.3',
+      picker: { chooseDestination: async () => destination },
+      folderOpener: { open: vi.fn(async () => undefined) },
+      restoreHost: { chooseBackupFolder, scheduleRelaunch },
+      session: { restore: async () => user },
+      now: () => Date.parse('2026-09-25T10:00:00.000Z'),
+    })
+
+    await expect(service.restoreBackup()).resolves.toEqual({ canceled: true })
+    expect(scheduleRelaunch).not.toHaveBeenCalled()
+
+    const backup = await service.createBackup()
+    chooseBackupFolder.mockResolvedValueOnce(join(destination, backup.folderName!))
+    await expect(service.restoreBackup()).resolves.toEqual({ canceled: false, restarting: true })
+    expect(scheduleRelaunch).toHaveBeenCalledTimes(1)
+    await expect(stat(join(userDataPath, 'pending-restore', 'restore.json'))).resolves.toBeTruthy()
+    await expect(stat(join(userDataPath, 'pending-restore', 'family.db'))).resolves.toBeTruthy()
+    db.close()
+  })
+
+  it('refuses restore when signed out or on a shared profile, and never relaunches on a failed check', async () => {
+    const root = await tempRoot()
+    const userDataPath = join(root, 'user-data')
+    await mkdir(userDataPath, { recursive: true })
+    const db = new DatabaseSync(join(userDataPath, 'family.db'))
+    runMigrations(db)
+    const users = new UserRepository(db)
+    const first = await users.createRegisteredUser({
+      name: 'Ada Example',
+      email: 'ada@example.test',
+      password: 'correct horse battery staple',
+    })
+    const scheduleRelaunch = vi.fn()
+    const chooseBackupFolder = vi.fn(async () => join(root, 'not-a-backup'))
+    const restore = vi.fn(async (): Promise<typeof first | null> => null)
+    const service = new SettingsService({
+      db,
+      userDataPath,
+      appVersion: '0.2.3',
+      picker: { chooseDestination: async () => null },
+      folderOpener: { open: vi.fn(async () => undefined) },
+      restoreHost: { chooseBackupFolder, scheduleRelaunch },
+      session: { restore },
+    })
+
+    await expect(service.restoreBackup()).rejects.toThrow('Sign in before restoring')
+
+    restore.mockResolvedValue(first)
+    await mkdir(join(root, 'not-a-backup'), { recursive: true })
+    await expect(service.restoreBackup()).rejects.toThrow('not a Family Circle backup')
+    await expect(stat(join(userDataPath, 'pending-restore'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await users.createRegisteredUser({
+      name: 'Second Person',
+      email: 'second@example.test',
+      password: 'another secure password 123',
+    })
+    chooseBackupFolder.mockClear()
+    await expect(service.restoreBackup()).rejects.toThrow('one Family Circle account')
+    expect(chooseBackupFolder).not.toHaveBeenCalled()
+    expect(scheduleRelaunch).not.toHaveBeenCalled()
+    db.close()
   })
 })

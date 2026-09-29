@@ -40,6 +40,8 @@ describe('registerCircleIpc', () => {
       cancelInvitation: vi.fn(async () => ({ success: true as const })),
       removeMember: vi.fn(async () => ({ success: true as const })),
       leaveCircle: vi.fn(async () => ({ success: true as const })),
+      renameCircle: vi.fn(async () => ({ success: true as const })),
+      deleteCircle: vi.fn(async () => ({ success: true as const })),
     }
 
     registerCircleIpc(ipc, service)
@@ -59,6 +61,8 @@ describe('registerCircleIpc', () => {
       'circle:cancel-invitation',
       'circle:remove-member',
       'circle:leave',
+      'circle:rename',
+      'circle:delete',
     ])
 
     await expect(handlers.get('circle:get-overview')?.({ sender: 'ignored' }, 'malicious-user-id')).resolves.toEqual(overview)
@@ -134,6 +138,11 @@ describe('registerCircleIpc', () => {
     expect(service.resendInvitation).toHaveBeenCalledWith({ personId: 'safe-person' })
     expect(service.cancelInvitation).toHaveBeenCalledWith({ personId: 'safe-person' })
     expect(service.removeMember).toHaveBeenCalledWith({ personId: 'safe-person' })
+
+    await handlers.get('circle:rename')?.({}, { name: 'Renamed Family', circleId: 'foreign', fromUserId: 'attacker' })
+    expect(service.renameCircle).toHaveBeenCalledWith({ name: 'Renamed Family' })
+    await handlers.get('circle:delete')?.({}, { confirmationName: 'Renamed Family', circleId: 'foreign', fromUserId: 'attacker' })
+    expect(service.deleteCircle).toHaveBeenCalledWith({ confirmationName: 'Renamed Family' })
 
     await handlers.get('circle:leave')?.({}, malicious)
     expect(service.leaveCircle).toHaveBeenCalledWith()

@@ -13,6 +13,7 @@ import type {
   InviteMemberInput,
   InviteMemberResult,
   LocalBackupResult,
+  LocalRestoreResult,
   OnboardingNextAction,
   PrivateAiPublicProgress,
   PrivateAiPublicState,
@@ -72,6 +73,8 @@ type DesktopChannel =
   | 'circle:cancel-invitation'
   | 'circle:remove-member'
   | 'circle:leave'
+  | 'circle:rename'
+  | 'circle:delete'
   | 'vault:list'
   | 'vault:choose-and-upload'
   | 'vault:open'
@@ -81,6 +84,7 @@ type DesktopChannel =
   | 'vault:ask'
   | 'settings:create-backup'
   | 'settings:open-data-folder'
+  | 'settings:restore-backup'
   | 'private-ai:get-status'
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
@@ -479,6 +483,14 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       leaveCircle() {
         return invoke('circle:leave') as Promise<{ success: true }>
       },
+      async renameCircle(input: { name: string }) {
+        await invoke('circle:rename', { name: String(input?.name ?? '') })
+        return { success: true as const }
+      },
+      async deleteCircle(input: { confirmationName: string }) {
+        await invoke('circle:delete', { confirmationName: String(input?.confirmationName ?? '') })
+        return { success: true as const }
+      },
     },
     vault: {
       async listDocuments() {
@@ -517,6 +529,12 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       async openDataFolder() {
         await invoke('settings:open-data-folder')
         return { success: true as const }
+      },
+      async restoreBackup(): Promise<LocalRestoreResult> {
+        const result = recordOf(await invoke('settings:restore-backup'))
+        return result.canceled === false
+          ? { canceled: false, restarting: true }
+          : { canceled: true }
       },
     },
     privateAi: {

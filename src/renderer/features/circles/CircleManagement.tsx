@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAppServices } from '../../app/services'
 import type { CircleManagementSnapshot } from '../../services/circle/types'
@@ -17,6 +17,7 @@ type PendingAction =
   | { kind: 'remove'; personId: string; name: string }
   | { kind: 'cancel'; personId: string; email: string }
   | { kind: 'leave' }
+  | { kind: 'delete' }
 
 const STALE_CIRCLE_MESSAGE = 'That Circle is no longer available to your account'
 
@@ -37,6 +38,11 @@ function managementErrorMessage(error: unknown, fallback = "We couldn't update t
     'Circle owners cannot leave their own Circle',
     'That member is no longer in this Circle',
     'That invitation is no longer pending',
+    'Only the Circle owner can rename this Circle',
+    'Only the Circle owner can delete this Circle',
+    'Type the Circle name exactly to confirm deletion',
+    'Circle name is required',
+    'Circle name is too long',
     STALE_CIRCLE_MESSAGE,
   ]
   const matched = known.find((candidate) => message.includes(candidate))
@@ -52,6 +58,8 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
   const [notice, setNotice] = useState<Notice | null>(null)
   const [resendingPersonId, setResendingPersonId] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [circleName, setCircleName] = useState('')
+  const [renaming, setRenaming] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +78,11 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
   }, [circle, reloadVersion])
 
   const details = loadState.details
+  const currentCircleName = details?.circle.name ?? ''
+
+  useEffect(() => {
+    setCircleName(currentCircleName)
+  }, [currentCircleName])
   const isOwner = useMemo(() => {
     if (!details) return false
     return details.members.find((member) => member.isViewer)?.isOwner
@@ -99,6 +112,23 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
     }
   }
 
+  async function rename(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    if (renaming) return
+    setRenaming(true)
+    setNotice(null)
+    try {
+      await circle.renameCircle(circleName)
+      setNotice({ kind: 'status', text: 'Circle renamed.' })
+      setReloadVersion((value) => value + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', text: managementErrorMessage(error, "We couldn't rename the Circle. Please try again.") })
+      if (isStaleCircleError(error)) setReloadVersion((value) => value + 1)
+    } finally {
+      setRenaming(false)
+    }
+  }
+
   async function confirmPendingAction(): Promise<void> {
     const action = pendingAction
     if (!action) return
@@ -118,6 +148,13 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
         setPendingAction(null)
         setNotice({ kind: 'status', text: 'Invitation cancelled.' })
         setReloadVersion((value) => value + 1)
+        return
+      }
+
+      if (action.kind === 'delete') {
+        await circle.deleteCircle(currentCircleName)
+        setPendingAction(null)
+        navigate('/circles')
         return
       }
 
@@ -177,7 +214,18 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
             confirmLabel: 'Leave Circle',
             busyLabel: 'Leaving…',
           }
-        : null
+        : pendingAction?.kind === 'delete'
+          ? {
+              title: `Delete ${details.circle.name}?`,
+              message: 'This permanently removes the Circle for everyone: its memberships, pending invitations and shared family-tree connections. Member accounts, My Story and private Vault data are not affected. This cannot be undone.',
+              confirmLabel: 'Delete Circle',
+              busyLabel: 'Deleting…',
+              requiredText: details.circle.name,
+            }
+          : null
+
+  const trimmedCircleName = circleName.trim()
+  const canRename = trimmedCircleName.length > 0 && trimmedCircleName !== details.circle.name && !renaming
 
   return (
     <>
@@ -301,7 +349,37 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
               Leave Circle
             </button>
           </section>
-        ) : null}
+        ) : (
+          <section className="circle-management__settings" aria-labelledby="circle-settings-title">
+            <div className="circle-management__settings-head">
+              <h2 id="circle-settings-title">Circle settings</h2>
+              <p>Only you, as the Circle owner, can rename or delete this Circle.</p>
+            </div>
+            <form className="circle-management__rename" onSubmit={(event) => void rename(event)}>
+              <label>
+                <span>Circle name</span>
+                <input
+                  value={circleName}
+                  maxLength={120}
+                  disabled={renaming}
+                  onChange={(event) => setCircleName(event.currentTarget.value)}
+                />
+              </label>
+              <button className="circle-management__secondary" type="submit" disabled={!canRename}>
+                {renaming ? 'Saving…' : 'Save name'}
+              </button>
+            </form>
+            <div className="circle-management__membership circle-management__membership--danger">
+              <div>
+                <h2>Delete this Circle</h2>
+                <p>Removes the Circle, its memberships, invitations and shared family tree for everyone.</p>
+              </div>
+              <button className="circle-management__danger" type="button" onClick={() => setPendingAction({ kind: 'delete' })}>
+                Delete Circle
+              </button>
+            </div>
+          </section>
+        )}
       </section>
 
       <InviteMemberDialog
@@ -318,6 +396,7 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
         message={confirmation?.message ?? ''}
         confirmLabel={confirmation?.confirmLabel ?? ''}
         busyLabel={confirmation?.busyLabel ?? ''}
+        requiredText={confirmation && 'requiredText' in confirmation ? confirmation.requiredText : undefined}
         onCancel={() => setPendingAction(null)}
         onConfirm={confirmPendingAction}
       />

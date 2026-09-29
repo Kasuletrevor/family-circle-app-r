@@ -13,6 +13,7 @@ describe('createDesktopApi', () => {
         user: { id: 1, email: 'a@example.com', name: 'Ada Updated', accountOrigin: 'registered', mustChangePassword: false, onboardingCompleted: true },
       }
       if (channel === 'settings:open-data-folder') return { success: true, path: 'C:/private/family-circle' }
+      if (channel === 'settings:restore-backup') return { canceled: false, restarting: true, stagedPath: 'C:/private/pending-restore' }
       if (channel === 'settings:create-backup') return {
         canceled: false,
         folderName: 'Family Circle Backup 2026-09-25T10-00-00-000Z',
@@ -82,9 +83,9 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword', 'updateProfile', 'changePassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
-    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
+    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle', 'renameCircle', 'deleteCircle'])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
-    expect(Object.keys(api.settings)).toEqual(['createBackup', 'openDataFolder'])
+    expect(Object.keys(api.settings)).toEqual(['createBackup', 'openDataFolder', 'restoreBackup'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'remove', 'onProgress'])
 
     const serialized = JSON.stringify(api).toLowerCase()
@@ -136,6 +137,10 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('circle:remove-member', { personId: 'user:2' })
     await api.circle.leaveCircle()
     expect(invoke).toHaveBeenCalledWith('circle:leave')
+    await expect(api.circle.renameCircle({ name: 'Renamed', circleId: 'foreign' } as never)).resolves.toEqual({ success: true })
+    expect(invoke).toHaveBeenCalledWith('circle:rename', { name: 'Renamed' })
+    await expect(api.circle.deleteCircle({ confirmationName: 'Renamed', fromUserId: 'attacker' } as never)).resolves.toEqual({ success: true })
+    expect(invoke).toHaveBeenCalledWith('circle:delete', { confirmationName: 'Renamed' })
 
     const documents = await api.vault.listDocuments()
     expect(invoke).toHaveBeenCalledWith('vault:list')
@@ -171,6 +176,8 @@ describe('createDesktopApi', () => {
     expect(JSON.stringify(backup)).not.toContain('absolutePath')
     await expect(api.settings.openDataFolder()).resolves.toEqual({ success: true })
     expect(invoke).toHaveBeenCalledWith('settings:open-data-folder')
+    await expect(api.settings.restoreBackup()).resolves.toEqual({ canceled: false, restarting: true })
+    expect(invoke).toHaveBeenCalledWith('settings:restore-backup')
     await api.privateAi.getStatus()
     expect(invoke).toHaveBeenCalledWith('private-ai:get-status')
   })

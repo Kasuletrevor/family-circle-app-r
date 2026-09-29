@@ -7,6 +7,7 @@ import {
   Info,
   KeyRound,
   Pause,
+  RotateCcw,
   Save,
   ShieldCheck,
   Trash2,
@@ -91,6 +92,10 @@ export function SettingsPage({
   const [backupBusy, setBackupBusy] = useState(false)
   const [backupMessage, setBackupMessage] = useState<string | null>(null)
   const [backupError, setBackupError] = useState<string | null>(null)
+  const [confirmRestore, setConfirmRestore] = useState(false)
+  const [restoreBusy, setRestoreBusy] = useState(false)
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null)
+  const [restoreError, setRestoreError] = useState<string | null>(null)
 
   const [appVersion, setAppVersion] = useState<string>('…')
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null)
@@ -255,6 +260,22 @@ export function SettingsPage({
     }
   }
 
+  async function restoreBackup() {
+    setRestoreBusy(true)
+    setRestoreMessage(null)
+    setRestoreError(null)
+    try {
+      const result = await desktop.settings.restoreBackup()
+      if (!result.canceled) {
+        setRestoreMessage('Backup checked. Family Circle is restarting to restore it…')
+        return
+      }
+    } catch (error) {
+      setRestoreError(error instanceof Error ? error.message : 'Could not restore the backup.')
+    }
+    setRestoreBusy(false)
+  }
+
   async function createBackup() {
     setBackupBusy(true)
     setBackupMessage(null)
@@ -395,6 +416,7 @@ export function SettingsPage({
           <div className="settings-copy">
             <p>The backup includes your Family Circle database, Vault documents and Story media.</p>
             <p>Private AI model files and your protected session credential are deliberately excluded.</p>
+            <p>Restoring is available for backups of this same account.</p>
           </div>
           <div className="settings-actions">
             <button className="settings-button settings-button--secondary" type="button" disabled={backupBusy} onClick={() => void createBackup()}>
@@ -403,7 +425,28 @@ export function SettingsPage({
             <button className="settings-button settings-button--secondary" type="button" onClick={() => void openDataFolder()}>
               <FolderOpen size={15} /> Open data folder
             </button>
+            {!confirmRestore ? (
+              <button className="settings-button settings-button--danger-quiet" type="button" disabled={backupBusy} onClick={() => setConfirmRestore(true)}>
+                <RotateCcw size={15} /> Restore from backup…
+              </button>
+            ) : null}
           </div>
+          {confirmRestore ? (
+            <div className="settings-confirm" role="group" aria-label="Confirm backup restore">
+              <p>Restoring replaces the Family Circle database, Vault documents and Story media on this computer with the backup you choose. Your current data is kept in a safety copy until the next restore, and Family Circle restarts to finish.</p>
+              <p>If you changed your password after the backup was made, sign in with the password you used then.</p>
+              <div className="settings-actions">
+                <button className="settings-button settings-button--danger" type="button" disabled={restoreBusy} onClick={() => void restoreBackup()}>
+                  <RotateCcw size={15} /> {restoreBusy ? 'Restoring…' : 'Choose backup and restore'}
+                </button>
+                <button className="settings-button settings-button--secondary" type="button" disabled={restoreBusy} onClick={() => { setConfirmRestore(false); setRestoreError(null) }}>
+                  Cancel
+                </button>
+              </div>
+              {restoreMessage ? <p className="settings-notice" role="status"><CheckCircle2 size={15} /> {restoreMessage}</p> : null}
+              {restoreError ? <p className="settings-error" role="alert">{restoreError}</p> : null}
+            </div>
+          ) : null}
           {backupMessage ? <p className="settings-notice" role="status"><CheckCircle2 size={15} /> {backupMessage}</p> : null}
           {backupError ? <p className="settings-error" role="alert">{backupError}</p> : null}
         </article>

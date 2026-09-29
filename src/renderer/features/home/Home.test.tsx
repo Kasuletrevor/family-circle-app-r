@@ -122,6 +122,8 @@ describe('Home', () => {
       cancelInvitation: vi.fn(async () => undefined),
       removeMember: vi.fn(async () => undefined),
       leaveCircle: vi.fn(async () => undefined),
+      renameCircle: vi.fn(async () => undefined),
+      deleteCircle: vi.fn(async () => undefined),
     })
 
     expect(await screen.findByText('We could not load your family overview.')).toBeInTheDocument()

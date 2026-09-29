@@ -109,6 +109,8 @@ export interface CirclePort {
     targetServerUserId: string
   }): Promise<{ success: true }>
   leaveCircle(input: { serverUserId: string; circleId: string }): Promise<{ success: true }>
+  renameCircle(input: { serverUserId: string; circleId: string; name: string }): Promise<{ success: true }>
+  deleteCircle(input: { serverUserId: string; circleId: string; confirmationName: string }): Promise<{ success: true }>
 }
 
 function emptyOverview(
@@ -488,6 +490,39 @@ export class CircleService {
     await this.circle.leaveCircle({
       serverUserId: context.serverUserId,
       circleId: context.group.id,
+    })
+
+    const remaining = await this.circle.listGroups(context.serverUserId)
+    await this.users.setActiveCircleId(context.record.user.id, remaining[0]?.id ?? null)
+    return { success: true }
+  }
+
+  async renameCircle(input: { name: string }): Promise<{ success: true }> {
+    const context = await this.requireActiveCircleContext()
+    this.requireOwner(context, 'Only the Circle owner can rename this Circle')
+    const name = String(input.name ?? '').trim()
+    if (!name) throw new Error('Circle name is required')
+    if (name.length > 120) throw new Error('Circle name is too long')
+    if (name === context.group.name) return { success: true }
+
+    return this.circle.renameCircle({
+      serverUserId: context.serverUserId,
+      circleId: context.group.id,
+      name,
+    })
+  }
+
+  async deleteCircle(input: { confirmationName: string }): Promise<{ success: true }> {
+    const context = await this.requireActiveCircleContext()
+    this.requireOwner(context, 'Only the Circle owner can delete this Circle')
+    if (String(input.confirmationName ?? '').trim() !== context.group.name) {
+      throw new Error('Type the Circle name exactly to confirm deletion')
+    }
+
+    await this.circle.deleteCircle({
+      serverUserId: context.serverUserId,
+      circleId: context.group.id,
+      confirmationName: context.group.name,
     })
 
     const remaining = await this.circle.listGroups(context.serverUserId)
