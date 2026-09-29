@@ -33,6 +33,8 @@ interface CircleDesktopOperations {
   cancelInvitation(input: { personId: string }): Promise<{ success: true }>
   removeMember(input: { personId: string }): Promise<{ success: true }>
   leaveCircle(): Promise<{ success: true }>
+  renameCircle(input: { name: string }): Promise<{ success: true }>
+  deleteCircle(input: { confirmationName: string }): Promise<{ success: true }>
 }
 
 function defaultOverview(): Promise<CircleOverview> {
@@ -53,6 +55,8 @@ const defaultOperations: CircleDesktopOperations = {
   cancelInvitation: (input) => window.familyCircle.circle.cancelInvitation(input),
   removeMember: (input) => window.familyCircle.circle.removeMember(input),
   leaveCircle: () => window.familyCircle.circle.leaveCircle(),
+  renameCircle: (input) => window.familyCircle.circle.renameCircle(input),
+  deleteCircle: (input) => window.familyCircle.circle.deleteCircle(input),
 }
 
 function initials(name: string): string {
@@ -309,6 +313,22 @@ export class DesktopCircleClient implements CircleClient {
   async leaveCircle(): Promise<void> {
     try {
       await this.operations.leaveCircle()
+    } finally {
+      this.invalidateCircleReads()
+    }
+  }
+
+  async renameCircle(name: string): Promise<void> {
+    try {
+      await this.operations.renameCircle({ name })
+    } finally {
+      this.invalidateCircleReads()
+    }
+  }
+
+  async deleteCircle(confirmationName: string): Promise<void> {
+    try {
+      await this.operations.deleteCircle({ confirmationName })
     } finally {
       this.invalidateCircleReads()
     }

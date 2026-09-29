@@ -196,4 +196,13 @@ export class MockCircleClient implements CircleClient {
     const fallback = circles.find((_circle, index) => index !== currentIndex)
     this.activeCircleId = fallback?.id ?? ''
   }
+
+  async renameCircle(name: string): Promise<void> {
+    const circle = circles.find((candidate) => candidate.id === this.activeCircleId)
+    if (circle) circle.name = name.trim()
+  }
+
+  async deleteCircle(_confirmationName: string): Promise<void> {
+    await this.leaveCircle()
+  }
 }

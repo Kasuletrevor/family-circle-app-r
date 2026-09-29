@@ -27,4 +27,6 @@ export interface CircleClient {
   cancelInvitation(personId: string): Promise<void>
   removeMember(personId: string): Promise<void>
   leaveCircle(): Promise<void>
+  renameCircle(name: string): Promise<void>
+  deleteCircle(confirmationName: string): Promise<void>
 }

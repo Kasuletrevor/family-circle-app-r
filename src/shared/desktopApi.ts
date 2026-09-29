@@ -398,6 +398,8 @@ export interface DesktopApi {
     cancelInvitation(input: { personId: string }): Promise<{ success: true }>
     removeMember(input: { personId: string }): Promise<{ success: true }>
     leaveCircle(): Promise<{ success: true }>
+    renameCircle(input: { name: string }): Promise<{ success: true }>
+    deleteCircle(input: { confirmationName: string }): Promise<{ success: true }>
   }
   vault: {
     listDocuments(): Promise<VaultDocumentSummary[]>

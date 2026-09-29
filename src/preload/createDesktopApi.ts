@@ -72,6 +72,8 @@ type DesktopChannel =
   | 'circle:cancel-invitation'
   | 'circle:remove-member'
   | 'circle:leave'
+  | 'circle:rename'
+  | 'circle:delete'
   | 'vault:list'
   | 'vault:choose-and-upload'
   | 'vault:open'
@@ -478,6 +480,14 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       leaveCircle() {
         return invoke('circle:leave') as Promise<{ success: true }>
+      },
+      async renameCircle(input: { name: string }) {
+        await invoke('circle:rename', { name: String(input?.name ?? '') })
+        return { success: true as const }
+      },
+      async deleteCircle(input: { confirmationName: string }) {
+        await invoke('circle:delete', { confirmationName: String(input?.confirmationName ?? '') })
+        return { success: true as const }
       },
     },
     vault: {
