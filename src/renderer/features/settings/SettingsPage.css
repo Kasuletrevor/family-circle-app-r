@@ -288,39 +288,6 @@
   letter-spacing: 0.05em;
 }
 
-.settings-progress {
-  display: grid;
-  gap: 7px;
-  margin: 12px 0;
-}
-
-.settings-progress > div:first-child {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--kk-text-muted);
-  font-size: 10.5px;
-}
-
-.settings-progress__meter {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e8edf2;
-}
-
-.settings-progress__meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--kk-teal);
-}
-
-.settings-progress small {
-  color: var(--kk-text-muted);
-  font-size: 10px;
-}
-
 .settings-copy {
   color: var(--kk-text-muted);
   font-size: 11px;

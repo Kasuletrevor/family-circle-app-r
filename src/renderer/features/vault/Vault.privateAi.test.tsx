@@ -183,7 +183,8 @@ describe('Vault Private AI setup and indexing UI', () => {
     })
     expect(await screen.findByText('42%')).toBeInTheDocument()
     expect(screen.getByText('420 B of 1000 B')).toBeInTheDocument()
-    expect(screen.getByText('Private AI component 2 of 3')).toBeInTheDocument()
+    expect(screen.getByText('Downloading part 2 of 3')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Private AI setup progress' })).toHaveAttribute('aria-valuenow', '42')
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause setup' }))
     await waitFor(() => expect(pauseSetup).toHaveBeenCalledTimes(1))
@@ -239,7 +240,7 @@ describe('Vault Private AI setup and indexing UI', () => {
       })
     })
 
-    expect(await screen.findByText('10.0 MB/s · about 7 sec left')).toBeInTheDocument()
+    expect(await screen.findByText(/10\.0 MB\/s · about 7 sec left/)).toBeInTheDocument()
     now.mockRestore()
   })
 
