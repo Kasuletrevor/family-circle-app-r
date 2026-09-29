@@ -13,6 +13,7 @@ import type {
   InviteMemberInput,
   InviteMemberResult,
   LocalBackupResult,
+  LocalRestoreResult,
   OnboardingNextAction,
   PrivateAiPublicProgress,
   PrivateAiPublicState,
@@ -83,6 +84,7 @@ type DesktopChannel =
   | 'vault:ask'
   | 'settings:create-backup'
   | 'settings:open-data-folder'
+  | 'settings:restore-backup'
   | 'private-ai:get-status'
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
@@ -527,6 +529,12 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       async openDataFolder() {
         await invoke('settings:open-data-folder')
         return { success: true as const }
+      },
+      async restoreBackup(): Promise<LocalRestoreResult> {
+        const result = recordOf(await invoke('settings:restore-backup'))
+        return result.canceled === false
+          ? { canceled: false, restarting: true }
+          : { canceled: true }
       },
     },
     privateAi: {
