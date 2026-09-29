@@ -66,6 +66,7 @@ function circleWithShell(
     leaveCircle: vi.fn(async () => undefined),
     renameCircle: vi.fn(async () => undefined),
     deleteCircle: vi.fn(async () => undefined),
+    onChange: vi.fn(() => () => undefined),
     ...overrides,
   }
 }
@@ -95,6 +96,37 @@ describe('TopBar', () => {
 
     await waitFor(() => expect(selectCircle).toHaveBeenCalledWith('g-2'))
     expect(await screen.findByText('Circles destination')).toBeInTheDocument()
+  })
+
+  it('refreshes the active Circle name when the Circle changes elsewhere in the app', async () => {
+    let notifyChange: () => void = () => undefined
+    const getShellSnapshot = vi.fn()
+      .mockResolvedValueOnce({ activeCircleName: 'Example Family', unreadNotifications: 0 })
+      .mockResolvedValue({ activeCircleName: 'Renamed Family', unreadNotifications: 0 })
+    const unsubscribe = vi.fn()
+    const circle = circleWithShell('Example Family', 0, {
+      getShellSnapshot,
+      onChange: vi.fn((listener: () => void) => {
+        notifyChange = listener
+        return unsubscribe
+      }),
+    })
+
+    const view = render(
+      <MemoryRouter>
+        <AppServicesProvider services={{ circle }}>
+          <TopBar user={user} onSignOut={async () => undefined} />
+        </AppServicesProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Example Family')).toBeInTheDocument()
+    notifyChange()
+    expect(await screen.findByText('Renamed Family')).toBeInTheDocument()
+    expect(screen.queryByText('Example Family')).not.toBeInTheDocument()
+
+    view.unmount()
+    expect(unsubscribe).toHaveBeenCalled()
   })
 
   it('opens real notifications and marks unread items read through the protected client', async () => {

@@ -126,6 +126,7 @@ function mapListItem(circle: CircleListItem): CircleSummary {
 }
 
 export class DesktopCircleClient implements CircleClient {
+  private readonly changeListeners = new Set<() => void>()
   private overviewInFlight: Promise<CircleOverview> | null = null
   private detailsInFlight: Promise<CircleDetails | null> | null = null
   private readonly operations: CircleDesktopOperations
@@ -334,9 +335,17 @@ export class DesktopCircleClient implements CircleClient {
     }
   }
 
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener)
+    return () => {
+      this.changeListeners.delete(listener)
+    }
+  }
+
   private invalidateCircleReads(): void {
     this.overviewInFlight = null
     this.detailsInFlight = null
+    for (const listener of [...this.changeListeners]) listener()
   }
 
   private readOverview(): Promise<CircleOverview> {

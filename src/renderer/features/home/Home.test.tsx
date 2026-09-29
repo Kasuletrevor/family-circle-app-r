@@ -124,6 +124,7 @@ describe('Home', () => {
       leaveCircle: vi.fn(async () => undefined),
       renameCircle: vi.fn(async () => undefined),
       deleteCircle: vi.fn(async () => undefined),
+      onChange: vi.fn(() => () => undefined),
     })
 
     expect(await screen.findByText('We could not load your family overview.')).toBeInTheDocument()
