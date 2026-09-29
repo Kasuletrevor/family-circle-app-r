@@ -9,11 +9,16 @@ export interface SettingsBackupPicker {
   chooseDestination(): Promise<string | null>
 }
 
+export interface SettingsFolderOpener {
+  open(path: string): Promise<void>
+}
+
 interface SettingsServiceDependencies {
   db: DatabaseSync
   userDataPath: string
   appVersion: string
   picker: SettingsBackupPicker
+  folderOpener: SettingsFolderOpener
   session: { restore(): Promise<AuthUser | null> }
   now?: () => number
   mutationLock?: MutationLock
@@ -50,6 +55,13 @@ export class SettingsService {
   async createBackup(): Promise<LocalBackupResult> {
     const mutationLock = this.dependencies.mutationLock ?? noMutationLock
     return mutationLock.runExclusive(() => this.createBackupSnapshot())
+  }
+
+  async openDataFolder(): Promise<{ success: true }> {
+    const current = await this.dependencies.session.restore()
+    if (!current) throw new Error('Sign in before opening the Family Circle data folder.')
+    await this.dependencies.folderOpener.open(this.dependencies.userDataPath)
+    return { success: true }
   }
 
   private async createBackupSnapshot(): Promise<LocalBackupResult> {

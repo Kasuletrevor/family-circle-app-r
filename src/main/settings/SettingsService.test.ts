@@ -49,6 +49,7 @@ describe('SettingsService', () => {
       userDataPath,
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => destination },
+      folderOpener: { open: vi.fn(async () => undefined) },
       session: { restore: async () => user },
       now: () => createdAt,
     })
@@ -111,6 +112,7 @@ describe('SettingsService', () => {
       userDataPath,
       appVersion: '0.2.3',
       picker: { chooseDestination },
+      folderOpener: { open: vi.fn(async () => undefined) },
       session: { restore: async () => first },
     })
 
@@ -137,6 +139,7 @@ describe('SettingsService', () => {
       userDataPath,
       appVersion: '0.2.3',
       picker: { chooseDestination: async () => null },
+      folderOpener: { open: vi.fn(async () => undefined) },
       session: { restore: async () => user },
     })
 
@@ -146,5 +149,26 @@ describe('SettingsService', () => {
       createdAt: null,
     })
     db.close()
+  })
+
+  it('opens the Family Circle data folder only for a signed-in user', async () => {
+    const open = vi.fn(async () => undefined)
+    const user = { id: 1, email: 'ada@example.test', name: 'Ada', accountOrigin: 'registered' as const, mustChangePassword: false, onboardingCompleted: true }
+    const restore = vi.fn(async () => user as typeof user | null)
+    const service = new SettingsService({
+      db: {} as never,
+      userDataPath: 'C:/private/family-circle',
+      appVersion: '0.2.3',
+      picker: { chooseDestination: async () => null },
+      folderOpener: { open },
+      session: { restore },
+    })
+
+    await expect(service.openDataFolder()).resolves.toEqual({ success: true })
+    expect(open).toHaveBeenCalledWith('C:/private/family-circle')
+
+    restore.mockResolvedValueOnce(null)
+    await expect(service.openDataFolder()).rejects.toThrow('Sign in before opening the Family Circle data folder.')
+    expect(open).toHaveBeenCalledTimes(1)
   })
 })
