@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http'
 
 const GENERATION_PORT = 8080
-const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources. Reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
+const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, reply with exactly NOT_FOUND and nothing else. Otherwise reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
 const TRANSLATION_INSTRUCTION = 'Translate the search question into English for retrieval. Return only the translated question. Preserve every name, date, number, and place exactly.'
 
 export interface QwenHttpPort {

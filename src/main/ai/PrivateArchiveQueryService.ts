@@ -126,6 +126,23 @@ function noContextAnswer(scope: PrivateArchiveScope): string {
   return 'I could not find it in the selected Vault documents.'
 }
 
+// The model is asked to reply exactly NOT_FOUND when its sources do not answer the
+// question. A 0.8B model does not always comply, so common "not found" wording in the
+// first sentence also counts; later sentences may legitimately note a gap.
+const NOT_FOUND_SENTINEL = /^\s*not_found\b/i
+const NOT_FOUND_WORDING = [
+  /\b(?:could not|couldn't|cannot|can't|unable to) find\b/i,
+  /\bno (?:information|mention|details?|record)\b/i,
+  /\b(?:does not|doesn't|do not|don't) (?:mention|contain|say|include|specify|provide)\b/i,
+  /\bis not (?:mentioned|provided|included|specified|stated)\b/i,
+]
+
+export function isNotFoundAnswer(answer: string): boolean {
+  if (NOT_FOUND_SENTINEL.test(answer)) return true
+  const firstSentence = answer.trim().split(/(?<=[.!?])\s+/)[0] ?? ''
+  return NOT_FOUND_WORDING.some((pattern) => pattern.test(firstSentence))
+}
+
 export class PrivateArchiveQueryService {
   constructor(private readonly dependencies: PrivateArchiveQueryServiceDependencies) {}
 
@@ -204,6 +221,10 @@ export class PrivateArchiveQueryService {
       scopeType: input.scope.type as PrivateScopeType,
     })
     const answer = await this.generateAnswer(route, question, context)
+
+    // Retrieved chunks that did not answer the question are not sources of the reply.
+    if (NOT_FOUND_SENTINEL.test(answer)) return { answer: noContextAnswer(input.scope), sources: [], route }
+    if (isNotFoundAnswer(answer)) return { answer, sources: [], route }
 
     return {
       answer,

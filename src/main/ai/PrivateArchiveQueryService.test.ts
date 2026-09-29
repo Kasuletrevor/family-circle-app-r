@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
+import { isNotFoundAnswer, PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
 
 function vaultChunk(documentId: number, fileName: string, chunkIndex: number, text: string, embedding: number[]) {
   return {
@@ -232,5 +232,65 @@ describe('PrivateArchiveQueryService', () => {
       question: 'Summarize this.',
       scope: { type: 'vault', vault: { type: 'all' } },
     })).rejects.toMatchObject({ code: 'private-ai-unavailable' })
+  })
+
+  it('replaces a NOT_FOUND model reply with the local not-found answer and no sources', async () => {
+    const service = new PrivateArchiveQueryService(deps({
+      qwen: {
+        generateFast: vi.fn(async () => 'NOT_FOUND'),
+        generateComplex: vi.fn(async () => 'NOT_FOUND'),
+        translateForRetrieval: vi.fn(async () => ''),
+      },
+    }))
+
+    await expect(service.ask({ question: 'What car does Joseph drive?', scope: { type: 'vault', vault: { type: 'all' } } }))
+      .resolves.toMatchObject({ answer: 'I could not find it in the selected Vault documents.', sources: [] })
+    await expect(service.ask({ question: 'What car does Joseph drive?', scope: { type: 'story' } }))
+      .resolves.toMatchObject({ answer: 'I could not find it in your confirmed My Story memories.', sources: [] })
+  })
+
+  it('keeps a worded not-found reply but drops the sources it did not use', async () => {
+    const reply = 'Based on the provided context, there is no information regarding any car Joseph drives. The text covers family history.'
+    const service = new PrivateArchiveQueryService(deps({
+      qwen: {
+        generateFast: vi.fn(async () => reply),
+        generateComplex: vi.fn(async () => reply),
+        translateForRetrieval: vi.fn(async () => ''),
+      },
+    }))
+
+    await expect(service.ask({ question: 'What car does Joseph drive?', scope: { type: 'vault', vault: { type: 'all' } } }))
+      .resolves.toMatchObject({ answer: reply, sources: [] })
+  })
+
+  it('keeps sources for real answers', async () => {
+    const service = new PrivateArchiveQueryService(deps())
+    const result = await service.ask({ question: 'Where was grandmother born?', scope: { type: 'vault', vault: { type: 'all' } } })
+    expect(result.sources.length).toBeGreaterThan(0)
+  })
+})
+
+describe('isNotFoundAnswer', () => {
+  it('recognises the sentinel and common not-found wording in the first sentence', () => {
+    for (const reply of [
+      'NOT_FOUND',
+      'not_found.',
+      'I could not find it in the selected private sources.',
+      'There is no information about a car in the context.',
+      'The context does not mention Joseph’s car.',
+      'Based on the sources, his job is not mentioned.',
+    ]) {
+      expect(isNotFoundAnswer(reply), reply).toBe(true)
+    }
+  })
+
+  it('does not flag real answers, even when a later sentence notes a gap', () => {
+    for (const reply of [
+      'Rose Nakato worked at Mulago Hospital for thirty-one years.',
+      'Daniel Ssempa is allergic to penicillin. The sources do not mention other allergies.',
+      'The family doctor is Dr. Okello at Nsambya Hospital.',
+    ]) {
+      expect(isNotFoundAnswer(reply), reply).toBe(false)
+    }
   })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { QwenClient, QwenClientError, type QwenHttpPort } from './QwenClient'
 
-const SYSTEM = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources. Reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
+const SYSTEM = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, reply with exactly NOT_FOUND and nothing else. Otherwise reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
 
 describe('QwenClient', () => {
   it('uses the 192-token ceiling for normal grounded answers', async () => {
