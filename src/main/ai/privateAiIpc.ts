@@ -8,6 +8,7 @@ export interface PrivateAiIpcService {
   startSetup(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiStatus>
   pauseSetup(): PrivateAiStatus | null
   repair(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiStatus>
+  remove(): Promise<PrivateAiStatus>
 }
 
 interface PrivateAiIpcEvent {
@@ -107,5 +108,12 @@ export function registerPrivateAiIpc(
     const status = await service.repair(progressFor(event))
     maybeReady(status)
     return publicStatus(status)
+  })
+  ipc.handle('private-ai:remove', async (event) => {
+    const status = await service.remove()
+    const publicResult = await publicStatus(status)
+    const sender = (event as PrivateAiIpcEvent | null)?.sender
+    sender?.send('private-ai:progress', safeProgress(status))
+    return publicResult
   })
 }
