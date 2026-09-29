@@ -84,7 +84,7 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle'])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
     expect(Object.keys(api.settings)).toEqual(['createBackup'])
-    expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
+    expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'remove', 'onProgress'])
 
     const serialized = JSON.stringify(api).toLowerCase()
     expect(serialized).not.toContain('api_key')

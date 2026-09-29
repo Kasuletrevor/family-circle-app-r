@@ -51,6 +51,7 @@ function privateAiClient(
     startSetup: vi.fn(async () => aiStatus('downloading')),
     pauseSetup: vi.fn(async () => aiStatus('paused')),
     repair: vi.fn(async () => aiStatus('ready')),
+    remove: vi.fn(async () => aiStatus('not_installed')),
     onProgress: vi.fn(() => () => undefined),
     ...overrides,
   }
