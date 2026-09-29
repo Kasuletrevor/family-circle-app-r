@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { StoryMediaPublicItem, StoryMediaType } from '../../../shared/desktopApi'
+import type { StoryMediaPublicItem, StoryMediaType, VoicePublicProgress, VoicePublicStatus } from '../../../shared/desktopApi'
 import {
   STORY_FIELDS,
   STORY_LANGUAGES,
@@ -15,6 +15,7 @@ import { HistoryStoryView } from './HistoryStoryView'
 import { ReviewStoryView } from './ReviewStoryView'
 import { StoryMedia } from './StoryMedia'
 import { StoryVoiceRecorder, type StoryVoiceRecorderLike } from './StoryVoiceRecorder'
+import { StoryVoiceSetup } from './StoryVoiceSetup'
 import './MyStory.css'
 
 const defaultClient = new DesktopStoryClient()
@@ -171,6 +172,11 @@ export function MyStory({
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [voiceFieldKey, setVoiceFieldKey] = useState<StoryFieldKey | null>(null)
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null)
+  const [voiceStatus, setVoiceStatus] = useState<VoicePublicStatus | null>(null)
+  const [voiceProgress, setVoiceProgress] = useState<VoicePublicProgress | null>(null)
+  const [voiceSetupFieldKey, setVoiceSetupFieldKey] = useState<StoryFieldKey | null>(null)
+  const [voiceSetupBusy, setVoiceSetupBusy] = useState(false)
+  const [voiceSetupError, setVoiceSetupError] = useState<string | null>(null)
   const timers = useRef(new Map<StoryFieldKey, ReturnType<typeof setTimeout>>())
   const revisions = useRef(new Map<StoryFieldKey, number>())
   const dirtyFields = useRef(new Set<StoryFieldKey>())
@@ -192,9 +198,29 @@ export function MyStory({
     void client.listMedia()
       .then((items) => { if (!cancelled) setMedia(items) })
       .catch(() => { if (!cancelled) setMedia([]) })
+    void client.getVoiceStatus()
+      .then((status) => { if (!cancelled) setVoiceStatus(status) })
+      .catch(() => { if (!cancelled) setVoiceStatus(null) })
+    let unsubscribeVoice: () => void = () => undefined
+    try {
+      unsubscribeVoice = client.onVoiceSetupProgress((progress) => {
+        if (cancelled) return
+        setVoiceProgress(progress)
+        setVoiceStatus((current) => current ? {
+          ...current,
+          state: progress.state,
+          ready: progress.state === 'ready',
+          repairRequired: progress.state === 'repair_required',
+          message: progress.message,
+        } : current)
+      })
+    } catch {
+      // Hosts without the voice bridge fall back to the status request above.
+    }
 
     return () => {
       cancelled = true
+      unsubscribeVoice()
       for (const timer of timers.current.values()) clearTimeout(timer)
       timers.current.clear()
       const recorder = voiceRecorderRef.current
@@ -398,8 +424,31 @@ export function MyStory({
     setMedia((current) => current.filter((item) => item.id !== mediaId))
   }
 
+  async function runVoiceSetup(action: 'start' | 'pause' | 'repair') {
+    setVoiceSetupBusy(true)
+    setVoiceSetupError(null)
+    try {
+      const status = action === 'start'
+        ? await client.startVoiceSetup()
+        : action === 'pause'
+          ? await client.pauseVoiceSetup()
+          : await client.repairVoiceSetup()
+      setVoiceStatus(status)
+      if (status.state !== 'downloading' && status.state !== 'verifying') setVoiceProgress(null)
+    } catch {
+      setVoiceSetupError('Offline voice setup could not continue. Please try again.')
+    } finally {
+      setVoiceSetupBusy(false)
+    }
+  }
+
   async function startVoiceRecording(field: StoryFieldDefinition) {
     if (voiceRecorderRef.current) return
+    // Transcription runs locally, so recording is pointless until offline voice is installed.
+    if (voiceStatus && !voiceStatus.ready) {
+      setVoiceSetupFieldKey(field.key)
+      return
+    }
     const recorder = createVoiceRecorder()
     voiceRecorderRef.current = recorder
     setVoiceFieldKey(field.key)
@@ -417,9 +466,12 @@ export function MyStory({
   }
 
   async function saveTranscriptDraft(field: StoryFieldDefinition, transcript: string, language: StoryLanguage) {
-    const revision = prepareDraft(field, transcript, language)
+    // Dictation adds to what the person already wrote; it never replaces their words.
+    const existing = (storyRef.current ? answerFor(storyRef.current, field.key)?.answer ?? '' : '').trim()
+    const value = existing ? `${existing} ${transcript}` : transcript
+    const revision = prepareDraft(field, value, language)
     if (revision === null) return false
-    return persistDraft(field.key, transcript, language, revision)
+    return persistDraft(field.key, value, language, revision)
   }
 
   async function stopAndTranscribe(field: StoryFieldDefinition) {
@@ -475,6 +527,20 @@ export function MyStory({
         {activeForField && voiceState === 'transcribing' && <span aria-live="polite">Transcribing…</span>}
         {activeForField && voiceState === 'success' && <span aria-live="polite">{voiceMessage}</span>}
         {activeForField && voiceState === 'error' && <p role="alert">{voiceMessage}</p>}
+        {voiceSetupFieldKey === field.key && voiceStatus && !voiceStatus.ready ? (
+          <StoryVoiceSetup
+            status={voiceStatus}
+            progress={voiceProgress}
+            busy={voiceSetupBusy}
+            error={voiceSetupError}
+            onSetup={() => void runVoiceSetup('start')}
+            onPause={() => void runVoiceSetup('pause')}
+            onRepair={() => void runVoiceSetup('repair')}
+          />
+        ) : null}
+        {voiceSetupFieldKey === field.key && voiceStatus?.ready && voiceState === 'idle' ? (
+          <span aria-live="polite">Offline voice is ready. Press Record voice to start.</span>
+        ) : null}
       </div>
     )
   }

@@ -8,7 +8,7 @@ import type { StoryVoiceRecorderLike } from './StoryVoiceRecorder'
 const emptyStory: StoryPublicState = { schemaVersion: 1, answers: [], confirmedCount: 0 }
 
 function client(): StoryClient {
-  const status = { state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null }
+  const status = { state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null }
   return {
     get: vi.fn(async () => emptyStory),
     saveDraft: vi.fn(async () => emptyStory),

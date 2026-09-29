@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { StoryMediaPublicItem } from '../../../shared/desktopApi'
+import type { StoryMediaPublicItem, VoicePublicProgress, VoicePublicStatus } from '../../../shared/desktopApi'
 import { STORY_FIELDS, STORY_LANGUAGES, type StoryFieldKey, type StoryLanguage } from '../../../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../../../shared/storyPublic'
 import type { StoryClient } from '../../services/story/StoryClient'
@@ -82,7 +82,7 @@ function client(initial: StoryPublicState) {
     openMedia: vi.fn(async () => ({ success: true as const })),
     deleteMedia: vi.fn(async () => ({ success: true as const })),
     transcribeRecording: vi.fn(async () => ({ transcript: '' })),
-    getVoiceStatus: vi.fn(async () => ({ state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
+    getVoiceStatus: vi.fn(async (): Promise<VoicePublicStatus> => ({ state: 'ready', ready: true, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
     startVoiceSetup: vi.fn(async () => ({ state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
     pauseVoiceSetup: vi.fn(async () => ({ state: 'paused' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
     repairVoiceSetup: vi.fn(async () => ({ state: 'not_installed' as const, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'voice-v1', message: null })),
@@ -292,8 +292,16 @@ describe('MyStory', () => {
     await waitFor(() => expect(storyClient.chooseAndAddMedia).toHaveBeenCalledWith('fullName', 'audio'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete portrait.jpg' }))
+    expect(storyClient.deleteMedia).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('portrait.jpg')).toBeInTheDocument()
+    expect(storyClient.deleteMedia).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete portrait.jpg' }))
+    expect(screen.getByText(/Delete portrait\.jpg from this computer\?/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
     await waitFor(() => expect(storyClient.deleteMedia).toHaveBeenCalledWith(41))
-    expect(screen.queryByText('portrait.jpg')).toBeNull()
+    await waitFor(() => expect(screen.queryByText('portrait.jpg')).toBeNull())
   })
 
   it('shows a safe microphone-permission error without leaking browser details', async () => {
@@ -336,6 +344,20 @@ describe('MyStory', () => {
     expect(screen.getByText('Draft — review your words before making this memory searchable.')).toBeInTheDocument()
   })
 
+  it('adds a transcript after existing memory text instead of replacing it', async () => {
+    const storyClient = client(state(answer('fullName', 'Amina Nansubuga', { confirmed: true })))
+    vi.mocked(storyClient.transcribeRecording).mockResolvedValueOnce({ transcript: 'My grandmother chose the name.' })
+    render(<MyStory client={storyClient} createVoiceRecorder={() => recorder()} />)
+
+    const input = await screen.findByRole('textbox', { name: 'Full name' })
+    expect(input).toHaveValue('Amina Nansubuga')
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop recording' }))
+
+    await waitFor(() => expect(input).toHaveValue('Amina Nansubuga My grandmother chose the name.'))
+    expect(storyClient.saveDraft).toHaveBeenCalledWith('fullName', 'Amina Nansubuga My grandmother chose the name.', 'en')
+  })
+
   it('shows a safe transcription error and keeps the memory unconfirmed', async () => {
     const storyClient = client(state(answer('fullName', '')))
     const voiceRecorder = recorder()
@@ -350,5 +372,44 @@ describe('MyStory', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Voice transcription failed. Try again.')
     expect(screen.queryByText(/whisper\.exe|temp\.wav|stderr/i)).toBeNull()
     expect(storyClient.confirmField).not.toHaveBeenCalled()
+  })
+
+  it('offers offline voice setup instead of recording when voice is not installed', async () => {
+    const storyClient = client(state(answer('fullName', '')))
+    const notInstalled: VoicePublicStatus = {
+      state: 'not_installed', ready: false, repairRequired: false, totalSizeBytes: 141 * 1024 * 1024, version: 'voice-v1', message: null,
+    }
+    let progressListener: ((progress: VoicePublicProgress) => void) | null = null
+    storyClient.getVoiceStatus = vi.fn(async () => notInstalled)
+    let finishSetup: (status: VoicePublicStatus) => void = () => undefined
+    storyClient.startVoiceSetup = vi.fn(() => new Promise<VoicePublicStatus>((resolve) => { finishSetup = resolve }))
+    storyClient.onVoiceSetupProgress = vi.fn((listener: (progress: VoicePublicProgress) => void) => {
+      progressListener = listener
+      return () => undefined
+    })
+    const createVoiceRecorder = vi.fn()
+    render(<MyStory client={storyClient} createVoiceRecorder={createVoiceRecorder} />)
+
+    await screen.findByRole('textbox', { name: 'Full name' })
+    await waitFor(() => expect(storyClient.getVoiceStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice' }))
+
+    expect(createVoiceRecorder).not.toHaveBeenCalled()
+    expect(await screen.findByRole('region', { name: 'Offline voice setup' })).toBeInTheDocument()
+    expect(screen.getByText('One-time download · about 141 MB')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set up offline voice' }))
+    await waitFor(() => expect(storyClient.startVoiceSetup).toHaveBeenCalledTimes(1))
+    act(() => {
+      ;(progressListener as ((progress: VoicePublicProgress) => void) | null)?.({
+        state: 'downloading', percent: 40, fileIndex: 2, fileCount: 2, fileName: 'Voice model', bytesDownloaded: 56 * 1024 * 1024,
+        totalSizeBytes: 141 * 1024 * 1024, fileBytesDownloaded: 0, fileSizeBytes: 0, message: 'Downloading offline voice',
+      })
+    })
+    expect(await screen.findByText('Downloading part 2 of 2')).toBeInTheDocument()
+
+    await act(async () => { finishSetup({ ...notInstalled, state: 'ready', ready: true }) })
+    expect(await screen.findByText('Offline voice is ready. Press Record voice to start.')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Offline voice setup' })).not.toBeInTheDocument()
   })
 })
