@@ -57,6 +57,7 @@ describe('SettingsPage', () => {
       onProgress: vi.fn(() => () => undefined),
     }
 
+    const openDataFolder = vi.fn(async () => ({ success: true as const }))
     const createBackup = vi.fn(async () => ({
       canceled: false,
       folderName: 'Family Circle Backup 2026-09-25T10-00-00-000Z',
@@ -67,7 +68,7 @@ describe('SettingsPage', () => {
         getVersion: vi.fn(async () => '0.2.3'),
         getPlatform: vi.fn(async () => 'win32' as const),
       },
-      settings: { createBackup },
+      settings: { createBackup, openDataFolder },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     const onAuthStateChange = vi.fn()
@@ -111,6 +112,9 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(createBackup).toHaveBeenCalledTimes(1))
     expect(await screen.findByText(/Backup created: Family Circle Backup/)).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Open data folder' }))
+    await waitFor(() => expect(openDataFolder).toHaveBeenCalledTimes(1))
+
     expect(screen.queryByRole('button', { name: /restore/i })).toBeNull()
     expect(screen.getByRole('button', { name: 'Remove Private AI' })).toBeInTheDocument()
   })
@@ -149,7 +153,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
     const auth = {
       updateProfile: vi.fn(async () => authenticated()),
@@ -210,7 +214,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     render(
@@ -244,7 +248,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     render(
@@ -283,7 +287,7 @@ describe('SettingsPage', () => {
     }
     const desktop = {
       app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
-      settings: { createBackup: vi.fn() },
+      settings: { createBackup: vi.fn(), openDataFolder: vi.fn() },
     } as Pick<DesktopApi, 'app' | 'settings'>
 
     const { unmount } = render(
@@ -303,5 +307,32 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Pause Private AI setup before removing downloaded files')
     expect(screen.getByRole('button', { name: 'Remove downloaded AI files' })).toBeEnabled()
+  })
+
+  it('surfaces a failure to open the data folder', async () => {
+    const privateAi: PrivateAiClient = {
+      getStatus: vi.fn(async () => ({
+        state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null,
+      })),
+      startSetup: vi.fn(),
+      pauseSetup: vi.fn(),
+      repair: vi.fn(),
+      remove: vi.fn(),
+      onProgress: vi.fn(() => () => undefined),
+    }
+    const desktop = {
+      app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
+      settings: {
+        createBackup: vi.fn(),
+        openDataFolder: vi.fn(async () => { throw new Error('Could not open the Family Circle data folder.') }),
+      },
+    } as Pick<DesktopApi, 'app' | 'settings'>
+
+    render(
+      <SettingsPage user={user} auth={{} as AuthClient} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open data folder' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not open the Family Circle data folder.')
   })
 })
