@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { QwenClient, QwenClientError, type QwenHttpPort } from './QwenClient'
 
-const SYSTEM = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources.'
+const SYSTEM = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, say you could not find it in the selected private sources. Reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
 
 describe('QwenClient', () => {
   it('uses the 192-token ceiling for normal grounded answers', async () => {
@@ -58,5 +58,22 @@ describe('QwenClient', () => {
 
     const failed = new QwenClient({ http: { post: vi.fn(async () => { throw new Error('offline') }) } })
     await expect(failed.generateComplex('Question', 'Context')).rejects.toBeInstanceOf(QwenClientError)
+  })
+
+  it('returns plain text when the model still answers in Markdown', async () => {
+    // Real Qwen3.5 0.8B output; the answer is rendered as plain text in the app.
+    const markdown = [
+      'Based on the provided private source context:',
+      '*   The land title is kept in a **locked tin box in the main bedroom**.',
+      '*   The executor of the will is **Grace Nakato**.',
+    ].join('\n')
+    const post = vi.fn(async () => ({ choices: [{ message: { content: markdown } }] }))
+    const client = new QwenClient({ http: { post } as QwenHttpPort })
+
+    await expect(client.generateFast('Where is the land title?', 'context')).resolves.toBe([
+      'Based on the provided private source context:',
+      '• The land title is kept in a locked tin box in the main bedroom.',
+      '• The executor of the will is Grace Nakato.',
+    ].join('\n'))
   })
 })
