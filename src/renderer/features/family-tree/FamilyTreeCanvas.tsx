@@ -133,10 +133,24 @@ export function FamilyTreeCanvas({
   const dragRef = useRef<DragState | null>(null)
   const panRef = useRef<PanState | null>(null)
 
+  const initialLayout = useRef(layout)
   useEffect(() => {
-    setLocalPositions(positionsFromLayout(layout))
+    // Positions were initialised from this layout; re-running on mount could clear a
+    // drag that started before this passive effect was flushed.
+    if (layout === initialLayout.current) return
+    initialLayout.current = layout
+
+    // A refreshed layout keeps an in-progress drag (and where the pointer has moved
+    // it) as long as that person is still in the tree.
+    const next = positionsFromLayout(layout)
+    const drag = dragRef.current
+    if (drag && next[drag.personId]) {
+      next[drag.personId] = { x: drag.currentX, y: drag.currentY }
+    } else {
+      dragRef.current = null
+    }
+    setLocalPositions(next)
     setSaveError(false)
-    dragRef.current = null
     panRef.current = null
   }, [layout])
 
