@@ -2,8 +2,9 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { AuthUser, LocalBackupResult } from '../../shared/desktopApi'
+import type { AuthUser, LocalBackupResult, LocalRestoreResult } from '../../shared/desktopApi'
 import { noMutationLock, type MutationLock } from '../storage/MutationLock'
+import { stageRestore, validateBackupFolder } from './LocalBackupRestore'
 
 export interface SettingsBackupPicker {
   chooseDestination(): Promise<string | null>
@@ -13,12 +14,19 @@ export interface SettingsFolderOpener {
   open(path: string): Promise<void>
 }
 
+export interface SettingsRestoreHost {
+  chooseBackupFolder(): Promise<string | null>
+  /** Restarts the app so the staged restore is applied before the database opens. */
+  scheduleRelaunch(): void
+}
+
 interface SettingsServiceDependencies {
   db: DatabaseSync
   userDataPath: string
   appVersion: string
   picker: SettingsBackupPicker
   folderOpener: SettingsFolderOpener
+  restoreHost: SettingsRestoreHost
   session: { restore(): Promise<AuthUser | null> }
   now?: () => number
   mutationLock?: MutationLock
@@ -64,17 +72,42 @@ export class SettingsService {
     return { success: true }
   }
 
-  private async createBackupSnapshot(): Promise<LocalBackupResult> {
-    const current = await this.dependencies.session.restore()
-    if (!current) throw new Error('Sign in before creating a local backup.')
+  async restoreBackup(): Promise<LocalRestoreResult> {
+    const mutationLock = this.dependencies.mutationLock ?? noMutationLock
+    const result = await mutationLock.runExclusive(() => this.stageBackupRestore())
+    if (!result.canceled) this.dependencies.restoreHost.scheduleRelaunch()
+    return result
+  }
 
+  private async stageBackupRestore(): Promise<LocalRestoreResult> {
+    const current = await this.dependencies.session.restore()
+    if (!current) throw new Error('Sign in before restoring a local backup.')
+    this.requireSingleAccountProfile(current, 'Restoring a backup is available only when this Windows profile contains one Family Circle account.')
+
+    const folderPath = await this.dependencies.restoreHost.chooseBackupFolder()
+    if (!folderPath) return { canceled: true }
+
+    const backup = await validateBackupFolder({
+      folderPath,
+      appVersion: this.dependencies.appVersion,
+      expectedEmail: current.email,
+    })
+    await stageRestore({ backup, userDataPath: this.dependencies.userDataPath, now: this.now() })
+    return { canceled: false, restarting: true }
+  }
+
+  private requireSingleAccountProfile(current: AuthUser, message: string): void {
     const row = this.dependencies.db.prepare('SELECT COUNT(*) AS count, MIN(id) AS only_id FROM users').get() as {
       count: number
       only_id: number | null
     } | undefined
-    if (!row || Number(row.count) !== 1 || Number(row.only_id) !== current.id) {
-      throw new Error('Local backup is available only when this Windows profile contains one Family Circle account.')
-    }
+    if (!row || Number(row.count) !== 1 || Number(row.only_id) !== current.id) throw new Error(message)
+  }
+
+  private async createBackupSnapshot(): Promise<LocalBackupResult> {
+    const current = await this.dependencies.session.restore()
+    if (!current) throw new Error('Sign in before creating a local backup.')
+    this.requireSingleAccountProfile(current, 'Local backup is available only when this Windows profile contains one Family Circle account.')
 
     const destinationRoot = await this.dependencies.picker.chooseDestination()
     if (!destinationRoot) return { canceled: true, folderName: null, createdAt: null }

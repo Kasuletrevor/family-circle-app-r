@@ -81,6 +81,10 @@ export interface ChangePasswordInput {
   newPassword: string
 }
 
+export type LocalRestoreResult =
+  | { canceled: true }
+  | { canceled: false; restarting: true }
+
 export interface LocalBackupResult {
   canceled: boolean
   folderName: string | null
@@ -414,6 +418,7 @@ export interface DesktopApi {
   settings: {
     createBackup(): Promise<LocalBackupResult>
     openDataFolder(): Promise<{ success: true }>
+    restoreBackup(): Promise<LocalRestoreResult>
   }
   privateAi: {
     getStatus(): Promise<PrivateAiPublicStatus>

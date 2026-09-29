@@ -18,9 +18,10 @@ import { registerCircleIpc } from './circle/circleIpc'
 import { CircleService } from './circle/CircleService'
 import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
-import { prepareDatabase } from './database/database'
+import { prepareDatabase, resolveDatabasePaths } from './database/database'
 import { SettingsService } from './settings/SettingsService'
 import { AsyncMutationLock } from './storage/MutationLock'
+import { applyPendingRestore } from './settings/LocalBackupRestore'
 import { registerSettingsIpc } from './settings/settingsIpc'
 import { createStoryServices, retryPendingPrivateIndexes } from './story/createStoryServices'
 import { StoryChunkRepository } from './story/StoryChunkRepository'
@@ -94,9 +95,20 @@ function registerDesktopIpc(services: AppServices) {
 
 async function createAppServices(): Promise<AppServices> {
   const userDataPath = app.getPath('userData')
+  const appDataPath = app.getPath('appData')
+  const restore = await applyPendingRestore({
+    userDataPath,
+    databasePath: resolveDatabasePaths({ userDataPath, appDataPath }).activePath,
+  })
+  if (restore.status === 'failed') {
+    dialog.showErrorBox(
+      'Backup was not restored',
+      `Family Circle kept your existing data because the backup could not be restored.\n\n${restore.message}`,
+    )
+  }
   database = await prepareDatabase({
     userDataPath,
-    appDataPath: app.getPath('appData'),
+    appDataPath,
   })
 
   const users = new UserRepository(database)
@@ -130,6 +142,22 @@ async function createAppServices(): Promise<AppServices> {
           properties: ['openDirectory', 'createDirectory'],
         })
         return result.canceled ? null : result.filePaths[0] ?? null
+      },
+    },
+    restoreHost: {
+      async chooseBackupFolder() {
+        const result = await dialog.showOpenDialog({
+          title: 'Choose a Family Circle backup folder to restore',
+          properties: ['openDirectory'],
+        })
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
+      scheduleRelaunch() {
+        // Let the IPC reply reach the renderer before quitting; before-quit closes the database.
+        setTimeout(() => {
+          app.relaunch()
+          app.quit()
+        }, 300)
       },
     },
     folderOpener: {

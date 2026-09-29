@@ -16,11 +16,12 @@ describe('registerSettingsIpc', () => {
         createdAt: 123,
       })),
       openDataFolder: vi.fn(async () => ({ success: true as const })),
+      restoreBackup: vi.fn(async () => ({ canceled: true as const })),
     }
 
     registerSettingsIpc(ipc, service)
 
-    expect([...handlers.keys()]).toEqual(['settings:create-backup', 'settings:open-data-folder'])
+    expect([...handlers.keys()]).toEqual(['settings:create-backup', 'settings:open-data-folder', 'settings:restore-backup'])
     await expect(handlers.get('settings:create-backup')?.({ sender: { id: 99 } })).resolves.toMatchObject({
       canceled: false,
       folderName: 'Family Circle Backup 2026-09-25T10-00-00-000Z',
@@ -29,5 +30,8 @@ describe('registerSettingsIpc', () => {
 
     await expect(handlers.get('settings:open-data-folder')?.({ sender: { id: 99 } }, 'C:/Windows')).resolves.toEqual({ success: true })
     expect(service.openDataFolder).toHaveBeenCalledWith()
+
+    await expect(handlers.get('settings:restore-backup')?.({ sender: { id: 99 } }, 'C:/attacker-chosen-folder')).resolves.toEqual({ canceled: true })
+    expect(service.restoreBackup).toHaveBeenCalledWith()
   })
 })
