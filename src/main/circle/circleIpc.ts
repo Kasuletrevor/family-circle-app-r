@@ -29,6 +29,8 @@ export interface CircleIpcService {
   cancelInvitation(input: { personId: string }): Promise<{ success: true }>
   removeMember(input: { personId: string }): Promise<{ success: true }>
   leaveCircle(): Promise<{ success: true }>
+  renameCircle(input: { name: string }): Promise<{ success: true }>
+  deleteCircle(input: { confirmationName: string }): Promise<{ success: true }>
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -82,4 +84,8 @@ export function registerCircleIpc(ipc: IpcHandleRegistrar, service: CircleIpcSer
   ipc.handle('circle:cancel-invitation', (_event, payload) => service.cancelInvitation(personInput(payload)))
   ipc.handle('circle:remove-member', (_event, payload) => service.removeMember(personInput(payload)))
   ipc.handle('circle:leave', () => service.leaveCircle())
+  ipc.handle('circle:rename', (_event, payload) => service.renameCircle({ name: String(recordOf(payload).name ?? '') }))
+  ipc.handle('circle:delete', (_event, payload) => service.deleteCircle({
+    confirmationName: String(recordOf(payload).confirmationName ?? ''),
+  }))
 }

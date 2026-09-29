@@ -319,6 +319,22 @@ export class LegacyCircleAuthAdapter {
     return { success: true }
   }
 
+  async renameCircle(input: { serverUserId: string; circleId: string; name: string }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/rename`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      name: String(input.name ?? '').trim(),
+    })
+    return { success: true }
+  }
+
+  async deleteCircle(input: { serverUserId: string; circleId: string; confirmationName: string }): Promise<{ success: true }> {
+    await this.postJson(`/api/group/${encodeURIComponent(String(input.circleId ?? '').trim())}/delete`, {
+      fromUserId: String(input.serverUserId ?? '').trim(),
+      confirmationName: String(input.confirmationName ?? '').trim(),
+    })
+    return { success: true }
+  }
+
   async getMemberships(serverUserId: string): Promise<Array<{ id: string; name: string; role: string }>> {
     const groups = await this.listGroups(serverUserId)
     return groups.map(({ id, name, role }) => ({ id, name, role }))

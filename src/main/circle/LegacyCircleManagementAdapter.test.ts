@@ -77,7 +77,7 @@ describe('LegacyCircleAuthAdapter management writes', () => {
     }])
   })
 
-  it('cancels, removes, and leaves using only Jose-compatible internal payloads', async () => {
+  it('cancels, removes, leaves, renames, and deletes using only Jose-compatible internal payloads', async () => {
     const calls: Array<{ path: string; body: unknown }> = []
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       calls.push({
@@ -102,6 +102,16 @@ describe('LegacyCircleAuthAdapter management writes', () => {
       serverUserId: '99',
       circleId: 'g-1',
     })).resolves.toEqual({ success: true })
+    await expect(adapter.renameCircle({
+      serverUserId: '88',
+      circleId: 'g-1',
+      name: 'The New Family',
+    })).resolves.toEqual({ success: true })
+    await expect(adapter.deleteCircle({
+      serverUserId: '88',
+      circleId: 'g-1',
+      confirmationName: 'The New Family',
+    })).resolves.toEqual({ success: true })
 
     expect(calls).toEqual([
       {
@@ -115,6 +125,14 @@ describe('LegacyCircleAuthAdapter management writes', () => {
       {
         path: '/api/group/g-1/leave',
         body: { fromUserId: '99' },
+      },
+      {
+        path: '/api/group/g-1/rename',
+        body: { fromUserId: '88', name: 'The New Family' },
+      },
+      {
+        path: '/api/group/g-1/delete',
+        body: { fromUserId: '88', confirmationName: 'The New Family' },
       },
     ])
   })
