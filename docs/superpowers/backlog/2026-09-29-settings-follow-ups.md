@@ -47,13 +47,15 @@ Status key: `[ ]` open · `[x]` done
 
 ---
 
-### 3. [ ] Offline voice setup is not in Settings and cannot be removed
+### 3. [ ] Offline voice setup is not in Settings and cannot be removed (partly done)
 
 **Problem.** Voice (offline Whisper) has its own setup lifecycle: status, setup, pause, repair (`src/shared/desktopApi.ts:356-359`, under `story`). It is only reachable from My Story. Settings shows Private AI but not voice, and unlike Private AI (after #50) there is no way to remove the downloaded voice models.
 
 **Suggested direction.**
 - Add a "Offline voice" card to Settings reusing the Private AI card pattern (status, size, setup/pause/repair).
 - Port the #50 removal design: `OfflineVoiceAssetService.remove()`, stop any running transcription first, serialize with the mutation lock, confirm in the UI.
+
+**Partly done (PR #11).** No screen called the voice setup API at all, so voice could never be installed. My Story's Record voice now shows setup (size, progress, pause/continue/repair) when voice is not ready. Still open: a Settings card, and removing the voice models.
 
 ---
 
@@ -160,16 +162,22 @@ Answers list the three highest-ranked chunks even when one is barely relevant (f
 
 ## Repo housekeeping
 
-### 10. [ ] Delete stale Settings branches
+### 10. [x] Delete stale Settings branches
 
 - `origin/feat/settings-foundation`: closed PR #48, superseded by #49. Its unique work (Remove Private AI, Open data folder) has been ported in #50 and #51.
 - Local `feat/settings-v1`: merged as #49.
 
 ---
 
-### 11. [ ] Triage old open PRs
+### 11. [x] Triage old open PRs
 
 - #11 `feature/my-story-history-media-recorder`: "My Story History media and recorder experience", open since 2026-09-12.
 - #27 `ci/demo-deploy-status`: "report demo deployment status", open since 2026-09-18.
 
 Decide whether to rebase and merge, or close each one.
+
+**Done (#10, #11).** Deleted 65 stale remote branches (44 with merged PRs, 3 with closed PRs, 18 with no PR that were already in `main`, were identical old snapshots, or held superseded/temporary work) and 2 stale local branches. A list of their commit IDs was kept locally for recovery. Closed #27 as superseded (demo-deploy status reporting already exists in `windows-package.yml`). Revived #11: rebased onto `main` and tested in the real app. It adds My Story Review, History/restore, photo and audio attachments, and the voice recorder. While testing it, these were fixed on the same branch:
+- offline voice could never be installed (no UI called the setup API), so Record voice now offers setup;
+- dictation replaced existing memory text, so it now adds to it;
+- attachment delete had no confirmation, so it now asks first.
+
