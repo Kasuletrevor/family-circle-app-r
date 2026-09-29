@@ -143,6 +143,59 @@ describe('FamilyTreeCanvas', () => {
     }))
   })
 
+  it('keeps an in-progress drag when the tree layout is refreshed mid-drag', async () => {
+    // A layout refresh (or a delayed mount effect) used to clear the active drag,
+    // so pointer-up saved nothing and the user's move silently vanished.
+    const onPositionChange = vi.fn(async (_input: SaveTreePositionInput) => undefined)
+    const props = (layout: FamilyTreeLayout) => ({
+      layout,
+      paths: buildRelationshipPaths(layout),
+      viewerPersonId: 'user:alice',
+      viewerIsOwner: true,
+      selection: null,
+      onSelectionChange: vi.fn(),
+      onPositionChange,
+    })
+    const { rerender } = render(<FamilyTreeCanvas {...props(baseLayout)} />)
+    const svg = screen.getByTestId('family-tree-svg')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Select Alice' }), { pointerId: 1, clientX: 100, clientY: 100 })
+    rerender(<FamilyTreeCanvas {...props({ ...baseLayout, nodes: baseLayout.nodes.map((node) => ({ ...node })) })} />)
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 170, clientY: 135 })
+    const alice = screen.getByRole('button', { name: 'Select Alice' })
+    expect(Number(alice.getAttribute('data-x'))).toBe(70)
+
+    rerender(<FamilyTreeCanvas {...props({ ...baseLayout, nodes: baseLayout.nodes.map((node) => ({ ...node })) })} />)
+    expect(Number(alice.getAttribute('data-x'))).toBe(70)
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 170, clientY: 135 })
+
+    await waitFor(() => expect(onPositionChange).toHaveBeenCalledTimes(1))
+    expect(onPositionChange).toHaveBeenCalledWith({ personId: 'user:alice', x: 70, y: 35 })
+  })
+
+  it('drops an in-progress drag when the dragged person leaves the refreshed tree', async () => {
+    const onPositionChange = vi.fn(async (_input: SaveTreePositionInput) => undefined)
+    const props = (layout: FamilyTreeLayout) => ({
+      layout,
+      paths: buildRelationshipPaths(layout),
+      viewerPersonId: 'user:alice',
+      viewerIsOwner: true,
+      selection: null,
+      onSelectionChange: vi.fn(),
+      onPositionChange,
+    })
+    const { rerender } = render(<FamilyTreeCanvas {...props(baseLayout)} />)
+    const svg = screen.getByTestId('family-tree-svg')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Select Bob' }), { pointerId: 1, clientX: 100, clientY: 100 })
+    rerender(<FamilyTreeCanvas {...props({ ...baseLayout, nodes: baseLayout.nodes.filter((node) => node.id !== 'user:bob') })} />)
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 170, clientY: 135 })
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 170, clientY: 135 })
+
+    await Promise.resolve()
+    expect(onPositionChange).not.toHaveBeenCalled()
+  })
+
   it('lets an ordinary member drag only the viewer node', async () => {
     const onPositionChange = vi.fn(async (_input: SaveTreePositionInput) => undefined)
     renderCanvas({ viewerPersonId: 'user:alice', viewerIsOwner: false, onPositionChange })

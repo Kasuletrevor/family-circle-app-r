@@ -79,11 +79,13 @@ Status key: `[ ]` open · `[x]` done
 
 ## Tests and tooling
 
-### 6. [ ] Flaky Family Tree positioning test
+### 6. [x] Flaky Family Tree positioning test
 
 **Problem.** `src/renderer/features/family-tree/FamilyTreePage.positioning.test.tsx` fails intermittently with `expected "vi.fn()" to be called 1 times, but got 0 times`. It failed the Windows Package run on #49's final commit (run `36164234240`, test "persists one position write after a completed owner drag", line 71) and failed locally on a different test in the same file ("ordinary member can persist only the viewer node movement", line 109).
 
 **Suggested direction.** Likely a timing race between the simulated drag end and the debounced/async position save. Use fake timers or `waitFor` on the save mock instead of asserting synchronously.
+
+**Done.** This was a real component bug, not a test-timing issue. `FamilyTreeCanvas` ran a `[layout]` effect that set `dragRef.current = null`. That effect also runs on mount, as a passive effect: when the test found the node and pressed on it before React flushed the effect, the flush cleared the drag, so pointer-up saved nothing. Confirmed with logging in a failing run (`layout effect cleared an active drag` → `pointerUp drag present=false`). In the app, a tree refresh mid-drag would also silently drop the user's move. The effect now skips the layout it was initialised from, and keeps an in-progress drag (at its current position) when the layout refreshes, unless that person left the tree. A new deterministic test refreshes the layout mid-drag. Stress runs: 1/12 failures before, 0/25 after.
 
 ---
 
