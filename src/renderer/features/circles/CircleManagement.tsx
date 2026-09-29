@@ -58,7 +58,8 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
   const [notice, setNotice] = useState<Notice | null>(null)
   const [resendingPersonId, setResendingPersonId] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
-  const [circleName, setCircleName] = useState('')
+  // null means "not edited": the field shows the authoritative Circle name.
+  const [draftName, setDraftName] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
 
   useEffect(() => {
@@ -79,9 +80,11 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
 
   const details = loadState.details
   const currentCircleName = details?.circle.name ?? ''
+  const circleName = draftName ?? currentCircleName
 
   useEffect(() => {
-    setCircleName(currentCircleName)
+    // A new authoritative name (after rename or switching Circles) replaces any draft.
+    setDraftName(null)
   }, [currentCircleName])
   const isOwner = useMemo(() => {
     if (!details) return false
@@ -362,7 +365,7 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
                   value={circleName}
                   maxLength={120}
                   disabled={renaming}
-                  onChange={(event) => setCircleName(event.currentTarget.value)}
+                  onChange={(event) => setDraftName(event.currentTarget.value)}
                 />
               </label>
               <button className="circle-management__secondary" type="submit" disabled={!canRename}>
