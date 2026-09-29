@@ -67,6 +67,14 @@ Setup and repair remain explicit user actions:
 
 No setup state disables Vault upload, local extraction, or Story drafting/confirmation.
 
+### Progress shown to the user
+
+Settings and the Vault page share `PrivateAiSetupProgress`:
+
+- **Before starting**, the card shows what will actually be downloaded (`downloadSizeBytes`). A first-time setup shows the full "one-time download"; a repair after an engine upgrade shows only the engine ("Repair downloads about 18 MB"); a paused or partial setup shows what is left. The estimate uses file sizes only, with no hashing.
+- **During setup**, installed files are checked first ("Checking installed files…"). The bar, percent, bytes, speed and time left then cover **only the files being downloaded**, and a resumed file counts the bytes already on disk. Steps without a byte count ("Preparing the AI engine…", "Verifying download…") show an indeterminate bar.
+- Public progress carries a `phase` (`checking`, `downloading`, `verifying`, `extracting`). The offline voice setup shares the base types without these fields.
+
 ## Lazy llama.cpp lifecycle
 
 `AiRuntimeManager` starts no AI process at construction or normal app startup. It owns two local llama.cpp server lifecycles:
