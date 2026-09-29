@@ -1,14 +1,14 @@
 import type { PrivateAiPublicProgress, PrivateAiPublicStatus } from '../../shared/desktopApi'
 import type { IpcHandleRegistrar } from '../auth/authIpc'
-import type { PrivateAiProgress, PrivateAiState, PrivateAiStatus } from './privateAiModels'
+import type { PrivateAiPhase, PrivateAiProgress, PrivateAiSetupStatus, PrivateAiState } from './privateAiModels'
 
 export interface PrivateAiIpcService {
-  getStatus(): Promise<PrivateAiStatus>
+  getStatus(): Promise<PrivateAiSetupStatus>
   getVersion(): Promise<string>
-  startSetup(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiStatus>
-  pauseSetup(): PrivateAiStatus | null
-  repair(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiStatus>
-  remove(): Promise<PrivateAiStatus>
+  startSetup(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiSetupStatus>
+  pauseSetup(): PrivateAiSetupStatus | null
+  repair(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiSetupStatus>
+  remove(): Promise<PrivateAiSetupStatus>
 }
 
 interface PrivateAiIpcEvent {
@@ -31,16 +31,23 @@ function safeState(value: unknown): PrivateAiState {
     : 'failed'
 }
 
-function safeStatus(status: PrivateAiStatus, version: string): PrivateAiPublicStatus {
+function safeStatus(status: PrivateAiSetupStatus, version: string): PrivateAiPublicStatus {
   const state = safeState(status.state)
   return {
     state,
     ready: state === 'ready',
     repairRequired: state === 'repair_required',
-    totalSizeBytes: Number(status.totalBytes) || 0,
+    totalSizeBytes: Number(status.installSizeBytes) || 0,
+    downloadSizeBytes: Number(status.pendingDownloadBytes) || 0,
     version,
     message: status.message == null ? null : String(status.message),
   }
+}
+
+function safePhase(value: PrivateAiPhase | undefined): PrivateAiPublicProgress['phase'] {
+  return value === 'checking' || value === 'downloading' || value === 'verifying' || value === 'extracting'
+    ? value
+    : null
 }
 
 function safeProgress(progress: PrivateAiProgress): PrivateAiPublicProgress {
@@ -48,6 +55,7 @@ function safeProgress(progress: PrivateAiProgress): PrivateAiPublicProgress {
   const fileCount = Number(progress.fileCount) || 0
   return {
     state: safeState(progress.state),
+    phase: safePhase(progress.phase),
     percent: Number(progress.percent) || 0,
     fileIndex,
     fileCount,
@@ -67,8 +75,8 @@ export function registerPrivateAiIpc(
   service: PrivateAiIpcService,
   onReady?: () => void,
 ): void {
-  const publicStatus = async (status: PrivateAiStatus) => safeStatus(status, await service.getVersion())
-  const maybeReady = (status: PrivateAiStatus) => {
+  const publicStatus = async (status: PrivateAiSetupStatus) => safeStatus(status, await service.getVersion())
+  const maybeReady = (status: PrivateAiSetupStatus) => {
     if (status.state === 'ready') onReady?.()
   }
   const progressFor = (event: unknown) => {

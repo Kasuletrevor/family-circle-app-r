@@ -13,6 +13,8 @@ function internalStatus(state: string = 'not_installed') {
     totalBytes: 2_000_000_000,
     fileBytesDownloaded: 0,
     fileSizeBytes: 0,
+    installSizeBytes: 2_000_000_000,
+    pendingDownloadBytes: state === 'ready' ? 0 : 19_000_000,
     message: state === 'ready' ? 'Private AI is ready' : 'Private AI is optional',
     url: 'https://secret.example/model',
     targetPath: 'C:/secret',
@@ -107,6 +109,7 @@ describe('registerPrivateAiIpc', () => {
       ready: false,
       repairRequired: true,
       totalSizeBytes: 2_000_000_000,
+      downloadSizeBytes: 19_000_000,
       version: '2026.09.04',
       message: 'Private AI is optional',
     })
@@ -116,6 +119,7 @@ describe('registerPrivateAiIpc', () => {
     const result = await handlers.get('private-ai:start-setup')?.({ sender: { send } })
     expect(send).toHaveBeenCalledWith('private-ai:progress', {
       state: 'downloading',
+      phase: 'downloading',
       percent: 25,
       fileIndex: 2,
       fileCount: 3,
@@ -132,6 +136,7 @@ describe('registerPrivateAiIpc', () => {
       ready: true,
       repairRequired: false,
       totalSizeBytes: 2_000_000_000,
+      downloadSizeBytes: 0,
       version: '2026.09.04',
       message: 'Private AI is ready',
     })

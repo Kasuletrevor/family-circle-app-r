@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AsyncMutationLock } from '../storage/MutationLock'
-import type { PrivateAiStatus } from './privateAiModels'
+import type { PrivateAiSetupStatus } from './privateAiModels'
 import { createPrivateAiRemoval } from './privateAiRemoval'
 
-const notInstalled = { state: 'not_installed' } as PrivateAiStatus
+const notInstalled = { state: 'not_installed' } as PrivateAiSetupStatus
 
 describe('createPrivateAiRemoval', () => {
   it('stops runtimes before removing assets', async () => {
