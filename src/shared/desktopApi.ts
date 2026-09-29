@@ -411,6 +411,7 @@ export interface DesktopApi {
   }
   settings: {
     createBackup(): Promise<LocalBackupResult>
+    openDataFolder(): Promise<{ success: true }>
   }
   privateAi: {
     getStatus(): Promise<PrivateAiPublicStatus>

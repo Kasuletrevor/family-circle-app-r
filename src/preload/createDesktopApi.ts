@@ -80,6 +80,7 @@ type DesktopChannel =
   | 'vault:delete'
   | 'vault:ask'
   | 'settings:create-backup'
+  | 'settings:open-data-folder'
   | 'private-ai:get-status'
   | 'private-ai:start-setup'
   | 'private-ai:pause-setup'
@@ -512,6 +513,10 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
     settings: {
       async createBackup() {
         return safeBackupResult(await invoke('settings:create-backup'))
+      },
+      async openDataFolder() {
+        await invoke('settings:open-data-folder')
+        return { success: true as const }
       },
     },
     privateAi: {
