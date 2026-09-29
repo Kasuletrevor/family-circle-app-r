@@ -36,8 +36,22 @@ describe('NomicClient local embeddings', () => {
     expect([...await client.embedDocument('three')]).toEqual([5, 6])
   })
 
+  it('accepts the pooled vector nested one level deep, as the shipped llama.cpp b8772 returns it', async () => {
+    // Captured shape of POST /embedding from llama-server b8772 with --pooling mean.
+    const { client } = makeClient([[{ index: 0, embedding: [[-0.0205, 0.0148, -0.1584]] }]])
+
+    expect([...await client.embedDocument('family history')]).toEqual([...new Float32Array([-0.0205, 0.0148, -0.1584])])
+  })
+
   it('maps empty and non-numeric vectors to stable embedding-failed', async () => {
-    for (const response of [[], { embedding: [] }, { embedding: [1, 'bad'] }, { unexpected: true }]) {
+    for (const response of [
+      [],
+      { embedding: [] },
+      { embedding: [1, 'bad'] },
+      { unexpected: true },
+      // Several nested vectors mean per-token (unpooled) output, which is not a single embedding.
+      [{ index: 0, embedding: [[1, 2], [3, 4]] }],
+    ]) {
       const { client } = makeClient([response])
       await expect(client.embedQuery('question')).rejects.toMatchObject({ code: 'embedding-failed' })
     }
