@@ -47,6 +47,8 @@ function service(overrides: Partial<CircleClient> = {}): CircleClient {
     cancelInvitation: vi.fn(async () => undefined),
     removeMember: vi.fn(async () => undefined),
     leaveCircle: vi.fn(async () => undefined),
+    renameCircle: vi.fn(async () => undefined),
+    deleteCircle: vi.fn(async () => undefined),
     ...overrides,
   }
 }
@@ -143,6 +145,63 @@ describe('CircleManagement', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Leave Circle' }))
     expect(await screen.findByRole('heading', { name: 'My Circles destination' })).toBeInTheDocument()
     expect(leaveCircle).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets the owner rename the Circle and reloads authoritative details', async () => {
+    const renameCircle = vi.fn(async () => undefined)
+    const getCircleDetails = vi.fn(async () => ownerDetails)
+    renderPage(service({ renameCircle, getCircleDetails }))
+
+    const input = await screen.findByLabelText('Circle name')
+    expect(input).toHaveValue('Kasule Family')
+    expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+
+    fireEvent.change(input, { target: { value: '  Kasule Family Circle  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+
+    await waitFor(() => expect(renameCircle).toHaveBeenCalledWith('  Kasule Family Circle  '))
+    expect(await screen.findByText('Circle renamed.')).toBeInTheDocument()
+    await waitFor(() => expect(getCircleDetails).toHaveBeenCalledTimes(2))
+  })
+
+  it('deletes the Circle only after the owner types its exact name', async () => {
+    const deleteCircle = vi.fn(async () => undefined)
+    renderPage(service({ deleteCircle }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Circle' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete Kasule Family?' })
+    const confirm = within(dialog).getByRole('button', { name: 'Delete Circle' })
+    expect(confirm).toBeDisabled()
+
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'kasule family' } })
+    expect(confirm).toBeDisabled()
+    fireEvent.click(confirm)
+    expect(deleteCircle).not.toHaveBeenCalled()
+
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Kasule Family' } })
+    expect(confirm).toBeEnabled()
+    fireEvent.click(confirm)
+
+    expect(await screen.findByRole('heading', { name: 'My Circles destination' })).toBeInTheDocument()
+    expect(deleteCircle).toHaveBeenCalledWith('Kasule Family')
+  })
+
+  it('does not show Circle settings to non-owners', async () => {
+    renderPage(service({ getCircleDetails: vi.fn(async () => memberDetails) }))
+
+    expect(await screen.findByRole('button', { name: 'Leave Circle' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Circle name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Circle' })).not.toBeInTheDocument()
+  })
+
+  it('shows a safe message when renaming fails', async () => {
+    const renameCircle = vi.fn(async () => { throw new Error('Only the Circle owner can rename this Circle') })
+    renderPage(service({ renameCircle }))
+
+    fireEvent.change(await screen.findByLabelText('Circle name'), { target: { value: 'Other name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Only the Circle owner can rename this Circle.')
   })
 
   it('maps known stale-state errors and never exposes raw backend details', async () => {

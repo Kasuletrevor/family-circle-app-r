@@ -48,6 +48,8 @@ it('shows a stable stale-Circle message and reloads repaired active details afte
     cancelInvitation: vi.fn(async () => undefined),
     removeMember,
     leaveCircle: vi.fn(async () => undefined),
+    renameCircle: vi.fn(async () => undefined),
+    deleteCircle: vi.fn(async () => undefined),
   } satisfies CircleClient
 
   render(

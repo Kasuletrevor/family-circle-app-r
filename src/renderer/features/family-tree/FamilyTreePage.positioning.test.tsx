@@ -47,6 +47,8 @@ function circleService(
     cancelInvitation: vi.fn(async () => undefined),
     removeMember: vi.fn(async () => undefined),
     leaveCircle: vi.fn(async () => undefined),
+    renameCircle: vi.fn(async () => undefined),
+    deleteCircle: vi.fn(async () => undefined),
   } as unknown as CircleClient
 }
 

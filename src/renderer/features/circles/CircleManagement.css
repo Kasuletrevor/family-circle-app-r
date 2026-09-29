@@ -294,9 +294,63 @@
   line-height: 1.6;
 }
 
+.circle-management__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--kk-border);
+  border-radius: 16px;
+  background: white;
+}
+
+.circle-management__settings-head h2 {
+  font-size: 18px;
+}
+
+.circle-management__settings-head p {
+  margin-top: 5px !important;
+  color: var(--kk-text);
+  font-size: 13px;
+}
+
+.circle-management__rename {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.circle-management__rename label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--kk-navy);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.circle-management__rename input {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--kk-border);
+  border-radius: 10px;
+  color: var(--kk-text);
+  background: white;
+  font: inherit;
+  font-weight: 500;
+}
+
+.circle-management__membership--danger {
+  padding: 14px 16px;
+  border-color: #efd0d0;
+  background: #fdf7f7;
+}
+
 @media (max-width: 760px) {
   .circle-management__header,
   .circle-management__membership,
+  .circle-management__rename,
   .circle-management__row {
     align-items: stretch;
     flex-direction: column;
