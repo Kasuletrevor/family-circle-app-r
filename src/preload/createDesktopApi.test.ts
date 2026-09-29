@@ -164,7 +164,7 @@ describe('createDesktopApi', () => {
     expect(invoke).toHaveBeenCalledWith('vault:delete', { documentId: 5 })
     const answer = await api.vault.ask({ question: 'Who?', scope: { type: 'documents', documentIds: [5] } })
     expect(invoke).toHaveBeenCalledWith('vault:ask', { question: 'Who?', scope: { type: 'documents', documentIds: [5] } })
-    expect(answer).toEqual({ answer: 'Grounded answer', sources: [{ documentId: 5, fileName: 'Family History.pdf', excerpt: 'Safe excerpt' }] })
+    expect(answer).toEqual({ answer: 'Grounded answer', sources: [{ sourceType: 'document', documentId: 5, fileName: 'Family History.pdf', excerpt: 'Safe excerpt' }] })
     expect(JSON.stringify(answer)).not.toMatch(/embedding|modelPath|localUserId|storedRelativePath|extractedText/)
     const backup = await api.settings.createBackup()
     expect(invoke).toHaveBeenCalledWith('settings:create-backup')

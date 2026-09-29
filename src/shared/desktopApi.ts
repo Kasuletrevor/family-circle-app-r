@@ -273,15 +273,16 @@ export interface VaultUploadProgress {
   percent: number
 }
 
+/** What a Private AI question searches: Vault documents, confirmed My Story memories, or both. */
 export type VaultQueryScope =
   | { type: 'all' }
   | { type: 'documents'; documentIds: number[] }
+  | { type: 'story' }
+  | { type: 'story-and-vault' }
 
-export interface VaultAnswerSource {
-  documentId: number
-  fileName: string
-  excerpt: string
-}
+export type VaultAnswerSource =
+  | { sourceType: 'document'; documentId: number; fileName: string; excerpt: string }
+  | { sourceType: 'story'; chapter: string; label: string; excerpt: string }
 
 export interface VaultAnswer {
   answer: string

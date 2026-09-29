@@ -37,28 +37,44 @@ describe('VaultQueryService archive compatibility facade', () => {
     })
     expect(result).toEqual({
       answer: 'Grounded answer',
-      sources: [{ documentId: 9, fileName: 'Letters.txt', excerpt: 'A safe excerpt' }],
+      sources: [{ sourceType: 'document', documentId: 9, fileName: 'Letters.txt', excerpt: 'A safe excerpt' }],
     })
   })
 
-  it('does not expose archive route metadata or Story sources through the legacy Vault contract', async () => {
+  it('asks My Story alone or together with the Vault', async () => {
+    const ask = vi.fn(async () => archiveAnswer())
+    const service = new VaultQueryService({ ask })
+
+    await service.ask({ question: 'Where did I study?', scope: { type: 'story' } })
+    await service.ask({ question: 'Tell me about grandmother', scope: { type: 'story-and-vault' } })
+
+    expect(ask).toHaveBeenNthCalledWith(1, { question: 'Where did I study?', scope: { type: 'story' } })
+    expect(ask).toHaveBeenNthCalledWith(2, {
+      question: 'Tell me about grandmother',
+      scope: { type: 'combined', vault: { type: 'all' } },
+    })
+  })
+
+  it('returns Story and document sources without route metadata or internal file labels', async () => {
     const service = new VaultQueryService({
       ask: vi.fn(async () => ({
         answer: 'Answer',
         route: 'complex' as const,
         sources: [
-          { sourceType: 'story' as const, chapter: 'Identity', label: 'Full name', fileName: 'My Story › Identity › Full name', excerpt: 'Hidden from Vault facade' },
+          { sourceType: 'story' as const, chapter: 'Identity', label: 'Full name', fileName: 'My Story › Identity › Full name', excerpt: 'My name' },
           { sourceType: 'document' as const, documentId: 3, fileName: 'History.pdf', excerpt: 'Visible' },
         ],
       })),
     })
 
-    const result = await service.ask({ question: 'Question?', scope: { type: 'all' } })
+    const result = await service.ask({ question: 'Question?', scope: { type: 'story-and-vault' } })
 
     expect(Object.keys(result).sort()).toEqual(['answer', 'sources'])
-    expect(result.sources).toEqual([{ documentId: 3, fileName: 'History.pdf', excerpt: 'Visible' }])
+    expect(result.sources).toEqual([
+      { sourceType: 'story', chapter: 'Identity', label: 'Full name', excerpt: 'My name' },
+      { sourceType: 'document', documentId: 3, fileName: 'History.pdf', excerpt: 'Visible' },
+    ])
     expect(JSON.stringify(result)).not.toContain('route')
-    expect(JSON.stringify(result)).not.toContain('My Story')
   })
 
   it('maps shared archive errors back to the existing safe Vault error contract', async () => {

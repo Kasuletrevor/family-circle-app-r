@@ -30,7 +30,7 @@ describe('createDesktopApi Vault ask', () => {
     expect(invoke).toHaveBeenCalledWith('vault:ask', { question: 'Where was grandmother born?', scope: { type: 'all' } })
     expect(result).toEqual({
       answer: 'She was born in Jinja.',
-      sources: [{ documentId: 3, fileName: 'History.pdf', excerpt: 'She was born in Jinja.' }],
+      sources: [{ sourceType: 'document', documentId: 3, fileName: 'History.pdf', excerpt: 'She was born in Jinja.' }],
     })
     expect(JSON.stringify(result)).not.toMatch(/embedding|storedRelativePath|extractedText|modelPath|localUserId/)
   })
