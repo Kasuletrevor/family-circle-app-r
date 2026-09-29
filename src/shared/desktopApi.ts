@@ -297,16 +297,25 @@ export type PrivateAiPublicState =
   | 'repair_required'
   | 'failed'
 
-export interface PrivateAiPublicStatus {
+/** Setup status of an optional local asset pack (the offline voice setup uses this shape). */
+export interface VoicePublicStatus {
   state: PrivateAiPublicState
   ready: boolean
   repairRequired: boolean
+  /** Full size of all required assets. */
   totalSizeBytes: number
   version: string
   message: string | null
 }
 
-export interface PrivateAiPublicProgress {
+export interface PrivateAiPublicStatus extends VoicePublicStatus {
+  /** Bytes still to download for setup or repair (0 when ready). */
+  downloadSizeBytes: number
+}
+
+export type PrivateAiPublicPhase = 'checking' | 'downloading' | 'verifying' | 'extracting'
+
+export interface VoicePublicProgress {
   state: PrivateAiPublicState
   percent: number
   fileIndex: number
@@ -317,6 +326,11 @@ export interface PrivateAiPublicProgress {
   fileBytesDownloaded: number
   fileSizeBytes: number
   message: string | null
+}
+
+export interface PrivateAiPublicProgress extends VoicePublicProgress {
+  /** Current step; bytes and percent cover only the files still being downloaded. */
+  phase: PrivateAiPublicPhase | null
 }
 
 export type StoryMediaType = 'photo' | 'audio'
@@ -341,8 +355,6 @@ export interface StoryMediaAddResult {
   items: Array<StoryMediaPublicItem | StoryMediaAddFailure>
 }
 
-export type VoicePublicStatus = PrivateAiPublicStatus
-export type VoicePublicProgress = PrivateAiPublicProgress
 
 export interface StoryDesktopApi {
   get(): Promise<StoryPublicState>

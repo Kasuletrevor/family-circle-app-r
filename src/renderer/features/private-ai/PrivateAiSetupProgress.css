@@ -1,0 +1,59 @@
+.private-ai-progress {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+}
+
+.private-ai-progress__copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--kk-text-muted);
+  font-size: 11px;
+}
+
+.private-ai-progress__copy strong {
+  color: var(--kk-navy);
+}
+
+.private-ai-progress__meter {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf2;
+}
+
+.private-ai-progress__meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--kk-teal);
+  transition: width 160ms ease;
+}
+
+/* Checking, verifying and unpacking have no byte count; show that work is happening. */
+.private-ai-progress__meter--indeterminate span {
+  position: absolute;
+  width: 35%;
+  animation: private-ai-progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes private-ai-progress-slide {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .private-ai-progress__meter--indeterminate span {
+    left: 0;
+    width: 100%;
+    opacity: 0.45;
+    animation: none;
+  }
+}
+
+.private-ai-progress__detail {
+  color: var(--kk-text-muted);
+  font-size: 10.5px;
+}

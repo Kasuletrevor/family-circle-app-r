@@ -38,6 +38,8 @@ describe('createDesktopApi Private AI contract', () => {
       ready: false,
       repairRequired: true,
       totalSizeBytes: 2_000_000_000,
+      // No separate download size from main: assume the full install is needed.
+      downloadSizeBytes: 2_000_000_000,
       version: '2026.09.04',
       message: 'Private AI needs repair',
     })
@@ -70,6 +72,7 @@ describe('createDesktopApi Private AI contract', () => {
 
     ;(bridgeListener as ((payload: unknown) => void) | null)?.({
       state: 'downloading',
+      phase: 'downloading',
       percent: 42,
       fileIndex: 2,
       fileCount: 3,
@@ -89,6 +92,7 @@ describe('createDesktopApi Private AI contract', () => {
 
     expect(listener).toHaveBeenCalledWith({
       state: 'downloading',
+      phase: 'downloading',
       percent: 42,
       fileIndex: 2,
       fileCount: 3,
@@ -100,5 +104,8 @@ describe('createDesktopApi Private AI contract', () => {
       message: 'Downloading Private AI',
     })
     expect(JSON.stringify(listener.mock.calls[0]?.[0])).not.toMatch(/url|path|sha|model|pid|port/i)
+
+    ;(bridgeListener as ((payload: unknown) => void) | null)?.({ state: 'verifying', phase: 'C:/secret/phase' })
+    expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'verifying', phase: null }))
   })
 })

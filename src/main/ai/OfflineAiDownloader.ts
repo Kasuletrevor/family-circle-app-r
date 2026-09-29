@@ -232,6 +232,40 @@ function stagingPartPath(rootPath: string, manifest: OfflineAiManifest, file: Of
   return safeTarget(join(rootPath, '.staging', manifest.version), `${file.targetPath}${suffix}`)
 }
 
+const MAX_RANGE_PART_FILES = 8
+
+async function stagedBytes(fs: OfflineAiDownloadFs, partPath: string): Promise<number> {
+  const whole = (await fs.stat(partPath))?.size ?? 0
+  if (whole > 0) return whole
+  let ranges = 0
+  for (let index = 0; index < MAX_RANGE_PART_FILES; index += 1) {
+    ranges += (await fs.stat(`${partPath}.range-${index}`))?.size ?? 0
+  }
+  return ranges
+}
+
+/**
+ * Bytes a setup or repair would still download, estimated from file sizes only
+ * (no hashing), so it is cheap enough to show before the user starts.
+ */
+export async function estimatePendingDownloadBytes(
+  manifest: OfflineAiManifest,
+  rootPath: string,
+  fs: OfflineAiDownloadFs = new NodeDownloadFs(),
+): Promise<number> {
+  let pending = 0
+  for (const file of manifest.files.filter((candidate) => candidate.required)) {
+    const finalPath = safeTarget(rootPath, file.targetPath)
+    const installed = file.extract
+      ? (await fs.stat(join(finalPath, 'llama-server.exe'))) !== null
+      : (await fs.stat(finalPath))?.size === file.sizeBytes
+    if (installed) continue
+    const staged = await stagedBytes(fs, stagingPartPath(rootPath, manifest, file))
+    pending += Math.max(0, file.sizeBytes - Math.min(staged, file.sizeBytes))
+  }
+  return pending
+}
+
 function percent(downloaded: number, total: number): number {
   if (total <= 0) return 100
   return Math.max(0, Math.min(100, Math.round((downloaded / total) * 100)))
@@ -294,17 +328,34 @@ export class OfflineAiDownloader {
   ): Promise<OfflineAiDownloadResult> {
     this.pauseRequested = false
     const requiredFiles = manifest.files.filter((file) => file.required)
-    const totalBytes = requiredFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
-    let completedBytes = 0
 
+    // Check installed files first (hashing can take a few seconds) so progress can be
+    // measured against only what still has to be downloaded, e.g. just the engine on repair.
+    const pendingFiles: OfflineAiManifestFile[] = []
     for (let index = 0; index < requiredFiles.length; index += 1) {
       const file = requiredFiles[index]!
-      const finalPath = safeTarget(rootPath, file.targetPath)
+      onProgress?.({
+        state: 'verifying',
+        phase: 'checking',
+        percent: 0,
+        fileIndex: index + 1,
+        fileCount: requiredFiles.length,
+        fileName: file.name,
+        bytesDownloaded: 0,
+        totalBytes: 0,
+        fileBytesDownloaded: 0,
+        fileSizeBytes: file.sizeBytes,
+        message: 'Checking installed Private AI files',
+      })
+      if (!(await this.isAlreadyInstalled(file, safeTarget(rootPath, file.targetPath)))) pendingFiles.push(file)
+    }
 
-      if (await this.isAlreadyInstalled(file, finalPath)) {
-        completedBytes += file.sizeBytes
-        continue
-      }
+    const totalBytes = pendingFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
+    let completedBytes = 0
+
+    for (let index = 0; index < pendingFiles.length; index += 1) {
+      const file = pendingFiles[index]!
+      const finalPath = safeTarget(rootPath, file.targetPath)
 
       const partPath = stagingPartPath(rootPath, manifest, file)
       await this.fs.mkdir(dirname(partPath))
@@ -319,7 +370,7 @@ export class OfflineAiDownloader {
           manifest,
           file,
           fileIndex: index + 1,
-          fileCount: requiredFiles.length,
+          fileCount: pendingFiles.length,
           completedBytes,
           totalBytes,
           onProgress,
@@ -341,7 +392,7 @@ export class OfflineAiDownloader {
         manifest,
         file,
         fileIndex: index + 1,
-        fileCount: requiredFiles.length,
+        fileCount: pendingFiles.length,
         fileBytes: file.sizeBytes,
         completedBytes,
         totalBytes,
@@ -360,7 +411,7 @@ export class OfflineAiDownloader {
           manifest,
           file,
           fileIndex: index + 1,
-          fileCount: requiredFiles.length,
+          fileCount: pendingFiles.length,
           fileBytes: file.sizeBytes,
           completedBytes,
           totalBytes,

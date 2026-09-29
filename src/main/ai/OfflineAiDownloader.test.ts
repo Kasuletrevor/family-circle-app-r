@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { OfflineAiDownloader } from './OfflineAiDownloader'
+import { OfflineAiDownloader, estimatePendingDownloadBytes } from './OfflineAiDownloader'
 import type { OfflineAiManifest, OfflineAiManifestFile, PrivateAiProgress } from './privateAiModels'
 
 function sha256(value: string): string {
@@ -315,5 +315,60 @@ describe('OfflineAiDownloader', () => {
     const invalid = makeDownloader(response(200, [zipBytes]))
     await expect(invalid.downloader.downloadAll(manifest(invalidRuntime), root)).rejects.toMatchObject({ code: 'sha-mismatch' })
     expect(invalid.archive.extractZip).not.toHaveBeenCalled()
+  })
+
+  it('measures progress against only the files that still need downloading', async () => {
+    const installed = modelFile('already here', { name: 'AI answers', type: 'model', targetPath: 'models/answers.gguf' })
+    const missing = modelFile('abcdef', { name: 'AI search', targetPath: 'models/search.gguf' })
+    const root = testRoot()
+    const { downloader, fs } = makeDownloader(response(200, ['abc', 'def']))
+    fs.seed(join(root, 'models/answers.gguf'), 'already here')
+    const progress: PrivateAiProgress[] = []
+
+    await downloader.downloadAll({ version: 'test-1', files: [installed, missing] }, root, (event) => progress.push(event))
+
+    // Installed files are checked first, so the user sees why the bar has not started yet.
+    expect(progress[0]).toMatchObject({ state: 'verifying', phase: 'checking', percent: 0 })
+    const downloading = progress.filter((event) => event.phase === 'downloading')
+    expect(downloading.length).toBeGreaterThan(0)
+    for (const event of downloading) {
+      expect(event).toMatchObject({ totalBytes: 6, fileIndex: 1, fileCount: 1, fileName: 'AI search' })
+    }
+    expect(downloading.map((event) => event.bytesDownloaded)).toEqual([3, 6])
+    expect(progress.at(-1)).toMatchObject({ bytesDownloaded: 6, totalBytes: 6, percent: 100 })
+  })
+
+  it('starts a resumed download from the bytes already on disk', async () => {
+    const file = modelFile('abcdef')
+    const root = testRoot()
+    const { downloader, fs } = makeDownloader(response(206, ['def']))
+    fs.seed(join(root, '.staging', 'test-1', 'models/model.gguf.part'), 'abc')
+    const progress: PrivateAiProgress[] = []
+
+    await downloader.downloadAll(manifest(file), root, (event) => progress.push(event))
+
+    const downloading = progress.filter((event) => event.phase === 'downloading')
+    expect(downloading[0]).toMatchObject({ bytesDownloaded: 6, totalBytes: 6, percent: 100 })
+  })
+
+  it('estimates the bytes still to download from file sizes without hashing', async () => {
+    const root = testRoot()
+    const engine = modelFile('engine-zip', { name: 'AI engine', type: 'runtime', extract: true, targetPath: 'bin/engine' })
+    const answers = modelFile('answers-model', { name: 'AI answers', type: 'model', targetPath: 'models/answers.gguf' })
+    const search = modelFile('search-model', { name: 'AI search', targetPath: 'models/search.gguf' })
+    const fs = new MemoryFs()
+    fs.seed(join(root, 'models/answers.gguf'), 'answers-model')
+    fs.seed(join(root, '.staging', 'test-1', 'models/search.gguf.part.range-0'), 'sear')
+    fs.seed(join(root, '.staging', 'test-1', 'models/search.gguf.part.range-1'), 'ch')
+    const plan = { version: 'test-1', files: [engine, answers, search] }
+
+    // Engine missing entirely, answers installed, search partly downloaded in ranges.
+    await expect(estimatePendingDownloadBytes(plan, root, fs as never))
+      .resolves.toBe(engine.sizeBytes + search.sizeBytes - 6)
+
+    fs.seed(join(root, 'bin/engine', 'llama-server.exe'), 'exe')
+    fs.seed(join(root, 'models/search.gguf'), 'search-model')
+    await expect(estimatePendingDownloadBytes(plan, root, fs as never)).resolves.toBe(0)
+    expect(fs.operations.some((operation) => operation.startsWith('read:'))).toBe(false)
   })
 })

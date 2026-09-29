@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { OfflineAiDownloadError, OfflineAiDownloader } from './OfflineAiDownloader'
+import { estimatePendingDownloadBytes, OfflineAiDownloadError, OfflineAiDownloader } from './OfflineAiDownloader'
 import type {
   InstalledAiPaths,
   OfflineAiDownloadResult,
@@ -10,7 +10,7 @@ import type {
   OfflineAiManifestFile,
   PrivateAiProgress,
   PrivateAiState,
-  PrivateAiStatus,
+  PrivateAiSetupStatus,
 } from './privateAiModels'
 
 export interface OfflineAiDownloaderPort {
@@ -32,7 +32,7 @@ interface InstalledVersionMarker {
   version: string
 }
 
-function phaseForState(state: PrivateAiState): PrivateAiStatus['phase'] {
+function phaseForState(state: PrivateAiState): PrivateAiSetupStatus['phase'] {
   switch (state) {
     case 'downloading': return 'downloading'
     case 'paused': return 'paused'
@@ -61,8 +61,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function statusFor(state: PrivateAiState, totalBytes: number, message: string | null = null): PrivateAiStatus {
+function statusFor(
+  state: PrivateAiState,
+  totalBytes: number,
+  message: string | null = null,
+  pendingDownloadBytes = state === 'ready' ? 0 : totalBytes,
+): PrivateAiSetupStatus {
   return {
+    installSizeBytes: totalBytes,
+    pendingDownloadBytes,
     state,
     phase: phaseForState(state),
     percent: state === 'ready' ? 100 : 0,
@@ -81,7 +88,7 @@ export class OfflineAiAssetService {
   private readonly rootPath: string
   private readonly markerPath: string
   private readonly downloader: OfflineAiDownloaderPort
-  private transientStatus: PrivateAiStatus | null = null
+  private transientStatus: PrivateAiSetupStatus | null = null
 
   constructor(private readonly dependencies: OfflineAiAssetServiceDependencies) {
     this.rootPath = join(dependencies.userDataPath, 'offline-ai')
@@ -93,21 +100,25 @@ export class OfflineAiAssetService {
     return (await this.readManifest()).version
   }
 
-  async getStatus(): Promise<PrivateAiStatus> {
+  async getStatus(): Promise<PrivateAiSetupStatus> {
     const manifest = await this.readManifest()
     const totalBytes = this.totalBytes(manifest)
-    if (this.transientStatus && ['downloading', 'paused', 'verifying', 'failed'].includes(this.transientStatus.state)) {
-      return { ...this.transientStatus, totalBytes }
+    if (this.transientStatus && ['downloading', 'paused', 'verifying'].includes(this.transientStatus.state)) {
+      return this.transientStatus
+    }
+    const pending = () => estimatePendingDownloadBytes(manifest, this.rootPath)
+    if (this.transientStatus?.state === 'failed') {
+      return { ...this.transientStatus, pendingDownloadBytes: await pending() }
     }
 
     const marker = await this.readMarker()
-    if (!marker) return statusFor('not_installed', totalBytes)
-    if (marker.version !== manifest.version) return statusFor('repair_required', totalBytes, 'Private AI needs repair')
+    if (!marker) return statusFor('not_installed', totalBytes, null, await pending())
+    if (marker.version !== manifest.version) return statusFor('repair_required', totalBytes, 'Private AI needs repair', await pending())
 
     const paths = await this.verifyRequiredAssets(manifest)
     return paths
       ? statusFor('ready', totalBytes, 'Private AI is ready')
-      : statusFor('repair_required', totalBytes, 'Private AI needs repair')
+      : statusFor('repair_required', totalBytes, 'Private AI needs repair', await pending())
   }
 
   async getInstalledPaths(): Promise<InstalledAiPaths | null> {
@@ -117,7 +128,7 @@ export class OfflineAiAssetService {
     return this.verifyRequiredAssets(manifest)
   }
 
-  async startSetup(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiStatus> {
+  async startSetup(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiSetupStatus> {
     const manifest = await this.readManifest()
     const totalBytes = this.totalBytes(manifest)
     const current = await this.getStatus()
@@ -126,13 +137,18 @@ export class OfflineAiAssetService {
     await mkdir(this.rootPath, { recursive: true })
 
     for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt += 1) {
+      const estimatedPending = current.pendingDownloadBytes
       this.transientStatus = statusFor('downloading', totalBytes, attempt > 1
         ? `Retrying Private AI download (attempt ${attempt})`
-        : 'Downloading Private AI')
+        : 'Downloading Private AI', estimatedPending)
 
       try {
         const result = await this.downloader.downloadAll(manifest, this.rootPath, (progress) => {
-          this.transientStatus = { ...progress, totalBytes }
+          // Progress totals cover only the files being downloaded; keep the install size separately.
+          const pendingDownloadBytes = progress.phase === 'checking'
+            ? estimatedPending
+            : Math.max(0, progress.totalBytes - progress.bytesDownloaded)
+          this.transientStatus = { ...progress, installSizeBytes: totalBytes, pendingDownloadBytes }
           onProgress?.(this.transientStatus)
         })
 
@@ -176,7 +192,7 @@ export class OfflineAiAssetService {
     return this.transientStatus
   }
 
-  pauseSetup(): PrivateAiStatus | null {
+  pauseSetup(): PrivateAiSetupStatus | null {
     this.downloader.pause()
     if (!this.transientStatus || !['downloading', 'verifying'].includes(this.transientStatus.state)) return this.transientStatus
     this.transientStatus = {
@@ -188,13 +204,13 @@ export class OfflineAiAssetService {
     return this.transientStatus
   }
 
-  async repair(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiStatus> {
+  async repair(onProgress?: (progress: PrivateAiProgress) => void): Promise<PrivateAiSetupStatus> {
     await rm(this.markerPath, { force: true })
     this.transientStatus = null
     return this.startSetup(onProgress)
   }
 
-  async remove(): Promise<PrivateAiStatus> {
+  async remove(): Promise<PrivateAiSetupStatus> {
     const current = await this.getStatus()
     if (current.state === 'downloading' || current.state === 'verifying') {
       throw new Error('Pause Private AI setup before removing downloaded files')

@@ -141,4 +141,30 @@ describe('OfflineAiAssetService installed asset state', () => {
 
     await expect(service.getStatus()).resolves.toMatchObject({ totalBytes: expectedTotal })
   })
+
+  it('reports only the bytes a setup or repair still needs to download', async () => {
+    const { service, manifest, write, writeMarker } = await makeFixture()
+    const [engine, answers, search] = manifest.files
+    const fullSize = engine!.sizeBytes + answers!.sizeBytes + search!.sizeBytes
+
+    await expect(service.getStatus()).resolves.toMatchObject({
+      state: 'not_installed',
+      installSizeBytes: fullSize,
+      pendingDownloadBytes: fullSize,
+    })
+
+    // Models kept from an older install; only the engine is missing (an engine upgrade).
+    await write('models/qwen.gguf', 'qwen-test-bytes')
+    await write('models/nomic.gguf', 'nomic-test-bytes')
+    await write('installed-version.json', JSON.stringify({ version: 'test-1' }))
+    await expect(service.getStatus()).resolves.toMatchObject({
+      state: 'repair_required',
+      installSizeBytes: fullSize,
+      pendingDownloadBytes: engine!.sizeBytes,
+    })
+
+    await write('bin/runtime/llama-server.exe', 'fake executable')
+    await writeMarker()
+    await expect(service.getStatus()).resolves.toMatchObject({ state: 'ready', pendingDownloadBytes: 0 })
+  })
 })

@@ -9,6 +9,7 @@ export type PrivateAiState =
 
 export type PrivateAiPhase =
   | 'idle'
+  | 'checking'
   | 'downloading'
   | 'verifying'
   | 'extracting'
@@ -49,6 +50,14 @@ export interface PrivateAiProgress {
 }
 
 export interface PrivateAiStatus extends PrivateAiProgress {}
+
+/** Private AI setup status (the offline voice setup shares PrivateAiStatus without these). */
+export interface PrivateAiSetupStatus extends PrivateAiStatus {
+  /** Full size of all required assets. */
+  installSizeBytes: number
+  /** Bytes still to download for setup or repair (0 when ready). */
+  pendingDownloadBytes: number
+}
 
 export interface InstalledAiPaths {
   llamaDir: string

@@ -18,6 +18,8 @@ import type { AuthState, AuthUser, DesktopApi } from '../../../shared/desktopApi
 import type { AuthClient } from '../../services/auth/AuthClient'
 import { DesktopPrivateAiClient } from '../../services/ai/DesktopPrivateAiClient'
 import type { PrivateAiClient, PrivateAiProgress, PrivateAiStatus } from '../../services/ai/PrivateAiClient'
+import { PrivateAiSetupProgress } from '../private-ai/PrivateAiSetupProgress'
+import { downloadSizeLabel } from '../private-ai/setupProgress'
 import './SettingsPage.css'
 
 type SettingsDesktopApi = Pick<DesktopApi, 'app' | 'settings'>
@@ -125,6 +127,10 @@ export function SettingsPage({
           ready: progress.state === 'ready',
           repairRequired: progress.state === 'repair_required',
           message: progress.message,
+          // Keep "left to download" accurate if the user pauses.
+          downloadSizeBytes: progress.state === 'downloading' && progress.totalSizeBytes > 0
+            ? Math.max(0, progress.totalSizeBytes - progress.bytesDownloaded)
+            : current.downloadSizeBytes,
         } : current)
       })
     } catch {
@@ -296,7 +302,7 @@ export function SettingsPage({
     || aiStatus?.state === 'paused'
     || aiStatus?.state === 'repair_required'
     || aiStatus?.state === 'failed'
-  const aiPercent = aiProgress ? Math.max(0, Math.min(100, aiProgress.percent)) : null
+  const aiDownloadLabel = aiStatus ? downloadSizeLabel(aiStatus) : null
 
   return (
     <section className="settings-page">
@@ -359,16 +365,11 @@ export function SettingsPage({
           </div>
           <div className="settings-ai-meta">
             <span><strong>Asset version</strong>{aiStatus?.version || 'Checking…'}</span>
-            <span><strong>Download size</strong>{aiStatus ? formatBytes(aiStatus.totalSizeBytes) : 'Checking…'}</span>
+            <span><strong>Install size</strong>{aiStatus ? formatBytes(aiStatus.totalSizeBytes) : 'Checking…'}</span>
             <span><strong>Privacy</strong>Runs locally after setup</span>
           </div>
-          {aiPercent != null && (aiStatus?.state === 'downloading' || aiStatus?.state === 'verifying') ? (
-            <div className="settings-progress" role="status" aria-live="polite">
-              <div><span>{aiProgress?.message ?? 'Preparing Private AI'}</span><strong>{Math.round(aiPercent)}%</strong></div>
-              <div className="settings-progress__meter"><span style={{ width: `${aiPercent}%` }} /></div>
-              {aiProgress?.totalSizeBytes ? <small>{formatBytes(aiProgress.bytesDownloaded)} of {formatBytes(aiProgress.totalSizeBytes)}</small> : null}
-            </div>
-          ) : null}
+          {aiDownloadLabel ? <p className="settings-detail">{aiDownloadLabel}</p> : null}
+          <PrivateAiSetupProgress state={aiStatus?.state} progress={aiProgress} />
           <div className="settings-actions">
             {aiStatus?.state === 'not_installed' || aiStatus?.state === 'paused' || aiStatus?.state === 'failed' ? (
               <button className="settings-button settings-button--primary" type="button" disabled={aiBusy} onClick={() => void startOrResumePrivateAi()}>
@@ -404,7 +405,10 @@ export function SettingsPage({
               </div>
             </div>
           ) : null}
-          {aiStatus?.message ? <p className="settings-detail">{aiStatus.message}</p> : null}
+          {/* While setup runs, the progress panel already names the step. */}
+          {aiStatus?.message && aiStatus.state !== 'downloading' && aiStatus.state !== 'verifying'
+            ? <p className="settings-detail">{aiStatus.message}</p>
+            : null}
           {aiError ? <p className="settings-error" role="alert">{aiError}</p> : null}
         </article>
 
