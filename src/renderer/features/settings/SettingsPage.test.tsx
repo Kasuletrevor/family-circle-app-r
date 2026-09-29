@@ -53,6 +53,7 @@ describe('SettingsPage', () => {
         state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
         version: 'qwen3.5-0.8b', message: 'Private AI is ready',
       })),
+      remove: vi.fn(),
       onProgress: vi.fn(() => () => undefined),
     }
 
@@ -111,7 +112,7 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/Backup created: Family Circle Backup/)).toBeInTheDocument()
 
     expect(screen.queryByRole('button', { name: /restore/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /remove private ai/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove Private AI' })).toBeInTheDocument()
   })
 
   it('keeps Pause enabled while Private AI setup is still in flight', async () => {
@@ -140,6 +141,7 @@ describe('SettingsPage', () => {
       startSetup,
       pauseSetup,
       repair: vi.fn(),
+      remove: vi.fn(),
       onProgress: vi.fn((listener) => {
         progressListeners.push(listener)
         return () => undefined
@@ -203,6 +205,7 @@ describe('SettingsPage', () => {
       startSetup: vi.fn(),
       pauseSetup: vi.fn(),
       repair: vi.fn(),
+      remove: vi.fn(),
       onProgress: vi.fn(() => () => undefined),
     }
     const desktop = {
@@ -221,5 +224,84 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('New passwords do not match.')).toBeInTheDocument()
     expect(changePassword).not.toHaveBeenCalled()
+  })
+
+  it('removes Private AI only after explicit confirmation', async () => {
+    const readyStatus = {
+      state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
+      version: 'qwen3.5-0.8b', message: null,
+    }
+    const remove = vi.fn(async () => ({
+      ...readyStatus, state: 'not_installed' as const, ready: false, message: 'Private AI is not installed',
+    }))
+    const privateAi: PrivateAiClient = {
+      getStatus: vi.fn(async () => readyStatus),
+      startSetup: vi.fn(),
+      pauseSetup: vi.fn(),
+      repair: vi.fn(),
+      remove,
+      onProgress: vi.fn(() => () => undefined),
+    }
+    const desktop = {
+      app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
+      settings: { createBackup: vi.fn() },
+    } as Pick<DesktopApi, 'app' | 'settings'>
+
+    render(
+      <SettingsPage user={user} auth={{} as AuthClient} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+
+    await screen.findByText('Ready (Offline)')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Private AI' }))
+    expect(remove).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('button', { name: 'Remove downloaded AI files' })).not.toBeInTheDocument()
+    expect(remove).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Private AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove downloaded AI files' }))
+
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Not set up')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /set up private ai/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove Private AI' })).not.toBeInTheDocument()
+  })
+
+  it('does not offer removal while Private AI is downloading and surfaces removal failures', async () => {
+    const status = (state: 'downloading' | 'paused') => ({
+      state, ready: false, repairRequired: false, totalSizeBytes: 0, version: 'test', message: null,
+    })
+    const getStatus = vi.fn(async () => status('downloading'))
+    const privateAi: PrivateAiClient = {
+      getStatus,
+      startSetup: vi.fn(),
+      pauseSetup: vi.fn(),
+      repair: vi.fn(),
+      remove: vi.fn(async () => { throw new Error('Pause Private AI setup before removing downloaded files') }),
+      onProgress: vi.fn(() => () => undefined),
+    }
+    const desktop = {
+      app: { getVersion: vi.fn(async () => '0.2.3'), getPlatform: vi.fn(async () => 'win32' as const) },
+      settings: { createBackup: vi.fn() },
+    } as Pick<DesktopApi, 'app' | 'settings'>
+
+    const { unmount } = render(
+      <SettingsPage user={user} auth={{} as AuthClient} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+    await screen.findByText('Downloading')
+    expect(screen.queryByRole('button', { name: 'Remove Private AI' })).not.toBeInTheDocument()
+    unmount()
+
+    getStatus.mockResolvedValue(status('paused'))
+    render(
+      <SettingsPage user={user} auth={{} as AuthClient} onAuthStateChange={() => undefined} privateAi={privateAi} desktop={desktop} />,
+    )
+    await screen.findByText('Paused')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Private AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove downloaded AI files' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pause Private AI setup before removing downloaded files')
+    expect(screen.getByRole('button', { name: 'Remove downloaded AI files' })).toBeEnabled()
   })
 })
