@@ -16,7 +16,7 @@ const user: AuthUser = {
 }
 
 describe('/ai route', () => {
-  it('routes AI Assistant to the real Ask your Vault experience instead of a placeholder', async () => {
+  it('routes AI Assistant to the real Ask Private AI experience instead of a placeholder', async () => {
     Object.defineProperty(window, 'familyCircle', {
       configurable: true,
       value: {
@@ -41,7 +41,7 @@ describe('/ai route', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Ask your Vault' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Ask Private AI' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Question' })).toBeInTheDocument()
   })
 })
