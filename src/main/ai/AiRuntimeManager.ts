@@ -114,6 +114,13 @@ export class AiRuntimeManager {
     this.stopManagedChild('generation')
   }
 
+  async stopAllAndWait(): Promise<void> {
+    await Promise.all([
+      this.stopManagedChildAndWait('embedding'),
+      this.stopManagedChildAndWait('generation'),
+    ])
+  }
+
   private async ensureRuntime(kind: RuntimeKind): Promise<boolean> {
     const port = this.portFor(kind)
     const existing = this.childFor(kind)
@@ -187,5 +194,32 @@ export class AiRuntimeManager {
     if (!child) return
     child.kill()
     if (this.childFor(kind) === child) this.setChild(kind, null)
+  }
+
+  private async stopManagedChildAndWait(kind: RuntimeKind): Promise<void> {
+    const child = this.childFor(kind)
+    if (!child) return
+
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        if (this.childFor(kind) === child) this.setChild(kind, null)
+        resolve()
+      }
+
+      child.once('exit', finish)
+      child.once('error', finish)
+
+      const killed = child.kill()
+      if (!killed) {
+        finish()
+        return
+      }
+
+      const timeout = setTimeout(finish, 5_000)
+      timeout.unref?.()
+    })
   }
 }
