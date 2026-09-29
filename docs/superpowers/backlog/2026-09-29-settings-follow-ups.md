@@ -8,7 +8,7 @@ Status key: `[ ]` open · `[x]` done
 
 ## Product gaps
 
-### 1. [ ] Restore from local backup
+### 1. [x] Restore from local backup
 
 **Problem.** Settings can create a local backup (`SettingsService.createBackup`), but there is no way to restore one. The rebuild spec lists "local backup/restore" as a local application-layer responsibility (`docs/superpowers/specs/2026-09-02-family-circle-rebuild-design.md:51`). A backup that cannot be restored only protects users who restore it by hand.
 
@@ -20,9 +20,15 @@ Status key: `[ ]` open · `[x]` done
 - Run under the shared `MutationLock` so Vault/Story/indexing cannot write mid-restore.
 - Decide how the single-account boundary (see #4) applies to restore.
 
+**Done (this branch).** Settings → Local data backup → *Restore from backup…*
+- Confirmation step, then a folder picker. The main process checks that `backup.json` has `formatVersion: 1` and includes the database, that the backup was not made by a newer app version, that it contains exactly one account, and that the account's email matches the signed-in user. It also keeps the same single-account-profile rule as backup.
+- Validation and staging run under the shared `MutationLock`. The backup is copied to `<userData>/pending-restore` (with the `restore.json` marker written last) and the app relaunches.
+- At startup, before the database opens, `applyPendingRestore` moves the current `family.db` (+ `-wal`/`-shm`), `vault/` and `story/` into `<userData>/pre-restore` and moves the staged data into place. If a step fails it rolls back and shows an error dialog. Private AI, voice models and the protected session are never touched.
+- Still open: restoring on a fresh computer before signing in (needs the sign-in/registration flow to offer it), and cleanup or UI for the `pre-restore` safety copy (it is replaced on the next restore).
+
 ---
 
-### 2. [ ] Circle settings: rename and delete Circle
+### 2. [x] Circle settings: rename and delete Circle
 
 **Problem.** The legacy app's Settings tab let owners **rename** and **delete** a Circle, and let members **leave**. The rebuild has Leave Circle (`src/renderer/features/circles/CircleManagement.tsx:124`), but no rename or delete anywhere. The members/invitations spec says "Circle settings next" (`docs/superpowers/specs/2026-09-04-circle-members-invitations-design.md:405`).
 
@@ -32,6 +38,12 @@ Status key: `[ ]` open · `[x]` done
 - Check which endpoints Jose's shared API offers for rename/delete (and whether they need `/v2` identity-bound versions).
 - Owner-only rename; owner-only delete with a confirmation step that requires typing the Circle name, matching the legacy UX.
 - Place in Circle management (per-Circle) rather than device Settings.
+
+**Done (this branch).** Circle management (Members/Invitations) now shows owners a *Circle settings* section:
+- Rename: trimmed, 1–120 characters, no-op when unchanged → `POST /api/group/:id/rename { fromUserId, name }`.
+- Delete: a dialog that stays disabled until the exact Circle name is typed → `POST /api/group/:id/delete { fromUserId, confirmationName }`, then selects another Circle (or none) and navigates to My Circles.
+- Owner checks run in `CircleService` (main); the renderer never sends Circle or user IDs.
+- Endpoint shapes were taken from the legacy app and its local Circle server stand-in. **Verify against the live shared server** before release.
 
 ---
 
@@ -91,11 +103,19 @@ Status key: `[ ]` open · `[x]` done
 
 ---
 
-### 9. [ ] Windows Package does not run on PRs that touch packaging-critical code
+### 9. [x] Windows Package does not run on PRs that touch packaging-critical code
 
 **Problem.** On `pull_request`, `.github/workflows/windows-package.yml` runs only for a hand-picked path list. That list omits `src/main/main.ts`, `src/preload/**`, `src/shared/desktopApi.ts`, `src/main/ai/**`, `src/main/settings/**`, `src/main/vault/**` and most of `src/renderer/features/**`. On `push` to `main` it runs for all of `src/**`. #50 and #51 therefore had their first packaged build only after merging.
 
 **Suggested direction.** Add at least `src/main/**`, `src/preload/**` and `src/shared/**` to the `pull_request` paths, or align the PR filter with the push filter.
+
+**Done (this branch).** The `pull_request` paths now include `src/main/**`, `src/preload/**` and `src/shared/**` (replacing the per-folder main entries and `src/shared/story.ts`). `windowsPackageWorkflow.test.ts` now asserts these paths on the `pull_request` block specifically. Renderer-only changes still skip the packaged build; the Desktop shell CI `npm run check` build covers them.
+
+### 12. [ ] Top bar shows a stale Circle name
+
+**Problem.** `TopBar` loads the active Circle name once on mount (`src/renderer/app/TopBar.tsx`, `loadShell`). After switching, leaving, deleting or renaming a Circle, the top bar keeps showing the old name until the app reloads.
+
+**Suggested direction.** Have `DesktopCircleClient` notify subscribers when a Circle mutation succeeds (or reload the shell snapshot on route change), and have `TopBar` refresh its shell snapshot then.
 
 ---
 
