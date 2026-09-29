@@ -28,9 +28,10 @@ describe('createDesktopApi Private AI contract', () => {
       startSetup(): Promise<unknown>
       pauseSetup(): Promise<unknown>
       repair(): Promise<unknown>
+      remove(): Promise<unknown>
     } }).privateAi
 
-    expect(Object.keys(privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'onProgress'])
+    expect(Object.keys(privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'remove', 'onProgress'])
     const status = await privateAi.getStatus()
     expect(status).toEqual({
       state: 'repair_required',
@@ -45,9 +46,11 @@ describe('createDesktopApi Private AI contract', () => {
     await privateAi.startSetup()
     await privateAi.pauseSetup()
     await privateAi.repair()
+    await privateAi.remove()
     expect(invoke).toHaveBeenCalledWith('private-ai:start-setup')
     expect(invoke).toHaveBeenCalledWith('private-ai:pause-setup')
     expect(invoke).toHaveBeenCalledWith('private-ai:repair')
+    expect(invoke).toHaveBeenCalledWith('private-ai:remove')
   })
 
   it('sanitizes Private AI progress and preserves listener unsubscribe semantics', () => {

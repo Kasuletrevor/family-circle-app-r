@@ -6,6 +6,7 @@ import { NomicClient } from './ai/NomicClient'
 import { OfflineAiAssetService } from './ai/OfflineAiAssetService'
 import { PrivateArchiveQueryService } from './ai/PrivateArchiveQueryService'
 import { registerPrivateAiIpc } from './ai/privateAiIpc'
+import { createPrivateAiRemoval } from './ai/privateAiRemoval'
 import { QwenClient } from './ai/QwenClient'
 import { AuthService } from './auth/AuthService'
 import { registerAuthIpc } from './auth/authIpc'
@@ -69,7 +70,20 @@ function registerDesktopIpc(services: AppServices) {
     transcription: services.voiceTranscriptionService,
     mutationLock: services.mutationLock,
   })
-  registerPrivateAiIpc(ipcMain, services.privateAiService, () => {
+  const privateAi = services.privateAiService
+  const removePrivateAi = createPrivateAiRemoval({
+    mutationLock: services.mutationLock,
+    stopRuntimes: async () => { await aiRuntimeManager?.stopAllAndWait() },
+    removeAssets: () => privateAi.remove(),
+  })
+  registerPrivateAiIpc(ipcMain, {
+    getStatus: () => privateAi.getStatus(),
+    getVersion: () => privateAi.getVersion(),
+    startSetup: (onProgress) => privateAi.startSetup(onProgress),
+    pauseSetup: () => privateAi.pauseSetup(),
+    repair: (onProgress) => privateAi.repair(onProgress),
+    remove: removePrivateAi,
+  }, () => {
     void retryPendingPrivateIndexes(
       services.sessions,
       services.vaultIndexService,

@@ -417,6 +417,7 @@ export interface DesktopApi {
     startSetup(): Promise<PrivateAiPublicStatus>
     pauseSetup(): Promise<PrivateAiPublicStatus>
     repair(): Promise<PrivateAiPublicStatus>
+    remove(): Promise<PrivateAiPublicStatus>
     onProgress(listener: (progress: PrivateAiPublicProgress) => void): () => void
   }
   story: StoryDesktopApi

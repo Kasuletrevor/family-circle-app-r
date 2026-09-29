@@ -177,6 +177,43 @@
   background: var(--kk-cool-tint);
 }
 
+.settings-button--danger-quiet {
+  border: 1px solid transparent;
+  color: #a23838;
+  background: transparent;
+}
+
+.settings-button--danger-quiet:not(:disabled):hover {
+  border-color: #e7c3c3;
+  background: #fbf1f1;
+}
+
+.settings-button--danger {
+  border: 1px solid #b43f3f;
+  color: white;
+  background: #b43f3f;
+}
+
+.settings-button--danger:not(:disabled):hover {
+  background: #9c3434;
+}
+
+.settings-confirm {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e7c3c3;
+  border-radius: 10px;
+  background: #fdf6f6;
+}
+
+.settings-confirm p {
+  margin: 0;
+  color: var(--kk-navy);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
 .settings-notice,
 .settings-error {
   display: flex;

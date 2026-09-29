@@ -34,5 +34,6 @@ export interface PrivateAiClient {
   startSetup(): Promise<PrivateAiStatus>
   pauseSetup(): Promise<PrivateAiStatus>
   repair(): Promise<PrivateAiStatus>
+  remove(): Promise<PrivateAiStatus>
   onProgress(listener: (progress: PrivateAiProgress) => void): () => void
 }

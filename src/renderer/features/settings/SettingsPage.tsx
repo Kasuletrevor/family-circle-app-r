@@ -8,6 +8,7 @@ import {
   Pause,
   Save,
   ShieldCheck,
+  Trash2,
   UserRound,
   Wrench,
 } from 'lucide-react'
@@ -84,6 +85,7 @@ export function SettingsPage({
   const [aiBusy, setAiBusy] = useState(false)
   const [aiPauseBusy, setAiPauseBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [confirmRemoveAi, setConfirmRemoveAi] = useState(false)
 
   const [backupBusy, setBackupBusy] = useState(false)
   const [backupMessage, setBackupMessage] = useState<string | null>(null)
@@ -227,6 +229,21 @@ export function SettingsPage({
     }
   }
 
+  async function removePrivateAi() {
+    setAiBusy(true)
+    setAiError(null)
+    try {
+      const status = await privateAiClient.remove()
+      setAiStatus(status)
+      setAiProgress(null)
+      setConfirmRemoveAi(false)
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Could not remove Private AI.')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   async function createBackup() {
     setBackupBusy(true)
     setBackupMessage(null)
@@ -243,6 +260,10 @@ export function SettingsPage({
     }
   }
 
+  const canRemoveAi = aiStatus?.state === 'ready'
+    || aiStatus?.state === 'paused'
+    || aiStatus?.state === 'repair_required'
+    || aiStatus?.state === 'failed'
   const aiPercent = aiProgress ? Math.max(0, Math.min(100, aiProgress.percent)) : null
 
   return (
@@ -332,7 +353,25 @@ export function SettingsPage({
                 <Wrench size={15} /> Repair Private AI
               </button>
             ) : null}
+            {canRemoveAi && !confirmRemoveAi ? (
+              <button className="settings-button settings-button--danger-quiet" type="button" disabled={aiBusy} onClick={() => setConfirmRemoveAi(true)}>
+                <Trash2 size={15} /> Remove Private AI
+              </button>
+            ) : null}
           </div>
+          {canRemoveAi && confirmRemoveAi ? (
+            <div className="settings-confirm" role="group" aria-label="Confirm Private AI removal">
+              <p>This deletes the downloaded AI models from this computer. Your Vault documents and Story stay here, but AI answers and indexing stop until you set up Private AI again.</p>
+              <div className="settings-actions">
+                <button className="settings-button settings-button--danger" type="button" disabled={aiBusy} onClick={() => void removePrivateAi()}>
+                  <Trash2 size={15} /> {aiBusy ? 'Removing…' : 'Remove downloaded AI files'}
+                </button>
+                <button className="settings-button settings-button--secondary" type="button" disabled={aiBusy} onClick={() => setConfirmRemoveAi(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
           {aiStatus?.message ? <p className="settings-detail">{aiStatus.message}</p> : null}
           {aiError ? <p className="settings-error" role="alert">{aiError}</p> : null}
         </article>

@@ -194,6 +194,18 @@ export class OfflineAiAssetService {
     return this.startSetup(onProgress)
   }
 
+  async remove(): Promise<PrivateAiStatus> {
+    const current = await this.getStatus()
+    if (current.state === 'downloading' || current.state === 'verifying') {
+      throw new Error('Pause Private AI setup before removing downloaded files')
+    }
+    this.downloader.pause()
+    this.transientStatus = null
+    await rm(this.rootPath, { recursive: true, force: true })
+    const manifest = await this.readManifest()
+    return statusFor('not_installed', this.totalBytes(manifest), 'Private AI is not installed')
+  }
+
   private async readManifest(): Promise<OfflineAiManifest> {
     const raw = await readFile(this.dependencies.manifestPath, 'utf8')
     const parsed = JSON.parse(raw) as OfflineAiManifest
