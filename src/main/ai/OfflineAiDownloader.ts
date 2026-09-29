@@ -154,28 +154,43 @@ class NodeHttpPort implements OfflineAiHttpPort {
   }
 }
 
-class PowerShellArchivePort implements OfflineAiArchivePort {
+export class PowerShellArchivePort implements OfflineAiArchivePort {
   async extractZip(zipPath: string, destinationPath: string): Promise<void> {
     await mkdir(dirname(destinationPath), { recursive: true })
-    await new Promise<void>((resolvePromise, reject) => {
-      const child = spawn(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
-          zipPath,
-          destinationPath,
-        ],
-        { windowsHide: true },
-      )
-      child.once('error', reject)
-      child.once('exit', (code) => {
-        if (code === 0) resolvePromise()
-        else reject(new OfflineAiDownloadError('extract-failed', 'Private AI runtime extraction failed'))
+    // Windows PowerShell's Expand-Archive only accepts files named *.zip, and the
+    // downloader stages archives as *.zip.part, so extract from a temporary .zip name.
+    const archivePath = /\.zip$/i.test(zipPath) ? zipPath : `${zipPath}.zip`
+    if (archivePath !== zipPath) await rename(zipPath, archivePath)
+    try {
+      await new Promise<void>((resolvePromise, reject) => {
+        // Paths travel in environment variables: arguments after -Command are joined
+        // into the script text instead of populating $args.
+        const child = spawn(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            '$ErrorActionPreference = "Stop"; Expand-Archive -LiteralPath $env:FAMILY_CIRCLE_ARCHIVE -DestinationPath $env:FAMILY_CIRCLE_ARCHIVE_DESTINATION -Force',
+          ],
+          {
+            windowsHide: true,
+            env: {
+              ...process.env,
+              FAMILY_CIRCLE_ARCHIVE: archivePath,
+              FAMILY_CIRCLE_ARCHIVE_DESTINATION: destinationPath,
+            },
+          },
+        )
+        child.once('error', reject)
+        child.once('exit', (code) => {
+          if (code === 0) resolvePromise()
+          else reject(new OfflineAiDownloadError('extract-failed', 'Private AI runtime extraction failed'))
+        })
       })
-    })
+    } finally {
+      if (archivePath !== zipPath) await rename(archivePath, zipPath).catch(() => undefined)
+    }
   }
 }
 
