@@ -249,20 +249,32 @@ function safeBackupResult(value: unknown): LocalBackupResult {
 function safePrivateAiStatus(value: unknown): PrivateAiPublicStatus {
   const raw = recordOf(value)
   const state = safePrivateAiState(raw.state)
+  const totalSizeBytes = Number(raw.totalSizeBytes) || 0
   return {
     state,
     ready: raw.ready === true && state === 'ready',
     repairRequired: raw.repairRequired === true && state === 'repair_required',
-    totalSizeBytes: Number(raw.totalSizeBytes) || 0,
+    totalSizeBytes,
+    // The offline voice setup does not report a separate download size.
+    downloadSizeBytes: raw.downloadSizeBytes == null
+      ? (state === 'ready' ? 0 : totalSizeBytes)
+      : Number(raw.downloadSizeBytes) || 0,
     version: String(raw.version ?? ''),
     message: raw.message == null ? null : String(raw.message),
   }
+}
+
+function safePrivateAiPhase(value: unknown): PrivateAiPublicProgress['phase'] {
+  return value === 'checking' || value === 'downloading' || value === 'verifying' || value === 'extracting'
+    ? value
+    : null
 }
 
 function safePrivateAiProgress(value: unknown): PrivateAiPublicProgress {
   const raw = recordOf(value)
   return {
     state: safePrivateAiState(raw.state),
+    phase: safePrivateAiPhase(raw.phase),
     percent: Number(raw.percent) || 0,
     fileIndex: Number(raw.fileIndex) || 0,
     fileCount: Number(raw.fileCount) || 0,

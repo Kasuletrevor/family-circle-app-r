@@ -96,7 +96,7 @@ describe('createDesktopApi Story contract', () => {
       message: 'Downloading offline voice', targetPath: 'C:/secret', sha256: 'SECRET', modelPath: 'C:/secret.bin',
     })
     expect(listener).toHaveBeenCalledWith({
-      state: 'downloading', percent: 25, fileIndex: 1, fileCount: 2, fileName: 'Whisper runtime',
+      state: 'downloading', phase: null, percent: 25, fileIndex: 1, fileCount: 2, fileName: 'Whisper runtime',
       bytesDownloaded: 100, totalSizeBytes: 400, fileBytesDownloaded: 100, fileSizeBytes: 200,
       message: 'Downloading offline voice',
     })
