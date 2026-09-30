@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { VaultDocumentInternal } from './vaultModels'
+import { InteractiveAiGate } from '../ai/InteractiveAiGate'
+import { AsyncMutationLock, type MutationLock } from '../storage/MutationLock'
 import { EMBEDDING_MODEL_ID, INDEX_VERSION, VaultIndexService } from './VaultIndexService'
 
 function document(overrides: Partial<VaultDocumentInternal> = {}): VaultDocumentInternal {
@@ -25,7 +27,7 @@ function document(overrides: Partial<VaultDocumentInternal> = {}): VaultDocument
   }
 }
 
-function makeHarness(rows: VaultDocumentInternal[] = [document()], options: { aiReady?: boolean } = {}) {
+function makeHarness(rows: VaultDocumentInternal[] = [document()], options: { aiReady?: boolean; mutationLock?: MutationLock; interactiveGate?: InteractiveAiGate } = {}) {
   const documents = {
     rows,
     getByIdForUser: vi.fn(async (localUserId: number, documentId: number) =>
@@ -42,6 +44,11 @@ function makeHarness(rows: VaultDocumentInternal[] = [document()], options: { ai
       if (!row) throw new Error('missing')
       row.indexStatus = 'failed'
       row.lastErrorCode = code
+    }),
+    markWaitingForAi: vi.fn(async (localUserId: number, documentId: number) => {
+      const row = rows.find((candidate) => candidate.localUserId === localUserId && candidate.id === documentId)
+      if (!row) throw new Error('missing')
+      row.indexStatus = 'waiting_for_ai'
     }),
   }
   const chunks = {
@@ -63,7 +70,7 @@ function makeHarness(rows: VaultDocumentInternal[] = [document()], options: { ai
   const assets = {
     getStatus: vi.fn(async () => ({ state: options.aiReady === false ? 'not_installed' : 'ready' })),
   }
-  const service = new VaultIndexService({ documents, chunks, runtime, nomic, assets })
+  const service = new VaultIndexService({ documents, chunks, runtime, nomic, assets, mutationLock: options.mutationLock, interactiveGate: options.interactiveGate })
   return { service, documents, chunks, runtime, nomic, assets, rows }
 }
 
@@ -182,5 +189,125 @@ describe('VaultIndexService', () => {
     expect(documents.markIndexing).not.toHaveBeenCalled()
     expect(runtime.ensureEmbeddingRuntime).not.toHaveBeenCalled()
     expect(row.indexStatus).toBe('waiting_for_ai')
+  })
+
+  describe('large documents', () => {
+    const longText = Array.from({ length: 30 }, (_, index) => `Paragraph ${index} `.repeat(20)).join(' ')
+
+    function gatedEmbeddings(nomic: { embedDocument: ReturnType<typeof vi.fn> }) {
+      let release: () => void = () => undefined
+      const gate = new Promise<void>((resolve) => { release = resolve })
+      let calls = 0
+      nomic.embedDocument.mockImplementation(async () => {
+        calls += 1
+        if (calls === 2) await gate
+        return new Float32Array([calls, 0.5])
+      })
+      return () => release()
+    }
+
+    it('does not hold the Vault lock while embedding, so other Vault operations can run', async () => {
+      const lock = new AsyncMutationLock()
+      const { service, nomic, chunks } = makeHarness([document({ extractedText: longText })], { mutationLock: lock })
+      const release = gatedEmbeddings(nomic)
+
+      const indexing = service.indexDocument(7, 1)
+      await vi.waitFor(() => expect(nomic.embedDocument).toHaveBeenCalledTimes(2))
+      await expect(lock.runExclusive(async () => 'listed while indexing')).resolves.toBe('listed while indexing')
+      expect(chunks.replaceDocumentIndex).not.toHaveBeenCalled()
+
+      release()
+      await indexing
+      expect(chunks.replaceDocumentIndex).toHaveBeenCalledTimes(1)
+    })
+
+    it('reports how many chunks are done while indexing and clears it afterwards', async () => {
+      const { service, nomic } = makeHarness([document({ extractedText: longText })])
+      const release = gatedEmbeddings(nomic)
+
+      const indexing = service.indexDocument(7, 1)
+      await vi.waitFor(() => expect(nomic.embedDocument).toHaveBeenCalledTimes(2))
+      const progress = service.getIndexProgress(1)
+      expect(progress?.done).toBe(1)
+      expect(progress?.total).toBeGreaterThan(2)
+
+      release()
+      await indexing
+      expect(service.getIndexProgress(1)).toBeNull()
+    })
+
+    it('does not write chunks for a document deleted while it was being embedded', async () => {
+      const rows = [document({ extractedText: longText })]
+      const { service, nomic, chunks } = makeHarness(rows)
+      const release = gatedEmbeddings(nomic)
+
+      const indexing = service.indexDocument(7, 1)
+      await vi.waitFor(() => expect(nomic.embedDocument).toHaveBeenCalledTimes(2))
+      rows[0]!.deleteStatus = 'pending'
+      release()
+
+      await expect(indexing).resolves.toBeUndefined()
+      expect(chunks.replaceDocumentIndex).not.toHaveBeenCalled()
+    })
+
+    it('returns a document to waiting_for_ai when Private AI is removed mid-indexing', async () => {
+      const rows = [document({ extractedText: longText })]
+      const { service, nomic, assets, documents } = makeHarness(rows)
+      nomic.embedDocument.mockImplementationOnce(async () => new Float32Array([1, 0.5]))
+        .mockImplementationOnce(async () => { throw new Error('embedding runtime stopped') })
+      assets.getStatus.mockResolvedValue({ state: 'not_installed' })
+
+      await expect(service.indexDocument(7, 1)).rejects.toMatchObject({ code: 'indexing-failed' })
+      expect(documents.markWaitingForAi).toHaveBeenCalledWith(7, 1)
+      expect(documents.markIndexFailure).not.toHaveBeenCalled()
+      expect(rows[0]!.indexStatus).toBe('waiting_for_ai')
+    })
+
+    it('ignores a second request for a document that is already being indexed', async () => {
+      const { service, nomic, chunks } = makeHarness([document({ extractedText: longText })])
+      const release = gatedEmbeddings(nomic)
+
+      const first = service.indexDocument(7, 1)
+      await vi.waitFor(() => expect(nomic.embedDocument).toHaveBeenCalledTimes(2))
+      await expect(service.indexDocument(7, 1)).resolves.toBeUndefined()
+
+      release()
+      await first
+      expect(chunks.replaceDocumentIndex).toHaveBeenCalledTimes(1)
+    })
+
+    it('indexes one document at a time so smaller documents finish first', async () => {
+      const rows = [
+        document({ id: 1, extractedText: longText }),
+        document({ id: 2, extractedText: 'A short family note that fits in one chunk.' }),
+      ]
+      const { service, nomic, chunks } = makeHarness(rows)
+      const release = gatedEmbeddings(nomic)
+
+      const first = service.indexDocument(7, 1)
+      await vi.waitFor(() => expect(nomic.embedDocument).toHaveBeenCalledTimes(2))
+      const second = service.indexDocument(7, 2)
+      await Promise.resolve()
+      // The second document waits (and is not marked indexing) until the first finishes.
+      expect(rows[1]!.indexStatus).toBe('waiting_for_ai')
+
+      release()
+      await Promise.all([first, second])
+      expect(chunks.replaceDocumentIndex.mock.calls.map((call) => call[1])).toEqual([1, 2])
+    })
+
+    it('pauses embedding while a question is being answered', async () => {
+      const gate = new InteractiveAiGate()
+      const { service, nomic, chunks } = makeHarness([document({ extractedText: longText })], { interactiveGate: gate })
+      const endQuestion = gate.begin()
+
+      const indexing = service.indexDocument(7, 1)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(nomic.embedDocument).not.toHaveBeenCalled()
+
+      endQuestion()
+      await indexing
+      expect(chunks.replaceDocumentIndex).toHaveBeenCalledTimes(1)
+    })
   })
 })
