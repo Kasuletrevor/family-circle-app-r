@@ -41,6 +41,8 @@ interface StoryIndexServiceDependencies {
   nomic: StoryNomicClient
   assets: StoryAiStatusSource
   mutationLock?: MutationLock
+  /** Questions take priority: embedding waits between chunks while one is answered. */
+  interactiveGate?: { waitUntilIdle(): Promise<void> }
 }
 
 type StoryIndexErrorCode = 'not-confirmed' | 'indexing-failed'
@@ -81,6 +83,7 @@ export class StoryIndexService {
 
       const indexed: StoryIndexChunkInput[] = []
       for (const chunk of textChunks) {
+        await this.dependencies.interactiveGate?.waitUntilIdle()
         indexed.push({
           chunkIndex: chunk.chunkIndex,
           text: chunk.text,

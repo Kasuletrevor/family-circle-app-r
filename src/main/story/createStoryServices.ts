@@ -29,6 +29,7 @@ interface CreateStoryServicesDependencies {
   picker: StoryMediaPicker
   opener: StoryMediaOpenPort
   mutationLock?: MutationLock
+  interactiveGate?: { waitUntilIdle(): Promise<void> }
 }
 
 export interface StoryServices {
@@ -50,6 +51,7 @@ export function createStoryServices(dependencies: CreateStoryServicesDependencie
     nomic: dependencies.nomic,
     assets: dependencies.privateAiAssets,
     mutationLock: dependencies.mutationLock,
+    interactiveGate: dependencies.interactiveGate,
   })
   const storyService = new StoryService({
     session: dependencies.sessions,
