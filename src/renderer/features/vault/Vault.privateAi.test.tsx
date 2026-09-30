@@ -282,6 +282,7 @@ describe('Vault Private AI setup and indexing UI', () => {
       preview: 'Family letters',
       issue: null,
       uploadedAt: 99,
+      indexProgress: null,
     }
     const listDocuments = vi.fn().mockResolvedValueOnce([failed]).mockResolvedValueOnce([{ ...failed, indexStatus: 'indexing' }])
     const retryIndexing = vi.fn(async () => ({ success: true as const }))

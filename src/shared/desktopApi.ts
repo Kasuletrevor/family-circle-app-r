@@ -252,6 +252,8 @@ export interface VaultDocumentSummary {
   preview: string | null
   issue: VaultDocumentIssue
   uploadedAt: number
+  /** Sections embedded so far while the document is being indexed; null otherwise. */
+  indexProgress: { done: number; total: number } | null
 }
 
 export interface VaultUploadItemResult {

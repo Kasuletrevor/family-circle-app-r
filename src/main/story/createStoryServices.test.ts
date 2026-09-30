@@ -96,6 +96,7 @@ describe('createStoryServices', () => {
     expect(mainSource.match(/new PrivateArchiveQueryService\(/g)).toHaveLength(1)
     expect(mainSource.match(/new QwenClient\(/g)).toHaveLength(1)
     expect(mainSource).toMatch(/new VaultQueryService\(privateArchiveQueryService\)/)
-    expect(mainSource).toContain('registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock)')
+    expect(mainSource).toContain('registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock, (documentId) => (')
+    expect(mainSource).toContain('services.vaultIndexService.getIndexProgress(documentId)')
   })
 })

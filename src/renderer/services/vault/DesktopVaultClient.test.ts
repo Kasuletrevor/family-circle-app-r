@@ -13,6 +13,7 @@ const document: VaultDocumentSummary = {
   preview: 'Family history preview',
   issue: null,
   uploadedAt: 99,
+  indexProgress: null,
 }
 
 function operations(overrides: Record<string, unknown> = {}) {

@@ -34,7 +34,7 @@ describe('registerVaultIpc', () => {
     expect(listed).toEqual([{
       id: 12, fileName: 'Family History.pdf', fileType: 'pdf', sizeBytes: 1234,
       extractionStatus: 'ready', indexStatus: 'waiting_for_ai', wordCount: 88,
-      preview: 'Family history preview', issue: null, uploadedAt: 99,
+      preview: 'Family history preview', issue: null, uploadedAt: 99, indexProgress: null,
     }])
     expect(JSON.stringify(listed)).not.toMatch(/localUserId|sha256|storedRelativePath|sourcePath|absolutePath|extractedText/)
 
@@ -67,5 +67,22 @@ describe('registerVaultIpc', () => {
     expect(service.retryIndexing).toHaveBeenCalledWith(21)
     await expect(handlers.get('vault:delete')?.({}, malicious)).resolves.toEqual({ success: true })
     expect(service.deleteDocument).toHaveBeenCalledWith(21)
+  })
+
+  it('adds live indexing progress only for documents that are indexing', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipc = { handle: (channel: string, handler: (...args: unknown[]) => unknown) => { handlers.set(channel, handler) } }
+    const service = {
+      listDocuments: vi.fn(async () => [
+        internalDocument({ id: 1, indexStatus: 'indexing' }),
+        internalDocument({ id: 2, indexStatus: 'indexed' }),
+      ]),
+    }
+    const progress = vi.fn((documentId: number) => ({ done: documentId * 10, total: 100 }))
+    registerVaultIpc(ipc, service as never, undefined, undefined, progress)
+
+    const listed = await handlers.get('vault:list')?.({}) as Array<{ id: number; indexProgress: unknown }>
+    expect(listed.map((row) => [row.id, row.indexProgress])).toEqual([[1, { done: 10, total: 100 }], [2, null]])
+    expect(progress).toHaveBeenCalledTimes(1)
   })
 })
