@@ -54,6 +54,17 @@ function makeHarness(options: { installed?: InstalledAiPaths | null; health?: bo
   return { manager, assets, process, health, sleep, children }
 }
 
+import { embeddingThreads } from './AiRuntimeManager'
+
+describe('embeddingThreads', () => {
+  it('leaves two threads free for the rest of the computer, but never goes below two', () => {
+    expect(embeddingThreads(8)).toBe(6)
+    expect(embeddingThreads(4)).toBe(2)
+    expect(embeddingThreads(2)).toBe(2)
+    expect(embeddingThreads(1)).toBe(1)
+  })
+})
+
 describe('AiRuntimeManager lazy split runtimes', () => {
   it('starts nothing at construction', () => {
     const { process } = makeHarness()
@@ -71,7 +82,8 @@ describe('AiRuntimeManager lazy split runtimes', () => {
       '--model', INSTALLED.nomicModel,
       '--host', '127.0.0.1',
       '--port', '8081',
-      '--threads', '4',
+      // Background indexing leaves two threads for the rest of the computer.
+      '--threads', '2',
       '--ctx-size', '2048',
       '--embeddings',
       '--pooling', 'mean',

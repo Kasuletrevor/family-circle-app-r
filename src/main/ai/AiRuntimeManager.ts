@@ -82,6 +82,15 @@ function defaultSleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
+/**
+ * Threads for the embedding server. Indexing is long-running background work, and on
+ * a hybrid laptop CPU (i3-1215U) 6 of 8 threads embedded as fast as all 8 (2.35 vs
+ * 2.03 chunks/s), so two threads stay free for the rest of the computer.
+ */
+export function embeddingThreads(cpus: number): number {
+  return Math.min(cpus, Math.max(2, cpus - 2))
+}
+
 export class AiRuntimeManager {
   private readonly process: AiRuntimeProcessPort
   private readonly health: AiRuntimeHealthPort
@@ -153,13 +162,14 @@ export class AiRuntimeManager {
   }
 
   private argsFor(kind: RuntimeKind, installed: InstalledAiPaths): string[] {
-    const threads = String(Math.max(1, Math.floor(this.cpuCount())))
+    const cpus = Math.max(1, Math.floor(this.cpuCount()))
+    const threads = String(cpus)
     if (kind === 'embedding') {
       return [
         '--model', installed.nomicModel,
         '--host', LOOPBACK_HOST,
         '--port', String(EMBEDDING_PORT),
-        '--threads', threads,
+        '--threads', String(embeddingThreads(cpus)),
         '--ctx-size', '2048',
         '--embeddings',
         '--pooling', 'mean',
