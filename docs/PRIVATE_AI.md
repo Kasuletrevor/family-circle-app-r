@@ -172,6 +172,23 @@ The AI Assistant ("Ask Private AI") exposes four scopes over the desktop `vault.
 
 When the retrieved context does not answer the question, Qwen is asked to reply `NOT_FOUND`. The service then returns the scope's local not-found answer with **no sources**. A worded refusal in the first sentence also drops the sources, but keeps the text.
 
+## Large documents: measured behaviour
+
+Measured on 2026-10-01 on an Intel Core i3-1215U laptop (6 cores / 8 threads, 16 GB, AC power) with three Project Gutenberg books carrying planted facts at 10%, 50% and 90% depth:
+
+| Document | Text | Sections (chunks) | Indexing time |
+|---|---:|---:|---:|
+| Pride and Prejudice (TXT) | 716k chars | 855 | 5 min 54 s |
+| Moby-Dick (PDF, ~400 pages) | 1.2M chars | 1,436 | 13 min (questions asked meanwhile) |
+| War and Peace (DOCX) | 3.2M chars | 3,770 | 22 min |
+
+- **Upload and text extraction** of all three (905k words) took under 10 seconds.
+- **Indexing** runs at about **2–2.9 sections per second** and is CPU-bound. Nomic v1.5 Q4 processes about 500 tokens/s on this CPU. Batching, parallel slots, a Q8 model and more threads did not help. bge-small (33M) was 2.4x faster, at some retrieval quality cost; a change would need an index version bump.
+- **Documents index one at a time**, holding the Vault lock only to mark them and to write their chunks. The Vault stays usable, and progress ("Indexing… 412 of 3,741 sections") refreshes every 2 s.
+- **Questions take priority**: indexing pauses between chunks while one is answered. During indexing, answers took 40–57 s before this, and take 4–8 s now.
+- **Answer latency** with ~6,000 chunks and nothing indexing: **1.0–1.3 s**.
+- **Retrieval**: 8 of 9 planted facts were answered correctly. Six ranked #1 and two #2 among ~6,000 chunks. The miss ("Where is the family Bible kept?") ranked #4, because a one-sentence fact inside 1,000 characters of 19th-century prose is diluted and its common words match much of the book. Hybrid keyword + vector search (SQLite FTS5) is the recommended next step.
+
 ## Persistent vector stores
 
 Vault chunks live in `vault_chunks` and derive ownership through `vault_documents.local_user_id`. Story chunks live in `story_chunks` and derive ownership/confirmation state through their `story_answers` row.
