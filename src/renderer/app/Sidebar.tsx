@@ -12,6 +12,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { PRIVATE_AI_MODELS } from '../../shared/privateAiModels'
 import { BrandMark } from '../design-system/BrandMark'
 import { DesktopPrivateAiClient } from '../services/ai/DesktopPrivateAiClient'
 import type { PrivateAiState } from '../services/ai/PrivateAiClient'
@@ -48,9 +49,23 @@ function aiStatusLabel(state: PrivateAiState | 'checking' | 'unavailable'): stri
   }
 }
 
-export function Sidebar() {
+function defaultGetVersion(): Promise<string | null> {
+  // Hosts without the desktop bridge (tests, previews) simply show no version.
+  return window.familyCircle?.app?.getVersion() ?? Promise.resolve(null)
+}
+
+export function Sidebar({ getVersion = defaultGetVersion }: { getVersion?: () => Promise<string | null> } = {}) {
   const privateAi = useMemo(() => new DesktopPrivateAiClient(), [])
   const [aiState, setAiState] = useState<PrivateAiState | 'checking' | 'unavailable'>('checking')
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void getVersion()
+      .then((value) => { if (active) setVersion(value) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [getVersion])
 
   useEffect(() => {
     let active = true
@@ -83,6 +98,8 @@ export function Sidebar() {
     <aside className="app-sidebar">
       <div className="app-sidebar__brand">
         <BrandMark />
+        {/* Family Circle has an ASK mode (this blue workspace); COMMAND mode will use its own colour. */}
+        <span className="app-sidebar__mode" aria-label="Current mode: Ask mode">Ask mode</span>
       </div>
 
       <nav className="app-sidebar__nav" aria-label="Primary navigation">
@@ -106,12 +123,13 @@ export function Sidebar() {
         </div>
         <div>
           <strong>Local AI</strong>
-          <span>Private AI · local runtime</span>
+          <span>{PRIVATE_AI_MODELS.answers} · on this computer</span>
           <span className={`ai-runtime-card__status${aiReady ? ' ai-runtime-card__status--ready' : ''}`}>
             <i aria-hidden="true" /> {aiStatusLabel(aiState)}
           </span>
         </div>
       </div>
+      {version ? <p className="app-sidebar__version">Family Circle v{version}</p> : null}
     </aside>
   )
 }

@@ -23,6 +23,27 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
 
+.app-sidebar__mode {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 3px 9px;
+  border: 1px solid rgba(124, 228, 223, 0.45);
+  border-radius: 999px;
+  color: #7ce4df;
+  background: rgba(14, 159, 154, 0.14);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-sidebar__version {
+  margin: 10px 4px 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10.5px;
+  text-align: center;
+}
+
 .app-sidebar__nav {
   display: flex;
   flex: 1;
