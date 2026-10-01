@@ -118,4 +118,14 @@ describe('PrivateAiSetupProgress', () => {
     // 1 MB in 2 s is 0.5 MB/s; 17 MB left is about 34 s.
     expect(screen.getByText(/0\.5 MB\/s · about 34 sec left/)).toBeInTheDocument()
   })
+
+  it('suggests a coffee break only for large downloads', () => {
+    const { rerender } = render(
+      <PrivateAiSetupProgress state="downloading" progress={progress({ percent: 3, bytesDownloaded: 20 * MB, totalSizeBytes: 651 * MB })} />,
+    )
+    expect(screen.getByText('Take a break, get some coffee — this will take several minutes.')).toBeInTheDocument()
+
+    rerender(<PrivateAiSetupProgress state="downloading" progress={progress({ percent: 40, bytesDownloaded: 7 * MB, totalSizeBytes: 18 * MB })} />)
+    expect(screen.queryByText(/get some coffee/)).not.toBeInTheDocument()
+  })
 })

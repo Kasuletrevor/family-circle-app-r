@@ -3,6 +3,9 @@ import { describeSetupStep, formatBytes, formatEta } from './setupProgress'
 import { useTransferTelemetry } from './useTransferTelemetry'
 import './PrivateAiSetupProgress.css'
 
+// Large downloads take several minutes on typical home connections; small repairs do not.
+const LONG_DOWNLOAD_BYTES = 50 * 1024 * 1024
+
 interface PrivateAiSetupProgressProps {
   state: PrivateAiState | undefined
   progress: PrivateAiProgress | null
@@ -33,6 +36,9 @@ export function PrivateAiSetupProgress({ state, progress }: PrivateAiSetupProgre
       >
         <span style={determinate ? { width: `${step.percent}%` } : undefined} />
       </div>
+      {determinate && step.totalBytes >= LONG_DOWNLOAD_BYTES ? (
+        <p className="private-ai-progress__break">Take a break, get some coffee — this will take several minutes.</p>
+      ) : null}
       {determinate ? (
         <small className="private-ai-progress__detail">
           {formatBytes(step.bytesDownloaded)} of {formatBytes(step.totalBytes)}

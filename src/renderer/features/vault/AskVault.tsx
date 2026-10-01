@@ -3,6 +3,7 @@ import { BookOpen, BrainCircuit, FileText, LockKeyhole, Sparkles } from 'lucide-
 import type { VaultAnswer, VaultDocumentSummary, VaultQueryScope } from '../../../shared/desktopApi'
 import { DesktopVaultClient } from '../../services/vault/DesktopVaultClient'
 import type { VaultClient } from '../../services/vault/VaultClient'
+import { PRIVATE_AI_MODELS } from '../../../shared/privateAiModels'
 import './AskVault.css'
 
 const defaultClient = new DesktopVaultClient()
@@ -90,6 +91,7 @@ export function AskVault({ client = defaultClient }: { client?: VaultClient }) {
           <div className="ask-vault__eyebrow"><LockKeyhole size={14} aria-hidden="true" /> Local Private AI</div>
           <h1 id="ask-vault-title">Ask Private AI</h1>
           <p>Ask about your confirmed My Story memories and indexed Vault documents. Everything stays on this computer.</p>
+          <p className="ask-vault__models">Answers by {PRIVATE_AI_MODELS.answers} · search by {PRIVATE_AI_MODELS.search} · offline</p>
         </div>
         <div className="ask-vault__privacy"><BrainCircuit size={18} aria-hidden="true" /> Answers only from your private sources</div>
       </header>
