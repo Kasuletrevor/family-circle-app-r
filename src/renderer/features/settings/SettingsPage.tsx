@@ -20,6 +20,7 @@ import { DesktopPrivateAiClient } from '../../services/ai/DesktopPrivateAiClient
 import type { PrivateAiClient, PrivateAiProgress, PrivateAiStatus } from '../../services/ai/PrivateAiClient'
 import { PrivateAiSetupProgress } from '../private-ai/PrivateAiSetupProgress'
 import { downloadSizeLabel } from '../private-ai/setupProgress'
+import { PRIVATE_AI_MODELS } from '../../../shared/privateAiModels'
 import './SettingsPage.css'
 
 type SettingsDesktopApi = Pick<DesktopApi, 'app' | 'settings'>
@@ -368,6 +369,10 @@ export function SettingsPage({
             <span><strong>Install size</strong>{aiStatus ? formatBytes(aiStatus.totalSizeBytes) : 'Checking…'}</span>
             <span><strong>Privacy</strong>Runs locally after setup</span>
           </div>
+          <p className="settings-detail">
+            Answers by {PRIVATE_AI_MODELS.answers} and search by {PRIVATE_AI_MODELS.search}, running on this computer.
+            Voice notes in My Story use {PRIVATE_AI_MODELS.voice}.
+          </p>
           {aiDownloadLabel ? <p className="settings-detail">{aiDownloadLabel}</p> : null}
           <PrivateAiSetupProgress state={aiStatus?.state} progress={aiProgress} />
           <div className="settings-actions">

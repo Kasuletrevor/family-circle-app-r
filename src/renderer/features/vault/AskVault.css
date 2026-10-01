@@ -298,3 +298,9 @@
     align-self: flex-start;
   }
 }
+
+.ask-vault__models {
+  margin-top: 6px !important;
+  color: var(--kk-text-muted);
+  font-size: 12px !important;
+}

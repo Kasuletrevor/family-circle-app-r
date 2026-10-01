@@ -87,6 +87,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Windows')).toBeInTheDocument()
     expect(screen.getByText('Not set up')).toBeInTheDocument()
     expect(screen.getByText('704 MB')).toBeInTheDocument()
+    expect(screen.getByText(/Answers by Qwen3\.5 0\.8B and search by Nomic Embed Text v1\.5, running on this computer\./)).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ada Updated' } })
     fireEvent.click(screen.getByRole('button', { name: /save profile/i }))
