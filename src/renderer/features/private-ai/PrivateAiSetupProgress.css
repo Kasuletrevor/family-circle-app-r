@@ -57,3 +57,10 @@
   color: var(--kk-text-muted);
   font-size: 10.5px;
 }
+
+.private-ai-progress__break {
+  margin: 0;
+  color: var(--kk-navy);
+  font-size: 11.5px;
+  font-weight: 600;
+}
