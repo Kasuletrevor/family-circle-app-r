@@ -270,6 +270,23 @@ describe('PrivateArchiveQueryService', () => {
   })
 })
 
+describe('PrivateArchiveQueryService question priority', () => {
+  it('marks a question in progress for its whole duration, even when it fails', async () => {
+    const events: string[] = []
+    const interactiveGate = { begin: vi.fn(() => { events.push('begin'); return () => events.push('end') }) }
+    const service = new PrivateArchiveQueryService(deps({ interactiveGate }))
+    await service.ask({ question: 'Where was grandmother born?', scope: { type: 'vault', vault: { type: 'all' } } })
+    expect(events).toEqual(['begin', 'end'])
+
+    const failing = new PrivateArchiveQueryService(deps({
+      interactiveGate,
+      runtime: { ensureEmbeddingRuntime: vi.fn(async () => false), ensureGenerationRuntime: vi.fn(async () => true) },
+    }))
+    await expect(failing.ask({ question: 'Where?', scope: { type: 'vault', vault: { type: 'all' } } })).rejects.toMatchObject({ code: 'private-ai-unavailable' })
+    expect(events).toEqual(['begin', 'end', 'begin', 'end'])
+  })
+})
+
 describe('isNotFoundAnswer', () => {
   it('recognises the sentinel and common not-found wording in the first sentence', () => {
     for (const reply of [

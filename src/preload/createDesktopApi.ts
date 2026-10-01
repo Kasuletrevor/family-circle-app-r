@@ -181,7 +181,18 @@ function safeSummary(value: unknown): VaultDocumentSummary {
     preview: raw.preview == null ? null : String(raw.preview),
     issue: safeIssue(raw.issue),
     uploadedAt: Number(raw.uploadedAt) || 0,
+    indexProgress: safeIndexProgress(raw.indexProgress),
   }
+}
+
+function safeIndexProgress(value: unknown): VaultDocumentSummary['indexProgress'] {
+  if (value == null) return null
+  const raw = recordOf(value)
+  const done = Number(raw.done)
+  const total = Number(raw.total)
+  return Number.isSafeInteger(done) && Number.isSafeInteger(total) && total > 0 && done >= 0
+    ? { done: Math.min(done, total), total }
+    : null
 }
 
 function safeUploadBatch(value: unknown): VaultUploadBatchResult {

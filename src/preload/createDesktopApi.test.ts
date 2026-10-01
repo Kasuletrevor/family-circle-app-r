@@ -147,7 +147,7 @@ describe('createDesktopApi', () => {
     expect(documents).toEqual([{
       id: 5, fileName: 'Family History.pdf', fileType: 'pdf', sizeBytes: 1234,
       extractionStatus: 'ready', indexStatus: 'waiting_for_ai', wordCount: 88,
-      preview: 'Family history preview', issue: null, uploadedAt: 99,
+      preview: 'Family history preview', issue: null, uploadedAt: 99, indexProgress: null,
     }])
     const upload = await api.vault.chooseAndUploadDocuments()
     expect(invoke).toHaveBeenCalledWith('vault:choose-and-upload')

@@ -70,6 +70,8 @@ export interface PrivateArchiveQueryServiceDependencies {
   direct: {
     answer(localUserId: number, question: string): Promise<PrivateDirectAnswer | null>
   }
+  /** Marks a question in progress so background indexing yields the CPU to it. */
+  interactiveGate?: { begin(): () => void }
 }
 
 export type PrivateArchiveQueryErrorCode =
@@ -147,6 +149,19 @@ export class PrivateArchiveQueryService {
   constructor(private readonly dependencies: PrivateArchiveQueryServiceDependencies) {}
 
   async ask(input: {
+    question: string
+    scope: PrivateArchiveScope
+    language?: string
+  }): Promise<PrivateArchiveAnswer> {
+    const end = this.dependencies.interactiveGate?.begin()
+    try {
+      return await this.answer(input)
+    } finally {
+      end?.()
+    }
+  }
+
+  private async answer(input: {
     question: string
     scope: PrivateArchiveScope
     language?: string

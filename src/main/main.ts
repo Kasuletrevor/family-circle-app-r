@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
+import { InteractiveAiGate } from './ai/InteractiveAiGate'
 import { NomicClient } from './ai/NomicClient'
 import { OfflineAiAssetService } from './ai/OfflineAiAssetService'
 import { PrivateArchiveQueryService } from './ai/PrivateArchiveQueryService'
@@ -62,7 +63,9 @@ function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
-  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock)
+  registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock, (documentId) => (
+    services.vaultIndexService.getIndexProgress(documentId)
+  ))
   registerSettingsIpc(ipcMain, services.settingsService)
   registerStoryIpc(ipcMain, {
     story: services.storyService,
@@ -173,6 +176,7 @@ async function createAppServices(): Promise<AppServices> {
   const vaultFileStore = new VaultFileStore(userDataPath)
   const vaultExtractor = new DocumentExtractor()
   const nomicClient = new NomicClient()
+  const interactiveAiGate = new InteractiveAiGate()
   const vaultIndexService = new VaultIndexService({
     documents: vaultRepository,
     chunks: vaultChunkRepository,
@@ -180,6 +184,7 @@ async function createAppServices(): Promise<AppServices> {
     nomic: nomicClient,
     assets: privateAiService,
     mutationLock,
+    interactiveGate: interactiveAiGate,
   })
   const vaultService = new VaultService({
     session: sessions,
@@ -209,6 +214,7 @@ async function createAppServices(): Promise<AppServices> {
     runtime: aiRuntimeManager,
     nomic: nomicClient,
     privateAiAssets: privateAiService,
+    interactiveGate: interactiveAiGate,
     picker: {
       async chooseMedia(mediaType) {
         const result = await dialog.showOpenDialog({
@@ -238,6 +244,7 @@ async function createAppServices(): Promise<AppServices> {
     nomic: nomicClient,
     qwen: new QwenClient(),
     direct: new StoryDirectAnswerService(storyQueryRepository),
+    interactiveGate: interactiveAiGate,
   })
   const vaultQueryService = new VaultQueryService(privateArchiveQueryService)
 

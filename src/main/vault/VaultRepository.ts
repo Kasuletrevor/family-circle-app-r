@@ -192,6 +192,16 @@ export class VaultRepository {
     requireSingleChange(result.changes)
   }
 
+  async markWaitingForAi(localUserId: number, documentId: number): Promise<void> {
+    const result = this.db.prepare(`
+      UPDATE vault_documents
+         SET index_status = 'waiting_for_ai', last_error_code = NULL, updated_at = ?
+       WHERE id = ? AND local_user_id = ?
+         AND extraction_status = 'ready' AND delete_status = 'active'
+    `).run(Date.now(), documentId, localUserId)
+    requireSingleChange(result.changes)
+  }
+
   async markDeletePending(localUserId: number, documentId: number): Promise<void> {
     const result = this.db.prepare(`
       UPDATE vault_documents

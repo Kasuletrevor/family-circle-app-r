@@ -48,8 +48,15 @@ function documentStatus(document: VaultDocumentSummary): string {
   if (document.extractionStatus === 'failed') return 'Stored, but text could not be extracted'
   if (document.extractionStatus === 'extracting') return 'Extracting text...'
   if (document.extractionStatus === 'pending') return 'Preparing document...'
+  const progress = document.indexStatus === 'indexing' ? document.indexProgress : null
+  if (progress) {
+    const percent = Math.floor((progress.done / progress.total) * 100)
+    return `Indexing… ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} sections (${percent}%)`
+  }
   return indexStatusLabel(document.indexStatus)
 }
+
+const INDEX_REFRESH_MS = 2_000
 
 function progressStageLabel(progress: VaultUploadProgress): string {
   switch (progress.stage) {
@@ -138,6 +145,24 @@ export function Vault({
       cancelled = true
     }
   }, [client, reloadVersion])
+
+  // Large documents take minutes to index; refresh quietly so progress and completion show up.
+  const indexingActive = loadState.documents.some((document) => document.indexStatus === 'indexing'
+    || (document.indexStatus === 'waiting_for_ai' && document.extractionStatus === 'ready' && privateAiStatus?.ready === true))
+  useEffect(() => {
+    if (!indexingActive) return
+    let cancelled = false
+    const timer = setInterval(() => {
+      void client.listDocuments().then(
+        (documents) => { if (!cancelled) setLoadState({ status: 'ready', documents }) },
+        () => undefined,
+      )
+    }, INDEX_REFRESH_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [client, indexingActive])
 
   useEffect(() => client.onUploadProgress((progress) => {
     setUploadProgress(progress)
@@ -431,6 +456,18 @@ export function Vault({
                     </div>
                     <span className={`vault-status vault-status--${statusTone(document)}`}>{documentStatus(document)}</span>
                   </div>
+                  {document.indexStatus === 'indexing' && document.indexProgress ? (
+                    <div
+                      className="vault-progress__meter"
+                      role="progressbar"
+                      aria-label={`Indexing ${document.fileName}`}
+                      aria-valuemin={0}
+                      aria-valuemax={document.indexProgress.total}
+                      aria-valuenow={document.indexProgress.done}
+                    >
+                      <span style={{ width: `${(document.indexProgress.done / document.indexProgress.total) * 100}%` }} />
+                    </div>
+                  ) : null}
                   {document.preview ? <p className="vault-document__preview">{document.preview}</p> : null}
                   <div className="vault-document__actions">
                     <button className="vault-action" type="button" aria-label={`Open ${document.fileName}`} onClick={() => void openDocument(document)}>

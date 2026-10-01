@@ -15,6 +15,7 @@ const indexed: VaultDocumentSummary = {
   preview: 'Family history',
   issue: null,
   uploadedAt: 1,
+  indexProgress: null,
 }
 
 const waiting: VaultDocumentSummary = { ...indexed, id: 5, fileName: 'Letters.txt', fileType: 'txt', indexStatus: 'waiting_for_ai' }

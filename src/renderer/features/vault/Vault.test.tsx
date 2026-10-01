@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { VaultDocumentSummary, VaultUploadProgress } from '../../../shared/desktopApi'
 import type { VaultClient } from '../../services/vault/VaultClient'
 import { Vault } from './Vault'
@@ -15,6 +15,7 @@ const baseDocument: VaultDocumentSummary = {
   preview: 'Family history preview',
   issue: null,
   uploadedAt: 99,
+  indexProgress: null,
 }
 
 function document(overrides: Partial<VaultDocumentSummary> = {}): VaultDocumentSummary {
@@ -150,5 +151,31 @@ describe('Vault', () => {
     render(<Vault client={client({ listDocuments: vi.fn(async () => [baseDocument]) })} />)
     await screen.findByText('Ready for Private AI')
     expect(screen.getByRole('button', { name: 'Upload documents' })).toBeEnabled()
+  })
+
+  describe('indexing progress', () => {
+    afterEach(() => { vi.useRealTimers() })
+
+    it('shows how far a large document has indexed and refreshes until it is done', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const listDocuments = vi.fn()
+        .mockResolvedValueOnce([document({ indexStatus: 'indexing', indexProgress: { done: 412, total: 3741 } })])
+        .mockResolvedValueOnce([document({ indexStatus: 'indexing', indexProgress: { done: 1900, total: 3741 } })])
+        .mockResolvedValue([document({ indexStatus: 'indexed' })])
+      render(<Vault client={client({ listDocuments })} />)
+
+      expect(await screen.findByText('Indexing… 412 of 3,741 sections (11%)')).toBeInTheDocument()
+      expect(screen.getByRole('progressbar', { name: 'Indexing Family History.pdf' })).toHaveAttribute('aria-valuenow', '412')
+
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(await screen.findByText('Indexing… 1,900 of 3,741 sections (50%)')).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(await screen.findByText('Ready to ask')).toBeInTheDocument()
+      const callsWhenDone = listDocuments.mock.calls.length
+
+      await vi.advanceTimersByTimeAsync(6_000)
+      expect(listDocuments).toHaveBeenCalledTimes(callsWhenDone)
+    })
   })
 })

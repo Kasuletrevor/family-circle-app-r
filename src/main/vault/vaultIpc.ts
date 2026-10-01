@@ -44,7 +44,10 @@ function issueOf(errorCode: string | null): VaultDocumentSummary['issue'] {
   return errorCode === 'extraction-failed' || errorCode === 'delete-failed' ? errorCode : null
 }
 
-function safeSummary(row: VaultDocumentInternal): VaultDocumentSummary {
+type IndexProgressLookup = (documentId: number) => { done: number; total: number } | null
+
+function safeSummary(row: VaultDocumentInternal, indexProgress?: IndexProgressLookup): VaultDocumentSummary {
+  const progress = row.indexStatus === 'indexing' ? indexProgress?.(row.id) ?? null : null
   return {
     id: row.id,
     fileName: row.fileName,
@@ -56,6 +59,7 @@ function safeSummary(row: VaultDocumentInternal): VaultDocumentSummary {
     preview: row.preview,
     issue: issueOf(row.lastErrorCode),
     uploadedAt: row.uploadedAt,
+    indexProgress: progress && progress.total > 0 ? { done: progress.done, total: progress.total } : null,
   }
 }
 
@@ -128,8 +132,11 @@ export function registerVaultIpc(
   service: VaultIpcService,
   queryService?: VaultQueryIpcService,
   mutationLock: MutationLock = noMutationLock,
+  indexProgress?: IndexProgressLookup,
 ): void {
-  ipc.handle('vault:list', async () => mutationLock.runExclusive(async () => (await service.listDocuments()).map(safeSummary)))
+  ipc.handle('vault:list', async () => mutationLock.runExclusive(async () => (
+    (await service.listDocuments()).map((row) => safeSummary(row, indexProgress))
+  )))
   ipc.handle('vault:choose-and-upload', async (event) => {
     const sender = (event as VaultIpcEvent | null)?.sender
     const result = await mutationLock.runExclusive(() => service.chooseAndUploadDocuments((progress) => {
