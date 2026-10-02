@@ -73,6 +73,25 @@ describe('DocumentExtractor', () => {
     expect(destroy).toHaveBeenCalledTimes(1)
   })
 
+  it('removes the page markers pdf-parse puts between pages', async () => {
+    const filePath = await tempFile('letters.pdf', Buffer.from('%PDF-1.7'))
+    const text = 'Rose was a nurse.\n\n-- 1 of 2 --\n\nShe worked at Mulago.\n\n-- 2 of 2 --\n'
+    const extractor = new DocumentExtractor({
+      createPdfParser: () => ({ getText: async () => ({ text }), destroy: async () => undefined }),
+    })
+
+    const result = await extractor.extract(filePath, 'pdf')
+    expect(result.extractedText).toBe('Rose was a nurse.\n\nShe worked at Mulago.')
+    expect(result.wordCount).toBe(8)
+  })
+
+  it('keeps marker-like lines in non-PDF documents', async () => {
+    const filePath = await tempFile('notes.txt', 'Chapter list\n-- 1 of 2 --\nEnd')
+    await expect(new DocumentExtractor().extract(filePath, 'txt')).resolves.toMatchObject({
+      extractedText: 'Chapter list\n-- 1 of 2 --\nEnd',
+    })
+  })
+
   it('destroys the PDF parser and maps parser failures to extraction-failed', async () => {
     const filePath = await tempFile('broken.pdf', Buffer.from('%PDF-1.7'))
     const destroy = vi.fn(async () => undefined)

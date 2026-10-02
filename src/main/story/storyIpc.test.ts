@@ -172,6 +172,19 @@ describe('Story IPC boundary', () => {
     } }])
   })
 
+  it('passes on how much a voice repair needs to download', async () => {
+    const { ipc, handlers } = createRegistrar()
+    const deps = dependencies()
+    deps.voiceAssets.getStatus = vi.fn(async () => ({
+      state: 'repair_required', totalBytes: 155_933_566, pendingDownloadBytes: 7_982_101, message: 'Offline voice needs repair',
+    })) as never
+    registerStoryIpc(ipc, deps)
+
+    await expect(handler(handlers, 'story:voice-status')({})).resolves.toMatchObject({
+      state: 'repair_required', totalSizeBytes: 155_933_566, downloadSizeBytes: 7_982_101,
+    })
+  })
+
   it('rejects oversized or malformed recording payloads before transcription dispatch', async () => {
     const { ipc, handlers } = createRegistrar()
     const deps = dependencies()

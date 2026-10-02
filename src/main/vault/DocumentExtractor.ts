@@ -32,6 +32,13 @@ function normalizeForPreview(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+// pdf-parse separates pages with lines such as "-- 3 of 12 --"; they are not document text.
+const PDF_PAGE_MARKER = /^[ \t]*-- \d+ of \d+ --[ \t]*\r?$/gm
+
+export function removePdfPageMarkers(text: string): string {
+  return text.replace(PDF_PAGE_MARKER, '').replace(/(\r?\n){3,}/g, '\n\n')
+}
+
 function countWords(text: string): number {
   const normalized = normalizeForPreview(text)
   return normalized ? normalized.split(' ').length : 0
@@ -59,7 +66,7 @@ export class DocumentExtractor {
       } else {
         const parser = this.createPdfParser(await readFile(filePath))
         try {
-          rawText = (await parser.getText()).text
+          rawText = removePdfPageMarkers((await parser.getText()).text)
         } finally {
           await parser.destroy()
         }

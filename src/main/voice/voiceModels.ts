@@ -35,7 +35,10 @@ export interface InstalledVoicePaths {
   model: string
 }
 
-export type VoiceStatus = PrivateAiStatus
+export type VoiceStatus = PrivateAiStatus & {
+  /** Bytes still to download for setup or repair; absent while a download is running. */
+  pendingDownloadBytes?: number
+}
 export type VoiceProgress = PrivateAiProgress
 
 const PINNED_FILES = [PINNED_VOICE_RUNTIME, PINNED_VOICE_MODEL] as const

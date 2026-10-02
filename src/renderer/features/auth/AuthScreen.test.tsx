@@ -83,6 +83,25 @@ describe('AuthScreen', () => {
     expect(screen.getByLabelText('Email')).toHaveValue('invited@example.com')
   })
 
+  it('explains a server problem during sign-up instead of showing the raw desktop error', async () => {
+    const offline = createClient({
+      checkInvitation: vi.fn(async () => {
+        throw new Error("Error invoking remote method 'auth:check-invitation': Error: Circle service authentication failed")
+      }),
+    })
+    render(<AuthScreen client={offline} onStateChange={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'New Member' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Family Circle could not reach the family server. Check your internet connection and try again.')
+    expect(alert).not.toHaveTextContent(/invoking remote method|Circle service/)
+  })
+
   it('enforces password confirmation and registers only once after invitation recheck', async () => {
     const client = createClient()
     const stateChanged = vi.fn()

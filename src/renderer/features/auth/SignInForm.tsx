@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { AuthState } from '../../../shared/desktopApi'
 import type { AuthClient } from '../../services/auth/AuthClient'
+import { userFacingError } from '../../services/userFacingError'
 
 interface SignInFormProps {
   client: AuthClient
@@ -30,7 +31,7 @@ export function SignInForm({
     try {
       onStateChange(await client.signIn({ email, password }))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not sign in. Please try again.')
+      setError(userFacingError(reason, 'Could not sign in. Please try again.'))
     } finally {
       setBusy(false)
     }

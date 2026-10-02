@@ -273,7 +273,7 @@ function safePrivateAiStatus(value: unknown): PrivateAiPublicStatus {
     ready: raw.ready === true && state === 'ready',
     repairRequired: raw.repairRequired === true && state === 'repair_required',
     totalSizeBytes,
-    // The offline voice setup does not report a separate download size.
+    // Older hosts do not report a separate download size; assume the full download.
     downloadSizeBytes: raw.downloadSizeBytes == null
       ? (state === 'ready' ? 0 : totalSizeBytes)
       : Number(raw.downloadSizeBytes) || 0,

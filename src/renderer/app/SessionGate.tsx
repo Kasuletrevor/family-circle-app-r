@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { AuthState } from '../../shared/desktopApi'
 import type { AuthClient } from '../services/auth/AuthClient'
 import { BrandMark } from '../design-system/BrandMark'
+import { userFacingError } from '../services/userFacingError'
 
 type StateUpdater = (next: AuthState) => void
 
@@ -29,7 +30,7 @@ export function SessionGate({
       })
       .catch((reason: unknown) => {
         if (!active) return
-        setError(reason instanceof Error ? reason.message : 'Could not open your private workspace.')
+        setError(userFacingError(reason, 'Could not open your private workspace.'))
       })
     return () => { active = false }
   }, [client])

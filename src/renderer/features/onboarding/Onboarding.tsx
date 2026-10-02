@@ -7,6 +7,7 @@ import { PasswordStep } from './PasswordStep'
 import { ProfileStep } from './ProfileStep'
 import { ReadyStep } from './ReadyStep'
 import './Onboarding.css'
+import { userFacingError } from '../../services/userFacingError'
 
 type Step = 'password' | 'profile' | 'circle' | 'ready'
 
@@ -37,7 +38,7 @@ export function Onboarding({ state, client, onStateChange }: OnboardingProps) {
       keepOnboarding(await client.setInitialPassword(password))
       setStep('profile')
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not secure your account. Please try again.')
+      setError(userFacingError(reason, 'Could not secure your account. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -54,7 +55,7 @@ export function Onboarding({ state, client, onStateChange }: OnboardingProps) {
       setCircleContext(context)
     } catch (reason) {
       setCircleContext(null)
-      setError(reason instanceof Error ? reason.message : 'Could not confirm your family Circle. Please try again.')
+      setError(userFacingError(reason, 'Could not confirm your family Circle. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -74,11 +75,11 @@ export function Onboarding({ state, client, onStateChange }: OnboardingProps) {
           setCircleContext(context)
         } catch (reason) {
           setCircleContext(null)
-          setError(reason instanceof Error ? reason.message : 'Could not confirm your family Circle. Please try again.')
+          setError(userFacingError(reason, 'Could not confirm your family Circle. Please try again.'))
         }
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save your profile. Please try again.')
+      setError(userFacingError(reason, 'Could not save your profile. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -97,7 +98,7 @@ export function Onboarding({ state, client, onStateChange }: OnboardingProps) {
     try {
       onStateChange(await client.completeOnboarding(nextAction))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not finish setup. Please try again.')
+      setError(userFacingError(reason, 'Could not finish setup. Please try again.'))
     } finally {
       setBusy(false)
     }

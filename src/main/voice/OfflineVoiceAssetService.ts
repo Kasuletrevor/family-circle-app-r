@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { OfflineAiDownloader } from '../ai/OfflineAiDownloader'
+import { estimatePendingDownloadBytes, OfflineAiDownloader } from '../ai/OfflineAiDownloader'
 import type { OfflineAiDownloadResult, OfflineAiManifest, PrivateAiProgress } from '../ai/privateAiModels'
 import {
   PINNED_VOICE_MODEL,
@@ -89,16 +89,24 @@ export class OfflineVoiceAssetService {
   async getStatus(): Promise<VoiceStatus> {
     const manifest = await this.readManifest()
     const totalBytes = this.totalBytes(manifest)
-    if (this.transientStatus && ['downloading','paused','verifying','failed'].includes(this.transientStatus.state)) {
+    // A repair usually needs only the missing part, such as the 8 MB engine, not the 148 MB model.
+    const withPending = async (status: VoiceStatus): Promise<VoiceStatus> => ({
+      ...status,
+      pendingDownloadBytes: await estimatePendingDownloadBytes(manifest, this.rootPath),
+    })
+    if (this.transientStatus && ['downloading','verifying'].includes(this.transientStatus.state)) {
       return { ...this.transientStatus, totalBytes }
+    }
+    if (this.transientStatus && ['paused','failed'].includes(this.transientStatus.state)) {
+      return withPending({ ...this.transientStatus, totalBytes })
     }
 
     const marker = await this.readMarker()
-    if (!marker) return statusFor('not_installed', totalBytes)
-    if (marker.version !== manifest.version) return statusFor('repair_required', totalBytes, 'Offline voice needs repair')
+    if (!marker) return withPending(statusFor('not_installed', totalBytes))
+    if (marker.version !== manifest.version) return withPending(statusFor('repair_required', totalBytes, 'Offline voice needs repair'))
     return await this.verifyInstalled(manifest)
       ? statusFor('ready', totalBytes, 'Offline voice is ready')
-      : statusFor('repair_required', totalBytes, 'Offline voice needs repair')
+      : withPending(statusFor('repair_required', totalBytes, 'Offline voice needs repair'))
   }
 
   async getInstalledPaths(): Promise<InstalledVoicePaths | null> {

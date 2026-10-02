@@ -99,11 +99,13 @@ Status key: `[ ]` open · `[x]` done
 
 ---
 
-### 8. [ ] Pin the Node version (local Node 22 cannot load SQLite tests)
+### 8. [x] Pin the Node version (local Node 22 cannot load SQLite tests)
 
 **Problem.** CI uses Node 24 (`.github/workflows/desktop-shell-ci.yml:31`). On local Node 22.13, all 15 test files that import `node:sqlite` fail to load with `Cannot bundle Node.js built-in "node:sqlite"`. This includes `SettingsService`, `AuthService`, the database/migrations tests, and the Story and Vault repositories. The repo has no `engines` field and no `.nvmrc` / `.node-version`, so nothing warns you.
 
 **Suggested direction.** Add `"engines": { "node": ">=24" }` to `package.json` and a `.nvmrc` containing `24`; optionally mark main-process tests with `// @vitest-environment node`.
+
+**Done.** `package.json` has `"engines": { "node": ">=24" }` (npm warns on older Node) and `.nvmrc` contains `24`. `nodeVersion.test.ts` keeps both in step with every `node-version` in the CI workflows.
 
 ---
 
@@ -154,8 +156,8 @@ After repairing from `1.2.0` to `1.3.0`, `offline-ai/bin/llama-b8772-bin-win-cpu
 Answers list the three highest-ranked chunks even when one is barely relevant (for example "My Story · What I do" under a question about the family doctor). Consider a similarity threshold, or showing only the sources the answer used.
 
 ### 16. [ ] Smaller findings
-- PDF extraction keeps page markers such as `-- 1 of 1 --` in the text, and they get indexed.
-- Sign-up surfaces raw IPC errors to users (for example `Error invoking remote method 'auth:check-invitation': Error: Circle service authentication failed`).
+- [x] PDF extraction keeps page markers such as `-- 1 of 1 --` in the text, and they get indexed. **Done:** removed from PDF text at extraction. PDFs indexed before the fix keep the markers until they are re-indexed.
+- [x] Sign-up surfaces raw IPC errors to users (for example `Error invoking remote method 'auth:check-invitation': Error: Circle service authentication failed`). **Done:** `userFacingError` removes the IPC prefix, turns server, network and mail failures into plain sentences, and hides paths and stack details. Used on sign-in, sign-up, recovery, onboarding, session restore and Settings.
 - Answers are still somewhat wordy for a 0.8B model. Consider tightening the prompt further and adding a benchmark fixture set (`scripts/benchmark-private-ai.mjs`).
 
 ---
@@ -187,3 +189,7 @@ Large-document test (2026-10-01, see `docs/PRIVATE_AI.md`): 8 of 9 planted facts
 ### 19. [ ] Faster indexing on low-end CPUs (decision needed)
 Indexing is CPU-bound at about 2.5 sections/s on an i3 laptop (a 3.7k-section book takes about 22 min). The only large lever measured was a smaller embedding model (bge-small: 2.4x faster, 384-dim, somewhat lower retrieval quality). That would need an embedding index version bump (re-index everyone) and a new asset upload.
 
+### 20. [x] Offline voice repair showed the full 149 MB as the download
+Found while testing languages and voice (#60). A repair that needed only the 8 MB whisper.cpp engine said "Repair downloads about 149 MB", because the voice status reported no pending size. The downloader also checked for `llama-server.exe` to decide whether any engine archive was extracted, so an installed whisper.cpp engine always counted as missing (and was re-downloaded on every repair).
+
+**Done.** The downloader recognises both engines (`llama-server.exe`, `Release/whisper-cli.exe`), and the voice status reports `pendingDownloadBytes`, passed to the screen as `downloadSizeBytes`.

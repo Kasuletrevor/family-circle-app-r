@@ -22,6 +22,7 @@ import { PrivateAiSetupProgress } from '../private-ai/PrivateAiSetupProgress'
 import { downloadSizeLabel } from '../private-ai/setupProgress'
 import { PRIVATE_AI_MODELS } from '../../../shared/privateAiModels'
 import './SettingsPage.css'
+import { userFacingError } from '../../services/userFacingError'
 
 type SettingsDesktopApi = Pick<DesktopApi, 'app' | 'settings'>
 
@@ -114,7 +115,7 @@ export function SettingsPage({
         if (active) setAiStatus(status)
       })
       .catch((error: unknown) => {
-        if (active) setAiError(error instanceof Error ? error.message : 'Could not read Private AI status.')
+        if (active) setAiError(userFacingError(error, 'Could not read Private AI status.'))
       })
 
     let unsubscribe = () => {}
@@ -168,7 +169,7 @@ export function SettingsPage({
       onAuthStateChange(state)
       setProfileMessage('Profile updated.')
     } catch (error) {
-      setProfileError(error instanceof Error ? error.message : 'Could not update your profile.')
+      setProfileError(userFacingError(error, 'Could not update your profile.'))
     } finally {
       setProfileBusy(false)
     }
@@ -196,7 +197,7 @@ export function SettingsPage({
       setConfirmPassword('')
       setPasswordMessage('Password changed. This protected session has been refreshed.')
     } catch (error) {
-      setPasswordError(error instanceof Error ? error.message : 'Could not change your password.')
+      setPasswordError(userFacingError(error, 'Could not change your password.'))
     } finally {
       setPasswordBusy(false)
     }
@@ -210,7 +211,7 @@ export function SettingsPage({
       setAiStatus(status)
       setAiProgress(null)
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : 'Private AI setup failed.')
+      setAiError(userFacingError(error, 'Private AI setup failed.'))
     } finally {
       setAiBusy(false)
     }
@@ -222,7 +223,7 @@ export function SettingsPage({
     try {
       setAiStatus(await privateAiClient.pauseSetup())
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : 'Could not pause Private AI setup.')
+      setAiError(userFacingError(error, 'Could not pause Private AI setup.'))
     } finally {
       setAiPauseBusy(false)
     }
@@ -236,7 +237,7 @@ export function SettingsPage({
       setAiStatus(status)
       setAiProgress(null)
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : 'Could not repair Private AI.')
+      setAiError(userFacingError(error, 'Could not repair Private AI.'))
     } finally {
       setAiBusy(false)
     }
@@ -251,7 +252,7 @@ export function SettingsPage({
       setAiProgress(null)
       setConfirmRemoveAi(false)
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : 'Could not remove Private AI.')
+      setAiError(userFacingError(error, 'Could not remove Private AI.'))
     } finally {
       setAiBusy(false)
     }
@@ -263,7 +264,7 @@ export function SettingsPage({
     try {
       await desktop.settings.openDataFolder()
     } catch (error) {
-      setBackupError(error instanceof Error ? error.message : 'Could not open the Family Circle data folder.')
+      setBackupError(userFacingError(error, 'Could not open the Family Circle data folder.'))
     }
   }
 
@@ -278,7 +279,7 @@ export function SettingsPage({
         return
       }
     } catch (error) {
-      setRestoreError(error instanceof Error ? error.message : 'Could not restore the backup.')
+      setRestoreError(userFacingError(error, 'Could not restore the backup.'))
     }
     setRestoreBusy(false)
   }
@@ -293,7 +294,7 @@ export function SettingsPage({
         setBackupMessage(`Backup created: ${result.folderName}`)
       }
     } catch (error) {
-      setBackupError(error instanceof Error ? error.message : 'Could not create the backup.')
+      setBackupError(userFacingError(error, 'Could not create the backup.'))
     } finally {
       setBackupBusy(false)
     }

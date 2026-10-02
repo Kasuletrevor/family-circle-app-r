@@ -248,6 +248,17 @@ async function stagedBytes(fs: OfflineAiDownloadFs, partPath: string): Promise<n
  * Bytes a setup or repair would still download, estimated from file sizes only
  * (no hashing), so it is cheap enough to show before the user starts.
  */
+// The executable that shows an engine archive was fully extracted: llama.cpp for
+// Private AI, whisper.cpp for offline voice.
+const ENGINE_EXECUTABLES = ['llama-server.exe', join('Release', 'whisper-cli.exe')]
+
+async function isEngineExtracted(fs: OfflineAiDownloadFs, finalPath: string): Promise<boolean> {
+  for (const executable of ENGINE_EXECUTABLES) {
+    if ((await fs.stat(join(finalPath, executable))) !== null) return true
+  }
+  return false
+}
+
 export async function estimatePendingDownloadBytes(
   manifest: OfflineAiManifest,
   rootPath: string,
@@ -257,7 +268,7 @@ export async function estimatePendingDownloadBytes(
   for (const file of manifest.files.filter((candidate) => candidate.required)) {
     const finalPath = safeTarget(rootPath, file.targetPath)
     const installed = file.extract
-      ? (await fs.stat(join(finalPath, 'llama-server.exe'))) !== null
+      ? await isEngineExtracted(fs, finalPath)
       : (await fs.stat(finalPath))?.size === file.sizeBytes
     if (installed) continue
     const staged = await stagedBytes(fs, stagingPartPath(rootPath, manifest, file))
@@ -728,9 +739,7 @@ export class OfflineAiDownloader {
   }
 
   private async isAlreadyInstalled(file: OfflineAiManifestFile, finalPath: string): Promise<boolean> {
-    if (file.extract) {
-      return (await this.fs.stat(join(finalPath, 'llama-server.exe'))) !== null
-    }
+    if (file.extract) return isEngineExtracted(this.fs, finalPath)
     const info = await this.fs.stat(finalPath)
     if (!info || info.size !== file.sizeBytes) return false
     return (await this.sha256(finalPath)) === file.sha256.toUpperCase()
