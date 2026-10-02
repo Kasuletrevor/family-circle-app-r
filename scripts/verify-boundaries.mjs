@@ -11,6 +11,7 @@ const legacyAdapterPath = 'src/main/circle/LegacyCircleAuthAdapter.ts'
 const desktopCircleClientPath = 'src/renderer/services/circle/DesktopCircleClient.ts'
 const desktopVaultClientPath = 'src/renderer/services/vault/DesktopVaultClient.ts'
 const desktopPrivateAiClientPath = 'src/renderer/services/ai/DesktopPrivateAiClient.ts'
+const desktopSpeechClientPath = 'src/renderer/services/speech/DesktopSpeechClient.ts'
 const mockCircleClientPath = 'src/renderer/services/circle/MockCircleClient.ts'
 
 const rendererRules = [
@@ -172,6 +173,15 @@ for (const filePath of rendererFiles) {
       {
         name: 'production renderer must access Private AI preload only through DesktopPrivateAiClient',
         pattern: /window\.familyCircle\.privateAi/g,
+      },
+    ])
+  }
+
+  if (file !== desktopSpeechClientPath) {
+    recordMatches(violations, file, content, [
+      {
+        name: 'production renderer must access speech preload only through DesktopSpeechClient',
+        pattern: /window\.familyCircle\.speech/g,
       },
     ])
   }

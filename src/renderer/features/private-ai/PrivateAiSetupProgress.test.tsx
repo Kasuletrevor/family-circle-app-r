@@ -81,6 +81,13 @@ describe('PrivateAiSetupProgress', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '40')
   })
 
+  it('names what is downloading, such as offline voice', () => {
+    render(<PrivateAiSetupProgress state="downloading" progress={progress({ percent: 50, bytesDownloaded: 2 * MB, totalSizeBytes: 4 * MB })} subject="offline voice" />)
+
+    expect(screen.getByText('Downloading offline voice')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'offline voice setup progress' })).toHaveAttribute('aria-valuenow', '50')
+  })
+
   it('names the steps that have no byte count and shows an indeterminate bar', () => {
     const { rerender } = render(<PrivateAiSetupProgress state="verifying" progress={progress({ state: 'verifying', phase: 'checking' })} />)
     expect(screen.getByText('Checking installed files…')).toBeInTheDocument()

@@ -63,7 +63,7 @@ describe('AskVault', () => {
     expect(await screen.findByText('Grandmother was born in Jinja and cooked luwombo every Christmas.')).toBeInTheDocument()
     expect(screen.getByText('Family History.pdf')).toBeInTheDocument()
     expect(screen.getByText(/My Story · Traditions to preserve/)).toBeInTheDocument()
-    expect(ask).toHaveBeenCalledWith('Tell me about grandmother', { type: 'story-and-vault' })
+    expect(ask).toHaveBeenCalledWith('Tell me about grandmother', { type: 'story-and-vault' }, 'en')
   })
 
   it('can ask only My Story', async () => {
@@ -74,7 +74,7 @@ describe('AskVault', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Where did I study?' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
 
-    await waitFor(() => expect(ask).toHaveBeenCalledWith('Where did I study?', { type: 'story' }))
+    await waitFor(() => expect(ask).toHaveBeenCalledWith('Where did I study?', { type: 'story' }, 'en'))
     expect(await screen.findByText('I studied at Makerere University.')).toBeInTheDocument()
   })
 
@@ -93,7 +93,7 @@ describe('AskVault', () => {
     expect(await screen.findByText('Grandmother was born in Jinja.')).toBeInTheDocument()
     expect(screen.getByText('Family History.pdf')).toBeInTheDocument()
     expect(screen.getByText('She was born in Jinja.')).toBeInTheDocument()
-    expect(ask).toHaveBeenCalledWith('Where was grandmother born?', { type: 'all' })
+    expect(ask).toHaveBeenCalledWith('Where was grandmother born?', { type: 'all' }, 'en')
   })
 
   it('selected mode lists only indexed documents and submits selected numeric ids', async () => {
@@ -109,7 +109,7 @@ describe('AskVault', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Who?' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
 
-    await waitFor(() => expect(ask).toHaveBeenCalledWith('Who?', { type: 'documents', documentIds: [4] }))
+    await waitFor(() => expect(ask).toHaveBeenCalledWith('Who?', { type: 'documents', documentIds: [4] }, 'en'))
   })
 
   it('shows a safe user-facing error without filesystem or model detail', async () => {

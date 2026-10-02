@@ -9,14 +9,16 @@ const LONG_DOWNLOAD_BYTES = 50 * 1024 * 1024
 interface PrivateAiSetupProgressProps {
   state: PrivateAiState | undefined
   progress: PrivateAiProgress | null
+  /** What is being downloaded, e.g. "offline voice". */
+  subject?: string
 }
 
 /** Shared Private AI setup/repair progress for Settings and the Vault page. */
-export function PrivateAiSetupProgress({ state, progress }: PrivateAiSetupProgressProps) {
+export function PrivateAiSetupProgress({ state, progress, subject = 'Private AI' }: PrivateAiSetupProgressProps) {
   const telemetry = useTransferTelemetry(progress)
   if (state !== 'downloading' && state !== 'verifying') return null
 
-  const step = describeSetupStep(progress, state)
+  const step = describeSetupStep(progress, state, subject)
   const determinate = step.kind === 'determinate'
 
   return (
@@ -28,7 +30,7 @@ export function PrivateAiSetupProgress({ state, progress }: PrivateAiSetupProgre
       <div
         className={`private-ai-progress__meter${determinate ? '' : ' private-ai-progress__meter--indeterminate'}`}
         role="progressbar"
-        aria-label="Private AI setup progress"
+        aria-label={`${subject} setup progress`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={determinate ? step.percent : undefined}

@@ -359,6 +359,22 @@ export interface StoryMediaAddResult {
 }
 
 
+export interface SpokenVoicePublic {
+  name: string
+  language: string
+}
+
+/** Reading text aloud with the computer's own voices (Windows built-in, offline). */
+export type SpeechPublicResult =
+  | { status: 'ok'; wavBytes: Uint8Array; voiceName: string }
+  | { status: 'no-voice' }
+  | { status: 'unsupported' }
+
+export interface SpeechDesktopApi {
+  listVoices(): Promise<SpokenVoicePublic[]>
+  synthesize(input: { text: string; language: StoryLanguage }): Promise<SpeechPublicResult>
+}
+
 export interface StoryDesktopApi {
   get(): Promise<StoryPublicState>
   saveDraft(input: { fieldKey: StoryFieldKey; answer: string; language: StoryLanguage }): Promise<StoryPublicState>
@@ -445,4 +461,5 @@ export interface DesktopApi {
     onProgress(listener: (progress: PrivateAiPublicProgress) => void): () => void
   }
   story: StoryDesktopApi
+  speech: SpeechDesktopApi
 }
