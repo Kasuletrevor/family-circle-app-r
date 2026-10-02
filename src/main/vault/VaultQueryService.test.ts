@@ -93,4 +93,10 @@ describe('VaultQueryService archive compatibility facade', () => {
       scope: { type: 'documents', documentIds: [999] },
     })).rejects.toMatchObject({ code: 'invalid-scope' })
   })
+
+  it('forwards the question language to the archive engine', async () => {
+    const ask = vi.fn(async () => archiveAnswer())
+    await new VaultQueryService({ ask }).ask({ question: 'Où ?', scope: { type: 'story' }, language: 'fr' })
+    expect(ask).toHaveBeenCalledWith({ question: 'Où ?', scope: { type: 'story' }, language: 'fr' })
+  })
 })

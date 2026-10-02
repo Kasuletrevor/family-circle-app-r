@@ -427,7 +427,8 @@ export interface DesktopApi {
     retryExtraction(input: { documentId: number }): Promise<VaultDocumentSummary>
     retryIndexing(input: { documentId: number }): Promise<{ success: true }>
     deleteDocument(input: { documentId: number }): Promise<{ success: true }>
-    ask(input: { question: string; scope: VaultQueryScope }): Promise<VaultAnswer>
+    /** `language` is a Story language code (en, fr, es, pt, zh, ja, fil); answers come back in it. */
+    ask(input: { question: string; scope: VaultQueryScope; language?: StoryLanguage }): Promise<VaultAnswer>
     onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
   }
   settings: {

@@ -34,4 +34,13 @@ describe('createDesktopApi Vault ask', () => {
     })
     expect(JSON.stringify(result)).not.toMatch(/embedding|storedRelativePath|extractedText|modelPath|localUserId/)
   })
+
+  it('sends only a supported language code', async () => {
+    const invoke = vi.fn(async () => ({ answer: 'ok', sources: [] }))
+    const api = createDesktopApi(invoke)
+    await api.vault.ask({ question: '¿Dónde?', scope: { type: 'all' }, language: 'es' })
+    expect(invoke).toHaveBeenLastCalledWith('vault:ask', { question: '¿Dónde?', scope: { type: 'all' }, language: 'es' })
+    await api.vault.ask({ question: 'Where?', scope: { type: 'all' }, language: 'xx' as never })
+    expect(invoke).toHaveBeenLastCalledWith('vault:ask', { question: 'Where?', scope: { type: 'all' } })
+  })
 })

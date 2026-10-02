@@ -3,6 +3,7 @@ import type { StoryQueryChunk } from '../story/StoryChunkRepository'
 import type { PrivateDirectAnswer } from '../story/StoryDirectAnswerService'
 import type { VaultQueryChunk } from '../vault/VaultChunkRepository'
 import { cosineSimilarity } from '../vault/cosineSimilarity'
+import { STORY_LANGUAGES } from '../../shared/story'
 import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from './embeddingContract'
 import { planRetrievalQueries, selectGenerationRoute, type PrivateScopeType } from './PrivateQueryPlanner'
 
@@ -63,8 +64,8 @@ export interface PrivateArchiveQueryServiceDependencies {
     embedQuery(question: string): Promise<Float32Array>
   }
   qwen: {
-    generateFast(question: string, context: string): Promise<string>
-    generateComplex(question: string, context: string): Promise<string>
+    generateFast(question: string, context: string, languageLabel?: string): Promise<string>
+    generateComplex(question: string, context: string, languageLabel?: string): Promise<string>
     translateForRetrieval(question: string): Promise<string>
   }
   direct: {
@@ -122,7 +123,24 @@ function compatible(model: string, version: number): boolean {
   return model === EMBEDDING_MODEL_ID && version === EMBEDDING_INDEX_VERSION
 }
 
-function noContextAnswer(scope: PrivateArchiveScope): string {
+const NOT_FOUND_BY_LANGUAGE: Record<string, string> = {
+  fr: "Je ne l'ai pas trouvé dans vos sources privées.",
+  es: 'No lo encontré en tus fuentes privadas.',
+  pt: 'Não encontrei isso nas suas fontes privadas.',
+  zh: '我在您的私人资料中没有找到相关内容。',
+  ja: 'あなたのプライベートな資料には見つかりませんでした。',
+  fil: 'Hindi ko ito nakita sa iyong mga pribadong sanggunian.',
+}
+
+function languageLabel(language: string | undefined): string | undefined {
+  const code = String(language ?? '').trim().toLowerCase().split(/[-_]/)[0]
+  return STORY_LANGUAGES.find((item) => item.code === code)?.label
+}
+
+function noContextAnswer(scope: PrivateArchiveScope, language?: string): string {
+  const code = String(language ?? '').trim().toLowerCase().split(/[-_]/)[0]
+  const localised = NOT_FOUND_BY_LANGUAGE[code]
+  if (localised) return localised
   if (scope.type === 'story') return 'I could not find it in your confirmed My Story memories.'
   if (scope.type === 'combined') return 'I could not find it in the selected My Story and Vault sources.'
   return 'I could not find it in the selected Vault documents.'
@@ -182,7 +200,7 @@ export class PrivateArchiveQueryService {
     }
 
     const candidates = await this.loadCandidates(user.id, input.scope, documentIds)
-    if (candidates.length === 0) return { answer: noContextAnswer(input.scope), sources: [], route: 'fast' }
+    if (candidates.length === 0) return { answer: noContextAnswer(input.scope, input.language), sources: [], route: 'fast' }
 
     if (!await this.dependencies.runtime.ensureEmbeddingRuntime()) {
       throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI search is unavailable')
@@ -224,7 +242,7 @@ export class PrivateArchiveQueryService {
       .sort((a, b) => b.score - a.score)
       .slice(0, MAX_RETRIEVAL_CHUNKS)
 
-    if (ranked.length === 0) return { answer: noContextAnswer(input.scope), sources: [], route: 'fast' }
+    if (ranked.length === 0) return { answer: noContextAnswer(input.scope, input.language), sources: [], route: 'fast' }
 
     const context = ranked.map(({ candidate }, index) => (
       `[Source ${index + 1}: ${candidate.fileName}]\n${candidate.text}`
@@ -235,10 +253,10 @@ export class PrivateArchiveQueryService {
       translatedQuestion: queries[1],
       scopeType: input.scope.type as PrivateScopeType,
     })
-    const answer = await this.generateAnswer(route, question, context)
+    const answer = await this.generateAnswer(route, question, context, languageLabel(input.language))
 
     // Retrieved chunks that did not answer the question are not sources of the reply.
-    if (NOT_FOUND_SENTINEL.test(answer)) return { answer: noContextAnswer(input.scope), sources: [], route }
+    if (NOT_FOUND_SENTINEL.test(answer)) return { answer: noContextAnswer(input.scope, input.language), sources: [], route }
     if (isNotFoundAnswer(answer)) return { answer, sources: [], route }
 
     return {
@@ -311,14 +329,14 @@ export class PrivateArchiveQueryService {
     return candidates
   }
 
-  private async generateAnswer(route: 'fast' | 'complex', question: string, context: string): Promise<string> {
+  private async generateAnswer(route: 'fast' | 'complex', question: string, context: string, label?: string): Promise<string> {
     if (!await this.dependencies.runtime.ensureGenerationRuntime()) {
       throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI generation is unavailable')
     }
     try {
       return route === 'complex'
-        ? await this.dependencies.qwen.generateComplex(question, context)
-        : await this.dependencies.qwen.generateFast(question, context)
+        ? await this.dependencies.qwen.generateComplex(question, context, label)
+        : await this.dependencies.qwen.generateFast(question, context, label)
     } catch {
       throw new PrivateArchiveQueryServiceError('generation-failed', 'Private AI answer generation failed')
     }

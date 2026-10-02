@@ -39,7 +39,7 @@ import type {
   VoicePublicProgress,
   VoicePublicStatus,
 } from '../shared/desktopApi'
-import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus } from '../shared/story'
+import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus, type StoryLanguage } from '../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
 
 type DesktopChannel =
@@ -538,10 +538,13 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       deleteDocument(input: { documentId: number }) {
         return invoke('vault:delete', { documentId: input.documentId }) as Promise<{ success: true }>
       },
-      async ask(input: { question: string; scope: VaultQueryScope }) {
+      async ask(input: { question: string; scope: VaultQueryScope; language?: StoryLanguage }) {
+        let language: StoryLanguage | undefined
+        try { language = input.language ? normalizeStoryLanguage(input.language).code : undefined } catch { language = undefined }
         return safeAnswer(await invoke('vault:ask', {
           question: String(input.question ?? ''),
           scope: safeQueryScope(input.scope),
+          ...(language ? { language } : {}),
         }))
       },
       onUploadProgress(listener: (progress: VaultUploadProgress) => void) {

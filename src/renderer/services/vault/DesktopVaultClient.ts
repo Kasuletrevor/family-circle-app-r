@@ -1,3 +1,4 @@
+import type { StoryLanguage } from '../../../shared/story'
 import type {
   DesktopApi,
   VaultDocumentSummary,
@@ -79,8 +80,8 @@ export class DesktopVaultClient implements VaultClient {
     }
   }
 
-  ask(question: string, scope: VaultQueryScope) {
-    return this.operations.ask({ question, scope })
+  ask(question: string, scope: VaultQueryScope, language?: StoryLanguage) {
+    return this.operations.ask({ question, scope, ...(language ? { language } : {}) })
   }
 
   onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void {
