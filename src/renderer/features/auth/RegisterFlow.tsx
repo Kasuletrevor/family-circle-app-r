@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { AuthState, InvitationCheckResult } from '../../../shared/desktopApi'
 import type { AuthClient } from '../../services/auth/AuthClient'
+import { userFacingError } from '../../services/userFacingError'
 
 type RegistrationStep = 'name' | 'email' | 'password' | 'invited'
 
@@ -45,7 +46,7 @@ export function RegisterFlow({ client, onStateChange, onReturnToSignIn }: Regist
         setStep('password')
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not check this email. Please try again.')
+      setError(userFacingError(reason, 'Could not check this email. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -67,7 +68,7 @@ export function RegisterFlow({ client, onStateChange, onReturnToSignIn }: Regist
     try {
       onStateChange(await client.register({ name, email, password }))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not create your account. Please try again.')
+      setError(userFacingError(reason, 'Could not create your account. Please try again.'))
     } finally {
       setBusy(false)
     }

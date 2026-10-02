@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { AuthClient } from '../../services/auth/AuthClient'
+import { userFacingError } from '../../services/userFacingError'
 
 type RecoveryStep = 'email' | 'code' | 'password' | 'complete'
 
@@ -28,7 +29,7 @@ export function RecoveryFlow({ client, initialEmail = '', onReturnToSignIn }: Re
       setMessage(result.message)
       setStep('code')
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not start password recovery. Please try again.')
+      setError(userFacingError(reason, 'Could not start password recovery. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -61,7 +62,7 @@ export function RecoveryFlow({ client, initialEmail = '', onReturnToSignIn }: Re
       await client.resetPassword({ email, code: code.trim(), newPassword })
       setStep('complete')
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not reset your password. Please try again.')
+      setError(userFacingError(reason, 'Could not reset your password. Please try again.'))
     } finally {
       setBusy(false)
     }

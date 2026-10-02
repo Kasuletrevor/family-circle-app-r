@@ -76,6 +76,25 @@ describe('OfflineVoiceAssetService', () => {
     await expect(service.getInstalledPaths()).resolves.toBeNull()
   })
 
+  it('reports only the missing part as the repair download', async () => {
+    const root = await tempRoot()
+    const voiceRoot = join(root, 'offline-voice')
+    const service = new OfflineVoiceAssetService({ userDataPath: root, manifestPath })
+    await expect(service.getStatus()).resolves.toMatchObject({
+      state: 'not_installed',
+      pendingDownloadBytes: PINNED_VOICE_RUNTIME.sizeBytes + PINNED_VOICE_MODEL.sizeBytes,
+    })
+
+    // The extracted whisper.cpp engine is present; only the model is missing.
+    await mkdir(join(voiceRoot, PINNED_VOICE_RUNTIME.targetPath, 'Release'), { recursive: true })
+    await writeFile(join(voiceRoot, PINNED_VOICE_RUNTIME.targetPath, 'Release', 'whisper-cli.exe'), 'fake engine')
+    await writeFile(join(voiceRoot, 'installed-version.json'), JSON.stringify({ version: VOICE_PACK_VERSION }), 'utf8')
+    await expect(service.getStatus()).resolves.toMatchObject({
+      state: 'repair_required',
+      pendingDownloadBytes: PINNED_VOICE_MODEL.sizeBytes,
+    })
+  })
+
   it('uses OfflineAiDownloader semantics but exposes only voice-safe progress and failure messages', async () => {
     const root = await tempRoot()
     const downloadAll = vi.fn(async (_manifest, requestedRoot: string, onProgress?: (progress: any) => void) => {

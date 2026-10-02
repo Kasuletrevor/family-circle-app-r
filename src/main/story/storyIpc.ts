@@ -180,6 +180,9 @@ function publicVoiceStatus(value: unknown): VoicePublicStatus {
     ready: state === 'ready',
     repairRequired: state === 'repair_required',
     totalSizeBytes: Math.max(0, finiteNumber(raw.totalBytes)),
+    ...(raw.pendingDownloadBytes == null
+      ? {}
+      : { downloadSizeBytes: Math.max(0, finiteNumber(raw.pendingDownloadBytes)) }),
     version: VOICE_PACK_VERSION,
     message: raw.message == null ? null : String(raw.message),
   }

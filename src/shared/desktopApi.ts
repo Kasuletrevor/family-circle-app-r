@@ -307,12 +307,13 @@ export interface VoicePublicStatus {
   repairRequired: boolean
   /** Full size of all required assets. */
   totalSizeBytes: number
+  /** Bytes still to download for setup or repair, when known (0 when ready). */
+  downloadSizeBytes?: number
   version: string
   message: string | null
 }
 
 export interface PrivateAiPublicStatus extends VoicePublicStatus {
-  /** Bytes still to download for setup or repair (0 when ready). */
   downloadSizeBytes: number
 }
 
