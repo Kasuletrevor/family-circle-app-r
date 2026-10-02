@@ -29,7 +29,7 @@ export function StoryVoiceSetup({
       <strong>Set up offline voice</strong>
       <p>Voice notes are transcribed on this computer, never online. This needs a one-time download first.</p>
       {sizeLabel ? <p className="my-story__voice-setup-size">{sizeLabel}</p> : null}
-      <PrivateAiSetupProgress state={status.state} progress={progress} />
+      <PrivateAiSetupProgress state={status.state} progress={progress} subject="offline voice" />
       <div className="my-story__voice-setup-actions">
         {status.state === 'not_installed' ? (
           <button type="button" className="my-story__primary" disabled={busy} onClick={onSetup}>Set up offline voice</button>
@@ -38,7 +38,8 @@ export function StoryVoiceSetup({
           <button type="button" className="my-story__primary" disabled={busy} onClick={onSetup}>Continue setup</button>
         ) : null}
         {status.state === 'downloading' ? (
-          <button type="button" disabled={busy} onClick={onPause}>Pause download</button>
+          // Setup stays busy for the whole download, so pausing must remain possible.
+          <button type="button" onClick={onPause}>Pause download</button>
         ) : null}
         {status.state === 'repair_required' || status.state === 'failed' ? (
           <button type="button" className="my-story__primary" disabled={busy} onClick={onRepair}>Repair offline voice</button>

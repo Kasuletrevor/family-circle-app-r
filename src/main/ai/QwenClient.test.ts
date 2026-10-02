@@ -76,4 +76,18 @@ describe('QwenClient', () => {
       '• The executor of the will is Grace Nakato.',
     ].join('\n'))
   })
+
+  it('asks for the answer in the selected language, keeping the NOT_FOUND contract', async () => {
+    const post = vi.fn(async () => ({ choices: [{ message: { content: 'Elle est née à Masaka.' } }] }))
+    const client = new QwenClient({ http: { post } as QwenHttpPort })
+
+    await expect(client.generateFast('Où est-elle née ?', 'context', 'French')).resolves.toBe('Elle est née à Masaka.')
+    const body = post.mock.calls[0]![1] as { messages: Array<{ role: string; content: string }> }
+    expect(body.messages[0]!.content).toContain('reply with exactly NOT_FOUND')
+    expect(body.messages[0]!.content).toContain('Write the complete answer in French.')
+
+    await client.generateFast('Where was she born?', 'context')
+    const englishBody = post.mock.calls[1]![1] as { messages: Array<{ role: string; content: string }> }
+    expect(englishBody.messages[0]!.content).toBe(SYSTEM)
+  })
 })

@@ -1,3 +1,4 @@
+import { normalizeStoryLanguage, type StoryLanguage } from '../../shared/story'
 import type {
   VaultAnswer,
   VaultDocumentSummary,
@@ -84,12 +85,22 @@ function safeUploadResult(result: InternalVaultUploadBatchResult): VaultUploadBa
   }
 }
 
-function queryInputOf(payload: unknown): { question: string; scope: VaultQueryScope } {
+function languageOf(value: unknown): StoryLanguage | undefined {
+  try {
+    return value == null ? undefined : normalizeStoryLanguage(value).code
+  } catch {
+    return undefined
+  }
+}
+
+function queryInputOf(payload: unknown): { question: string; scope: VaultQueryScope; language?: StoryLanguage } {
   const raw = recordOf(payload)
+  const language = languageOf(raw.language)
   const scope = recordOf(raw.scope)
   const question = typeof raw.question === 'string' ? raw.question : ''
+  const withLanguage = language ? { language } : {}
   if (scope.type === 'all' || scope.type === 'story' || scope.type === 'story-and-vault') {
-    return { question, scope: { type: scope.type } }
+    return { question, scope: { type: scope.type }, ...withLanguage }
   }
   if (scope.type !== 'documents' || !Array.isArray(scope.documentIds) || scope.documentIds.length === 0) {
     throw new Error('invalid-scope')
@@ -98,10 +109,7 @@ function queryInputOf(payload: unknown): { question: string; scope: VaultQuerySc
   if (documentIds.some((id) => typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0)) {
     throw new Error('invalid-scope')
   }
-  return {
-    question: typeof raw.question === 'string' ? raw.question : '',
-    scope: { type: 'documents', documentIds: [...new Set(documentIds)] },
-  }
+  return { question, scope: { type: 'documents', documentIds: [...new Set(documentIds)] }, ...withLanguage }
 }
 
 function safeAnswerSources(value: unknown): VaultAnswer['sources'] {

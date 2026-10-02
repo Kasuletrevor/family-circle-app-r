@@ -100,12 +100,13 @@ export class QwenClient {
     this.http = dependencies.http ?? new LocalQwenHttpPort()
   }
 
-  async generateFast(question: string, context: string): Promise<string> {
-    return this.generate(question, context, 192)
+  /** `languageLabel` (for example "French") asks for the answer in that language; English is the default. */
+  async generateFast(question: string, context: string, languageLabel?: string): Promise<string> {
+    return this.generate(question, context, 192, languageLabel)
   }
 
-  async generateComplex(question: string, context: string): Promise<string> {
-    return this.generate(question, context, 384)
+  async generateComplex(question: string, context: string, languageLabel?: string): Promise<string> {
+    return this.generate(question, context, 384, languageLabel)
   }
 
   async translateForRetrieval(question: string): Promise<string> {
@@ -123,10 +124,13 @@ export class QwenClient {
     return cleaned
   }
 
-  private async generate(question: string, context: string, maxTokens: number): Promise<string> {
+  private async generate(question: string, context: string, maxTokens: number, languageLabel?: string): Promise<string> {
+    const system = languageLabel && languageLabel !== 'English'
+      ? `${SYSTEM_INSTRUCTION} Write the complete answer in ${languageLabel}. If the sources or the question are in another language, translate the answer into ${languageLabel}. Keep names, dates, numbers and quotations exact.`
+      : SYSTEM_INSTRUCTION
     const answer = await this.complete({
       messages: [
-        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'system', content: system },
         { role: 'user', content: `Private source context:\n${context}\n\nQuestion:\n${question}` },
       ],
       max_tokens: maxTokens,

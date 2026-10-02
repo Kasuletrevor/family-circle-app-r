@@ -41,6 +41,13 @@ describe('PrivateQueryPlanner retrieval queries', () => {
 })
 
 describe('PrivateQueryPlanner generation routing', () => {
+  it('still detects a non-English question when English is the selected language', async () => {
+    const translateToEnglish = vi.fn(async () => 'Where was I born?')
+    await expect(planRetrievalQueries({ question: 'Où suis-je née ?', language: 'en', translateToEnglish }))
+      .resolves.toEqual(['Où suis-je née ?', 'Where was I born?'])
+    expect(translateToEnglish).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps ordinary questions and single-source summaries on the fast route', () => {
     expect(selectGenerationRoute({ question: 'Where was I born?', scopeType: 'story' })).toBe('fast')
     expect(selectGenerationRoute({ question: 'Summarize this document briefly.', scopeType: 'vault' })).toBe('fast')

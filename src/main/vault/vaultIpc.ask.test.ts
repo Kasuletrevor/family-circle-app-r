@@ -79,4 +79,17 @@ describe('Vault ask IPC', () => {
     }))).rejects.toThrow()
     expect(ask).not.toHaveBeenCalled()
   })
+
+  it('passes a supported question language through and drops anything else', async () => {
+    const { ipc, handlers } = registrar()
+    const ask = vi.fn(async () => ({ answer: 'Réponse', sources: [] }))
+    ;(registerVaultIpc as unknown as (ipc: unknown, vault: unknown, query: { ask: typeof ask }) => void)(ipc, {}, { ask })
+    const handler = handlers.get('vault:ask')
+
+    await handler?.({}, { question: 'Où ?', scope: { type: 'all' }, language: 'fr-FR' })
+    expect(ask).toHaveBeenLastCalledWith({ question: 'Où ?', scope: { type: 'all' }, language: 'fr' })
+
+    await handler?.({}, { question: 'Where?', scope: { type: 'story' }, language: 'klingon' })
+    expect(ask).toHaveBeenLastCalledWith({ question: 'Where?', scope: { type: 'story' } })
+  })
 })

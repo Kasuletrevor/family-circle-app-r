@@ -23,6 +23,8 @@ import type {
   ResendInvitationResult,
   ResetPasswordInput,
   SignInInput,
+  SpeechPublicResult,
+  SpokenVoicePublic,
   StoryMediaAddResult,
   StoryMediaPublicItem,
   VaultAnswer,
@@ -39,7 +41,7 @@ import type {
   VoicePublicProgress,
   VoicePublicStatus,
 } from '../shared/desktopApi'
-import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus } from '../shared/story'
+import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus, type StoryLanguage } from '../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
 
 type DesktopChannel =
@@ -106,6 +108,8 @@ type DesktopChannel =
   | 'story:voice-start-setup'
   | 'story:voice-pause-setup'
   | 'story:voice-repair-setup'
+  | 'speech:list-voices'
+  | 'speech:synthesize'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress'
@@ -408,6 +412,21 @@ function safeVoiceProgress(value: unknown): VoicePublicProgress {
   return safePrivateAiProgress(value)
 }
 
+function safeSpokenVoices(value: unknown): SpokenVoicePublic[] {
+  return (Array.isArray(value) ? value : []).map((voice) => ({
+    name: String(recordOf(voice).name ?? ''),
+    language: String(recordOf(voice).language ?? ''),
+  })).filter((voice) => voice.name && voice.language)
+}
+
+function safeSpeechResult(value: unknown): SpeechPublicResult {
+  const raw = recordOf(value)
+  if (raw.status === 'ok' && raw.wavBytes instanceof Uint8Array) {
+    return { status: 'ok', wavBytes: new Uint8Array(raw.wavBytes), voiceName: String(raw.voiceName ?? '') }
+  }
+  return { status: raw.status === 'no-voice' ? 'no-voice' : 'unsupported' }
+}
+
 const noopSubscribe: Subscribe = () => () => undefined
 
 export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubscribe): DesktopApi {
@@ -538,10 +557,13 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       deleteDocument(input: { documentId: number }) {
         return invoke('vault:delete', { documentId: input.documentId }) as Promise<{ success: true }>
       },
-      async ask(input: { question: string; scope: VaultQueryScope }) {
+      async ask(input: { question: string; scope: VaultQueryScope; language?: StoryLanguage }) {
+        let language: StoryLanguage | undefined
+        try { language = input.language ? normalizeStoryLanguage(input.language).code : undefined } catch { language = undefined }
         return safeAnswer(await invoke('vault:ask', {
           question: String(input.question ?? ''),
           scope: safeQueryScope(input.scope),
+          ...(language ? { language } : {}),
         }))
       },
       onUploadProgress(listener: (progress: VaultUploadProgress) => void) {
@@ -641,6 +663,17 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       onVoiceSetupProgress(listener: (progress: VoicePublicProgress) => void) {
         return subscribe('story:voice-setup-progress', (payload) => listener(safeVoiceProgress(payload)))
+      },
+    },
+    speech: {
+      async listVoices() {
+        return safeSpokenVoices(await invoke('speech:list-voices'))
+      },
+      async synthesize(input) {
+        return safeSpeechResult(await invoke('speech:synthesize', {
+          text: String(input.text ?? ''),
+          language: input.language,
+        }))
       },
     },
   }

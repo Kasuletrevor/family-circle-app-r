@@ -14,7 +14,8 @@ const COMPLEX_SYNTHESIS_PATTERNS = [
 
 function normalizeLanguage(value: string | undefined, question: string): string {
   const explicit = String(value ?? '').trim().toLowerCase().split(/[-_]/)[0]
-  if (explicit) return explicit
+  // English is the default selection, so still recognise a question typed in another language.
+  if (explicit && explicit !== 'en') return explicit
   if (/[\u3040-\u30ff]/u.test(question)) return 'ja'
   if (/[\u3400-\u9fff]/u.test(question)) return 'zh'
   if (/[¿¡]|\b(?:qué|cuál|dónde|quién|cuándo|nací|tengo)\b/iu.test(question)) return 'es'

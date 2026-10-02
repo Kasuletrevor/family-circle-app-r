@@ -1,3 +1,4 @@
+import type { StoryLanguage } from '../../../shared/story'
 import type {
   VaultAnswer,
   VaultDocumentSummary,
@@ -13,6 +14,6 @@ export interface VaultClient {
   retryExtraction(documentId: number): Promise<VaultDocumentSummary>
   retryIndexing(documentId: number): Promise<{ success: true }>
   deleteDocument(documentId: number): Promise<{ success: true }>
-  ask(question: string, scope: VaultQueryScope): Promise<VaultAnswer>
+  ask(question: string, scope: VaultQueryScope, language?: StoryLanguage): Promise<VaultAnswer>
   onUploadProgress(listener: (progress: VaultUploadProgress) => void): () => void
 }

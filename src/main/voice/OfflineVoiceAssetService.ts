@@ -68,7 +68,8 @@ function safeProgress(progress: PrivateAiProgress, totalBytes: number): VoicePro
       : progress.state === 'verifying'
         ? 'Verifying offline voice'
         : 'Downloading offline voice'
-  return { ...progress, totalBytes, message }
+  // Progress counts only the files being downloaded (a repair may need just the engine).
+  return { ...progress, totalBytes: progress.totalBytes > 0 ? progress.totalBytes : totalBytes, message }
 }
 
 export class OfflineVoiceAssetService {

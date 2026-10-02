@@ -103,6 +103,8 @@ describe('OfflineVoiceAssetService', () => {
     const result = await service.startSetup((event) => progress.push(event))
     expect(downloadAll).toHaveBeenCalledTimes(1)
     expect(progress[0]?.message).toBe('Downloading offline voice')
+    // Bytes describe only what is being downloaded, so percent and "x of y MB" agree.
+    expect(progress[0]?.totalBytes).toBe(100)
     expect(result).toMatchObject({ state: 'ready', message: 'Offline voice is ready' })
     expect(JSON.stringify(progress)).not.toMatch(/Private AI|stderr|https?:\/\//i)
   })

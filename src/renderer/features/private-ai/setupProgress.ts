@@ -61,7 +61,11 @@ export type SetupStep =
   | { kind: 'indeterminate'; label: string }
 
 /** Names the current setup step; bytes and percent cover only files being downloaded. */
-export function describeSetupStep(progress: PrivateAiProgress | null, state: PrivateAiStatus['state']): SetupStep {
+export function describeSetupStep(
+  progress: PrivateAiProgress | null,
+  state: PrivateAiStatus['state'],
+  subject = 'Private AI',
+): SetupStep {
   if (progress?.phase === 'checking') return { kind: 'indeterminate', label: 'Checking installed files…' }
   if (progress?.phase === 'extracting') return { kind: 'indeterminate', label: 'Preparing the AI engine…' }
   if (progress?.phase === 'verifying' || state === 'verifying') return { kind: 'indeterminate', label: 'Verifying download…' }
@@ -71,7 +75,7 @@ export function describeSetupStep(progress: PrivateAiProgress | null, state: Pri
     kind: 'determinate',
     label: progress.fileCount > 1
       ? `Downloading part ${progress.fileIndex} of ${progress.fileCount}`
-      : 'Downloading Private AI',
+      : `Downloading ${subject}`,
     percent: Math.max(0, Math.min(100, Math.round(progress.percent))),
     bytesDownloaded: progress.bytesDownloaded,
     totalBytes: progress.totalSizeBytes,

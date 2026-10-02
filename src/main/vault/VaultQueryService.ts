@@ -44,11 +44,12 @@ function archiveScope(scope: VaultQueryScope): PrivateArchiveScope {
 export class VaultQueryService {
   constructor(private readonly archive: VaultArchiveQueryPort) {}
 
-  async ask(input: { question: string; scope: VaultQueryScope }): Promise<VaultAnswer> {
+  async ask(input: { question: string; scope: VaultQueryScope; language?: string }): Promise<VaultAnswer> {
     try {
       const result = await this.archive.ask({
         question: input.question,
         scope: archiveScope(input.scope),
+        ...(input.language ? { language: input.language } : {}),
       })
       return safeVaultAnswer(result)
     } catch (error) {

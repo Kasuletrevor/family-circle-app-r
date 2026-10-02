@@ -287,6 +287,24 @@ describe('PrivateArchiveQueryService question priority', () => {
   })
 })
 
+describe('PrivateArchiveQueryService languages', () => {
+  it('passes the selected language to the answer model and localises not-found answers', async () => {
+    const generateFast = vi.fn(async () => 'Grand-mère est née à Jinja.')
+    const service = new PrivateArchiveQueryService(deps({
+      qwen: { generateFast, generateComplex: vi.fn(), translateForRetrieval: vi.fn(async () => 'Where was grandmother born?') },
+    }))
+    await expect(service.ask({ question: 'Où grand-mère est-elle née ?', scope: { type: 'vault', vault: { type: 'all' } }, language: 'fr' }))
+      .resolves.toMatchObject({ answer: 'Grand-mère est née à Jinja.' })
+    expect(generateFast).toHaveBeenCalledWith('Où grand-mère est-elle née ?', expect.any(String), 'French')
+
+    const notFound = new PrivateArchiveQueryService(deps({
+      qwen: { generateFast: vi.fn(async () => 'NOT_FOUND'), generateComplex: vi.fn(), translateForRetrieval: vi.fn(async () => 'What car?') },
+    }))
+    await expect(notFound.ask({ question: 'Quelle voiture ?', scope: { type: 'vault', vault: { type: 'all' } }, language: 'fr' }))
+      .resolves.toMatchObject({ answer: "Je ne l'ai pas trouvé dans vos sources privées.", sources: [] })
+  })
+})
+
 describe('isNotFoundAnswer', () => {
   it('recognises the sentinel and common not-found wording in the first sentence', () => {
     for (const reply of [

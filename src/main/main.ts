@@ -30,6 +30,8 @@ import { StoryDirectAnswerService } from './story/StoryDirectAnswerService'
 import { StoryHistoryRepository } from './story/StoryHistoryRepository'
 import { StoryRepository } from './story/StoryRepository'
 import { registerStoryIpc } from './story/storyIpc'
+import { registerSpeechIpc } from './speech/speechIpc'
+import { WindowsSpeechService } from './speech/WindowsSpeechService'
 import { DocumentExtractor } from './vault/DocumentExtractor'
 import { VaultChunkRepository } from './vault/VaultChunkRepository'
 import { VaultFileStore } from './vault/VaultFileStore'
@@ -67,6 +69,7 @@ function registerDesktopIpc(services: AppServices) {
     services.vaultIndexService.getIndexProgress(documentId)
   ))
   registerSettingsIpc(ipcMain, services.settingsService)
+  registerSpeechIpc(ipcMain, new WindowsSpeechService({ tempPath: app.getPath('temp') }))
   registerStoryIpc(ipcMain, {
     story: services.storyService,
     media: services.storyMediaService,

@@ -79,7 +79,7 @@ describe('createDesktopApi', () => {
     const subscribe = vi.fn(() => () => undefined)
     const api = createDesktopApi(invoke, subscribe)
 
-    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'settings', 'privateAi', 'story'])
+    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'settings', 'privateAi', 'story', 'speech'])
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword', 'updateProfile', 'changePassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
@@ -87,6 +87,7 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
     expect(Object.keys(api.settings)).toEqual(['createBackup', 'openDataFolder', 'restoreBackup'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'remove', 'onProgress'])
+    expect(Object.keys(api.speech)).toEqual(['listVoices', 'synthesize'])
 
     const serialized = JSON.stringify(api).toLowerCase()
     expect(serialized).not.toContain('api_key')
