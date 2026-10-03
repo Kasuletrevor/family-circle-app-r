@@ -263,6 +263,53 @@ describe('PrivateArchiveQueryService', () => {
       .resolves.toMatchObject({ answer: reply, sources: [] })
   })
 
+  it('lifts an exact-word match that meaning-based search ranks outside the top three', async () => {
+    const generateFast = vi.fn(async () => "It is kept at Joseph's house in Entebbe.")
+    const service = new PrivateArchiveQueryService(deps({
+      vaultChunks: {
+        listQueryChunks: vi.fn(async () => [
+          vaultChunk(1, 'Book.pdf', 0, 'The family gathered by the fire and told old stories.', [1, 0]),
+          vaultChunk(1, 'Book.pdf', 1, 'Every family has its records and its customs.', [0.98, 0.02]),
+          vaultChunk(1, 'Book.pdf', 2, 'Grandmother kept the family close in hard years.', [0.96, 0.04]),
+          vaultChunk(1, 'Book.pdf', 3, "The family Bible with all the birth records is kept at Joseph's house in Entebbe.", [0.9, 0.1]),
+        ]),
+      },
+      qwen: {
+        generateFast,
+        generateComplex: vi.fn(async () => 'unused'),
+        translateForRetrieval: vi.fn(async () => 'unused'),
+      },
+    }))
+
+    await service.ask({ question: 'Where is the family Bible kept?', scope: { type: 'vault', vault: { type: 'all' } } })
+
+    const [, context] = generateFast.mock.calls[0]!
+    expect(context).toContain('Bible')
+  })
+
+  it('rebuilds the keyword index when the sections change', async () => {
+    let texts = ['Rose kept the deeds in a red tin.', 'Nothing about property here.']
+    const generateFast = vi.fn(async () => 'answer')
+    const service = new PrivateArchiveQueryService(deps({
+      vaultChunks: {
+        listQueryChunks: vi.fn(async () => texts.map((text, index) => vaultChunk(1, 'Notes.txt', index, text, [0.5, 0.5]))),
+      },
+      qwen: {
+        generateFast,
+        generateComplex: vi.fn(async () => 'unused'),
+        translateForRetrieval: vi.fn(async () => 'unused'),
+      },
+    }))
+    const contextFor = async (question: string) => {
+      await service.ask({ question, scope: { type: 'vault', vault: { type: 'all' } } })
+      return String(generateFast.mock.calls.at(-1)![1]).split('\n\n')[0]
+    }
+
+    expect(await contextFor('Where are the deeds?')).toContain('red tin')
+    texts = ['Nothing about property here.', 'The deeds moved to a blue box at the bank.']
+    expect(await contextFor('Where are the deeds?')).toContain('blue box')
+  })
+
   it('keeps sources for real answers', async () => {
     const service = new PrivateArchiveQueryService(deps())
     const result = await service.ask({ question: 'Where was grandmother born?', scope: { type: 'vault', vault: { type: 'all' } } })

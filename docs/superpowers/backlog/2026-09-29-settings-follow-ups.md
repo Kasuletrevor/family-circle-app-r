@@ -183,8 +183,10 @@ Decide whether to rebase and merge, or close each one.
 - dictation replaced existing memory text, so it now adds to it;
 - attachment delete had no confirmation, so it now asks first.
 
-### 18. [ ] Hybrid keyword + vector search for large archives
+### 18. [x] Hybrid keyword + vector search for large archives
 Large-document test (2026-10-01, see `docs/PRIVATE_AI.md`): 8 of 9 planted facts were found among ~6,000 chunks. One ranked #4, just outside the top 3, because its words ("family", "Bible", "records") also match much of the surrounding prose. Add SQLite FTS5 over chunk text and fuse keyword and vector ranks (for example reciprocal rank fusion), so exact names, numbers and phrases always surface. Consider 5 context chunks instead of 3.
+
+**Done.** In-memory BM25 keyword ranking fused with vector ranking (reciprocal rank fusion) instead of SQLite FTS5: search already loads every section in scope, FTS5's default tokenizer cannot split Chinese or Japanese, and this needs no migration, sync triggers or backfill. The index is cached per scope. On the large-document set, 9 of 9 facts now rank in the top 3 (the family Bible fact moved from #4 to #1), keyword ranking takes 5–11 ms per question once built, and building takes about 1 s for 6,000 sections. Context stays at 3 chunks.
 
 ### 19. [ ] Faster indexing on low-end CPUs (decision needed)
 Indexing is CPU-bound at about 2.5 sections/s on an i3 laptop (a 3.7k-section book takes about 22 min). The only large lever measured was a smaller embedding model (bge-small: 2.4x faster, 384-dim, somewhat lower retrieval quality). That would need an embedding index version bump (re-index everyone) and a new asset upload.
@@ -193,3 +195,8 @@ Indexing is CPU-bound at about 2.5 sections/s on an i3 laptop (a 3.7k-section bo
 Found while testing languages and voice (#60). A repair that needed only the 8 MB whisper.cpp engine said "Repair downloads about 149 MB", because the voice status reported no pending size. The downloader also checked for `llama-server.exe` to decide whether any engine archive was extracted, so an installed whisper.cpp engine always counted as missing (and was re-downloaded on every repair).
 
 **Done.** The downloader recognises both engines (`llama-server.exe`, `Release/whisper-cli.exe`), and the voice status reports `pendingDownloadBytes`, passed to the screen as `downloadSizeBytes`.
+
+### 21. [ ] Remove the build-time npm advisory allowlist (re-check by 2026-11-03)
+`GHSA-ch52-4w7c-c8xp` (`http-cache-semantics`, no fixed version) reaches us only through electron-builder 26's build-time Electron download (`app-builder-lib > @electron/get@3 > got > cacheable-request`). It is allowlisted in `config/audit-allowlist.json` until **2026-11-03**, after which CI fails again.
+
+**Long-term fix:** electron-builder 27 uses `@electron/get@5`, which drops `got`; with `27.0.0-alpha.9` `npm audit` reports 0 vulnerabilities. Tried on 2026-10-03: the Windows installer builds and the app launches, once `build.publish` is set to `null` (27 crashes in `computeChannelNames` when no publish config is detected; we publish with our own script, so `null` is correct anyway). `scripts/verify-package.mjs` pins `26.15.3` and needs updating too. Decision (2026-10-03): stay on 26 until 27 is stable; revisit when the allowlist expires.
