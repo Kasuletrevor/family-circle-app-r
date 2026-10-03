@@ -195,3 +195,8 @@ Indexing is CPU-bound at about 2.5 sections/s on an i3 laptop (a 3.7k-section bo
 Found while testing languages and voice (#60). A repair that needed only the 8 MB whisper.cpp engine said "Repair downloads about 149 MB", because the voice status reported no pending size. The downloader also checked for `llama-server.exe` to decide whether any engine archive was extracted, so an installed whisper.cpp engine always counted as missing (and was re-downloaded on every repair).
 
 **Done.** The downloader recognises both engines (`llama-server.exe`, `Release/whisper-cli.exe`), and the voice status reports `pendingDownloadBytes`, passed to the screen as `downloadSizeBytes`.
+
+### 21. [ ] Remove the build-time npm advisory allowlist (re-check by 2026-11-03)
+`GHSA-ch52-4w7c-c8xp` (`http-cache-semantics`, no fixed version) reaches us only through electron-builder 26's build-time Electron download (`app-builder-lib > @electron/get@3 > got > cacheable-request`). It is allowlisted in `config/audit-allowlist.json` until **2026-11-03**, after which CI fails again.
+
+**Long-term fix:** electron-builder 27 uses `@electron/get@5`, which drops `got`; with `27.0.0-alpha.9` `npm audit` reports 0 vulnerabilities. Tried on 2026-10-03: the Windows installer builds and the app launches, once `build.publish` is set to `null` (27 crashes in `computeChannelNames` when no publish config is detected; we publish with our own script, so `null` is correct anyway). `scripts/verify-package.mjs` pins `26.15.3` and needs updating too. Decision (2026-10-03): stay on 26 until 27 is stable; revisit when the allowlist expires.
