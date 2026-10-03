@@ -5,10 +5,13 @@ import type { VaultQueryChunk } from '../vault/VaultChunkRepository'
 import { cosineSimilarity } from '../vault/cosineSimilarity'
 import { STORY_LANGUAGES } from '../../shared/story'
 import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from './embeddingContract'
+import { fuseRankings, KeywordIndex } from './keywordSearch'
 import { planRetrievalQueries, selectGenerationRoute, type PrivateScopeType } from './PrivateQueryPlanner'
 
 export const MAX_RETRIEVAL_CHUNKS = 3
 const MAX_EXCERPT_CHARS = 320
+/** Keyword indexes kept in memory, one per recently asked scope. */
+const MAX_CACHED_KEYWORD_INDEXES = 3
 
 export type PrivateVaultScope =
   | { type: 'all' }
@@ -108,6 +111,24 @@ type Candidate =
       embedding: Float32Array
     }
 
+/** Identifies the exact sections in scope, so a cached keyword index is reused only for them. */
+function fingerprint(candidates: Candidate[]): string {
+  let hash = 0x811c9dc5
+  const mix = (text: string) => {
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index)
+      hash = Math.imul(hash, 0x01000193)
+    }
+  }
+  for (const candidate of candidates) {
+    mix(candidate.logicalKey)
+    mix('\u0000')
+    mix(candidate.text)
+    mix('\u0001')
+  }
+  return `${candidates.length}:${(hash >>> 0).toString(16)}`
+}
+
 function validDocumentId(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0
 }
@@ -164,6 +185,8 @@ export function isNotFoundAnswer(answer: string): boolean {
 }
 
 export class PrivateArchiveQueryService {
+  private readonly keywordIndexes = new Map<string, KeywordIndex>()
+
   constructor(private readonly dependencies: PrivateArchiveQueryServiceDependencies) {}
 
   async ask(input: {
@@ -229,18 +252,24 @@ export class PrivateArchiveQueryService {
       throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI search is unavailable')
     }
 
-    const ranked = candidates
-      .flatMap((candidate) => {
+    // Meaning-based ranking finds rewordings; keyword ranking finds exact names, numbers
+    // and rare words that a large document can otherwise bury. Both are fused.
+    const vectorRanking = candidates
+      .flatMap((candidate, index) => {
         try {
           const scores = queryEmbeddings.map((queryEmbedding) => cosineSimilarity(queryEmbedding, candidate.embedding))
           const score = Math.max(...scores)
-          return Number.isFinite(score) ? [{ candidate, score }] : []
+          return Number.isFinite(score) ? [{ index, score }] : []
         } catch {
           return []
         }
       })
       .sort((a, b) => b.score - a.score)
+      .map(({ index }) => index)
+    const keywordRanking = this.keywordIndexFor(candidates).rank(queries)
+    const ranked = fuseRankings([vectorRanking, keywordRanking], candidates.length)
       .slice(0, MAX_RETRIEVAL_CHUNKS)
+      .map((index) => ({ candidate: candidates[index]! }))
 
     if (ranked.length === 0) return { answer: noContextAnswer(input.scope, input.language), sources: [], route: 'fast' }
 
@@ -264,6 +293,21 @@ export class PrivateArchiveQueryService {
       route,
       sources: this.deduplicateSources(ranked.map(({ candidate }) => candidate)),
     }
+  }
+
+  private keywordIndexFor(candidates: Candidate[]): KeywordIndex {
+    const key = fingerprint(candidates)
+    let index = this.keywordIndexes.get(key)
+    if (index) {
+      this.keywordIndexes.delete(key)
+    } else {
+      index = new KeywordIndex(candidates.map((candidate) => candidate.text))
+    }
+    this.keywordIndexes.set(key, index)
+    while (this.keywordIndexes.size > MAX_CACHED_KEYWORD_INDEXES) {
+      this.keywordIndexes.delete(this.keywordIndexes.keys().next().value!)
+    }
+    return index
   }
 
   private async validateScope(localUserId: number, scope: PrivateArchiveScope): Promise<number[] | undefined> {

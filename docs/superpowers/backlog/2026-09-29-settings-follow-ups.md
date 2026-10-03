@@ -183,8 +183,10 @@ Decide whether to rebase and merge, or close each one.
 - dictation replaced existing memory text, so it now adds to it;
 - attachment delete had no confirmation, so it now asks first.
 
-### 18. [ ] Hybrid keyword + vector search for large archives
+### 18. [x] Hybrid keyword + vector search for large archives
 Large-document test (2026-10-01, see `docs/PRIVATE_AI.md`): 8 of 9 planted facts were found among ~6,000 chunks. One ranked #4, just outside the top 3, because its words ("family", "Bible", "records") also match much of the surrounding prose. Add SQLite FTS5 over chunk text and fuse keyword and vector ranks (for example reciprocal rank fusion), so exact names, numbers and phrases always surface. Consider 5 context chunks instead of 3.
+
+**Done.** In-memory BM25 keyword ranking fused with vector ranking (reciprocal rank fusion) instead of SQLite FTS5: search already loads every section in scope, FTS5's default tokenizer cannot split Chinese or Japanese, and this needs no migration, sync triggers or backfill. The index is cached per scope. On the large-document set, 9 of 9 facts now rank in the top 3 (the family Bible fact moved from #4 to #1), keyword ranking takes 5–11 ms per question once built, and building takes about 1 s for 6,000 sections. Context stays at 3 chunks.
 
 ### 19. [ ] Faster indexing on low-end CPUs (decision needed)
 Indexing is CPU-bound at about 2.5 sections/s on an i3 laptop (a 3.7k-section book takes about 22 min). The only large lever measured was a smaller embedding model (bge-small: 2.4x faster, 384-dim, somewhat lower retrieval quality). That would need an embedding index version bump (re-index everyone) and a new asset upload.

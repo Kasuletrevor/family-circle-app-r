@@ -187,7 +187,18 @@ Measured on 2026-10-01 on an Intel Core i3-1215U laptop (6 cores / 8 threads, 16
 - **Documents index one at a time**, holding the Vault lock only to mark them and to write their chunks. The Vault stays usable, and progress ("Indexing… 412 of 3,741 sections") refreshes every 2 s.
 - **Questions take priority**: indexing pauses between chunks while one is answered. During indexing, answers took 40–57 s before this, and take 4–8 s now.
 - **Answer latency** with ~6,000 chunks and nothing indexing: **1.0–1.3 s**.
-- **Retrieval**: 8 of 9 planted facts were answered correctly. Six ranked #1 and two #2 among ~6,000 chunks. The miss ("Where is the family Bible kept?") ranked #4, because a one-sentence fact inside 1,000 characters of 19th-century prose is diluted and its common words match much of the book. Hybrid keyword + vector search (SQLite FTS5) is the recommended next step.
+- **Retrieval (vector only)**: 8 of 9 planted facts were answered correctly. Six ranked #1 and two #2 among ~6,000 chunks. The miss ("Where is the family Bible kept?") ranked #4, because a one-sentence fact inside 1,000 characters of 19th-century prose is diluted and its common words match much of the book.
+- **Retrieval (hybrid, 2026-10-03)**: 9 of 9 planted facts rank in the top 3 (eight #1, one #2); the family Bible fact moved from #4 to #1 and is now answered correctly in the app. See *Hybrid search* below.
+
+## Hybrid search
+
+Every question is ranked two ways over the sections in scope, and the two rankings are fused:
+
+- **Meaning (vector)**: cosine similarity between the Nomic query embedding and each stored chunk embedding. Finds rewordings.
+- **Keywords (BM25)**: `src/main/ai/keywordSearch.ts`. Words are lowercased with accents and possessives removed; question words such as "where is the" are ignored; Chinese and Japanese are split into overlapping character pairs because they are written without spaces. Rare words (names, numbers, places) count most. Finds exact terms that a large document can bury.
+- **Fusion**: reciprocal rank fusion (`1 / (60 + rank)` from each ranking, summed). A chunk ranked well by either method rises, and one ranked well by both wins. The top 3 go to the answer model as before.
+
+The keyword index is built in memory, in the main process, the first time a set of sections is searched (about 1 s for 6,000 sections), and cached for the three most recent scopes, keyed by a hash of the exact sections. Later questions take 5–11 ms for keyword ranking and fusion. Any change to the sections (re-indexing, a confirmed My Story edit) changes the hash, so the index is rebuilt. Nothing extra is stored on disk, so no migration or backfill is needed.
 
 ## Persistent vector stores
 
