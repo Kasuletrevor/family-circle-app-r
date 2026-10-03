@@ -67,7 +67,7 @@ jobs:
           for attempt in 1 2 3; do
             audit_output="$(mktemp)"
             set +e
-            NPM_CONFIG_FETCH_TIMEOUT=60000 timeout 90s npm audit --audit-level=high 2>&1 | tee "$audit_output"
+            NPM_CONFIG_FETCH_TIMEOUT=60000 timeout 90s node scripts/audit-gate.mjs 2>&1 | tee "$audit_output"
             audit_status=${PIPESTATUS[0]}
             set -e
 
