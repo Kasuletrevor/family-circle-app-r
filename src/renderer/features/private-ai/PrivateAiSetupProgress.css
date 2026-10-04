@@ -9,7 +9,7 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--kk-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .private-ai-progress__copy strong {
@@ -28,7 +28,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--kk-teal);
+  background: var(--kk-accent);
   transition: width 160ms ease;
 }
 
@@ -55,12 +55,12 @@
 
 .private-ai-progress__detail {
   color: var(--kk-text-muted);
-  font-size: 10.5px;
+  font-size: 13px;
 }
 
 .private-ai-progress__break {
   margin: 0;
   color: var(--kk-navy);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }

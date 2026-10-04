@@ -14,7 +14,7 @@
   overflow: hidden;
   color: white;
   background:
-    radial-gradient(circle at 0 0, rgba(14, 159, 154, 0.18), transparent 32%),
+    radial-gradient(circle at 0 0, rgb(var(--kk-accent-rgb) / 0.18), transparent 32%),
     linear-gradient(180deg, #0c2348 0%, #081b37 100%);
 }
 
@@ -27,11 +27,11 @@
   display: inline-block;
   margin-top: 12px;
   padding: 3px 9px;
-  border: 1px solid rgba(124, 228, 223, 0.45);
+  border: 1px solid rgb(var(--kk-accent-light-rgb) / 0.45);
   border-radius: 999px;
-  color: #7ce4df;
-  background: rgba(14, 159, 154, 0.14);
-  font-size: 10px;
+  color: var(--kk-accent-light);
+  background: rgb(var(--kk-accent-rgb) / 0.14);
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -40,7 +40,7 @@
 .app-sidebar__version {
   margin: 10px 4px 0;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 10.5px;
+  font-size: 13px;
   text-align: center;
 }
 
@@ -51,10 +51,15 @@
   flex-direction: column;
   gap: 4px;
   padding: 18px 0;
+  /* In a short window the links scroll instead of sliding under the Local AI card. */
+  overflow-y: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  scrollbar-width: thin;
 }
 
 .sidebar-link {
   display: grid;
+  flex-shrink: 0;
   min-height: 44px;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -76,7 +81,7 @@
 .sidebar-link--active {
   color: white;
   border-color: rgba(255, 255, 255, 0.08);
-  background: linear-gradient(100deg, var(--kk-teal), #22b8b1);
+  background: linear-gradient(100deg, var(--kk-accent), var(--kk-accent-bright));
   box-shadow: 0 10px 22px rgba(5, 31, 57, 0.2);
 }
 
@@ -89,12 +94,13 @@
   border-radius: 999px;
   color: var(--kk-navy);
   background: var(--kk-gold);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .ai-runtime-card {
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: 34px 1fr;
   gap: 10px;
   padding: 13px;
@@ -109,8 +115,8 @@
   height: 34px;
   place-items: center;
   border-radius: 9px;
-  color: #7ce4df;
-  background: rgba(14, 159, 154, 0.15);
+  color: var(--kk-accent-light);
+  background: rgb(var(--kk-accent-rgb) / 0.15);
 }
 
 .ai-runtime-card strong,
@@ -119,13 +125,13 @@
 }
 
 .ai-runtime-card strong {
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .ai-runtime-card span {
   margin-top: 3px;
   color: rgba(255, 255, 255, 0.62);
-  font-size: 10.5px;
+  font-size: 13px;
 }
 
 .ai-runtime-card .ai-runtime-card__status {
@@ -195,10 +201,10 @@
   width: 31px;
   height: 31px;
   place-items: center;
-  border: 1px solid rgba(14, 159, 154, 0.32);
+  border: 1px solid rgb(var(--kk-accent-rgb) / 0.32);
   border-radius: 50%;
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
   font-family: Georgia, serif;
   font-weight: 800;
 }
@@ -245,7 +251,7 @@
 .notification-menu__heading {
   padding: 8px 10px 10px;
   color: var(--kk-navy);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.04em;
 }
@@ -259,7 +265,7 @@
 
 .notification-menu__heading span {
   color: var(--kk-text-muted);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -293,13 +299,13 @@
 }
 
 .circle-menu__item strong {
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .circle-menu__item small {
   margin-top: 2px;
   color: var(--kk-text-muted);
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .icon-button {
@@ -317,15 +323,16 @@
   top: 3px;
   right: 2px;
   display: grid;
-  min-width: 16px;
-  height: 16px;
+  min-width: 18px;
+  height: 18px;
   place-items: center;
-  padding: 0 3px;
+  padding: 0 4px;
   border: 2px solid white;
   border-radius: 999px;
   color: white;
-  background: var(--kk-teal);
-  font-size: 8px;
+  background: var(--kk-accent);
+  /* A count bubble is the one place text stays below 13px; it holds digits only. */
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -342,12 +349,12 @@
 
 .notification-menu__item strong {
   color: var(--kk-navy);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .notification-menu__item span {
   color: var(--kk-text);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -355,7 +362,7 @@
 .circle-menu__popover > p,
 .notification-menu__popover > p {
   color: var(--kk-text-muted);
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .circle-menu__popover > p,
@@ -400,13 +407,13 @@
 
 .profile-menu__identity strong {
   color: var(--kk-navy);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .profile-menu__identity span {
   overflow: hidden;
   color: var(--kk-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -422,7 +429,7 @@
   border-radius: 9px;
   color: #9f2f2f;
   background: transparent;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -444,7 +451,7 @@
 .profile-menu__error {
   margin: 7px 10px 3px;
   color: #9f2f2f;
-  font-size: 10.5px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -453,11 +460,11 @@
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 2px solid #caeeec;
+  border: 2px solid var(--kk-accent-ring);
   border-radius: 50%;
   color: white;
-  background: linear-gradient(135deg, var(--kk-ocean), var(--kk-teal));
-  font-size: 11px;
+  background: linear-gradient(135deg, var(--kk-ocean), var(--kk-accent));
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -475,13 +482,13 @@
 
 .profile-button__copy strong {
   color: var(--kk-navy);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .profile-button__copy small {
   margin-top: 2px;
   color: #7d8999;
-  font-size: 9.5px;
+  font-size: 13px;
 }
 
 .app-shell__content {
@@ -499,8 +506,8 @@
 
 .placeholder-page__eyebrow {
   margin-bottom: 9px;
-  color: var(--kk-teal-dark);
-  font-size: 11px;
+  color: var(--kk-accent-dark);
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -540,8 +547,40 @@
 
 .placeholder-page__card span {
   color: var(--kk-text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
+}
+
+/* Short windows (down to the 720px minimum): tighter sidebar spacing, same text size. */
+@media (max-height: 760px) {
+  .app-sidebar {
+    padding: 14px 12px 12px;
+  }
+
+  .app-sidebar__brand {
+    padding-bottom: 12px;
+  }
+
+  .app-sidebar__mode {
+    margin-top: 8px;
+  }
+
+  .app-sidebar__nav {
+    gap: 2px;
+    padding: 10px 0;
+  }
+
+  .sidebar-link {
+    min-height: 38px;
+  }
+
+  .ai-runtime-card {
+    padding: 10px 12px;
+  }
+
+  .app-sidebar__version {
+    margin-top: 6px;
+  }
 }
 
 @media (max-width: 1180px) {

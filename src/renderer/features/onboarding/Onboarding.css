@@ -12,7 +12,7 @@
   padding: 42px 34px;
   color: #fff;
   background:
-    radial-gradient(circle at 80% 5%, rgba(14, 159, 154, 0.28), transparent 28%),
+    radial-gradient(circle at 80% 5%, rgb(var(--kk-accent-rgb) / 0.28), transparent 28%),
     linear-gradient(165deg, var(--kk-navy), #102f5e 68%, var(--kk-ocean));
 }
 
@@ -26,7 +26,7 @@
 }
 
 .onboarding-sidebar__copy .auth-eyebrow {
-  color: #8ee5dc;
+  color: var(--kk-accent-light);
 }
 
 .onboarding-sidebar__copy h2 {
@@ -67,12 +67,12 @@
   height: 28px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .onboarding-progress strong {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -81,9 +81,9 @@
 }
 
 .onboarding-progress li.is-active > span {
-  border-color: #8ee5dc;
+  border-color: var(--kk-accent-light);
   color: var(--kk-navy);
-  background: #8ee5dc;
+  background: var(--kk-accent-light);
 }
 
 .onboarding-progress li.is-complete {
@@ -91,8 +91,8 @@
 }
 
 .onboarding-progress li.is-complete > span {
-  border-color: rgba(142, 229, 220, 0.44);
-  color: #8ee5dc;
+  border-color: rgb(var(--kk-accent-light-rgb) / 0.44);
+  color: var(--kk-accent-light);
 }
 
 .onboarding-account {
@@ -106,14 +106,14 @@
 
 .onboarding-account span {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .onboarding-account strong {
   color: rgba(255, 255, 255, 0.86);
-  font-size: 12px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -124,7 +124,7 @@
   padding: 48px clamp(38px, 7vw, 110px);
   overflow-y: auto;
   background:
-    radial-gradient(circle at 65% 32%, rgba(14, 159, 154, 0.05), transparent 27%),
+    radial-gradient(circle at 65% 32%, rgb(var(--kk-accent-rgb) / 0.05), transparent 27%),
     linear-gradient(180deg, #fff, var(--kk-canvas));
 }
 
@@ -163,7 +163,7 @@
   border-radius: var(--kk-radius-sm);
   background: var(--kk-card);
   color: var(--kk-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .onboarding-profile-saved strong {
@@ -172,10 +172,10 @@
 
 .onboarding-loading {
   padding: 18px;
-  border: 1px dashed rgba(14, 159, 154, 0.3);
+  border: 1px dashed rgb(var(--kk-accent-rgb) / 0.3);
   border-radius: var(--kk-radius-md);
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
   text-align: center;
   font-size: 13px;
 }
@@ -202,16 +202,16 @@
   grid-template-columns: 1fr auto;
   gap: 6px 18px;
   padding: 22px;
-  border: 1px solid rgba(14, 159, 154, 0.2);
+  border: 1px solid rgb(var(--kk-accent-rgb) / 0.2);
   border-radius: var(--kk-radius-md);
-  background: linear-gradient(145deg, var(--kk-mint), #fff);
+  background: linear-gradient(145deg, var(--kk-accent-soft), #fff);
   box-shadow: var(--kk-shadow-card);
 }
 
 .onboarding-circle-card__label {
   grid-column: 1 / -1;
-  color: var(--kk-teal-dark);
-  font-size: 11px;
+  color: var(--kk-accent-dark);
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -228,7 +228,7 @@
   border-radius: 999px;
   color: var(--kk-ocean);
   background: rgba(12, 85, 127, 0.08);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -255,7 +255,7 @@
 }
 
 .onboarding-choice:hover {
-  border-color: rgba(14, 159, 154, 0.38);
+  border-color: rgb(var(--kk-accent-rgb) / 0.38);
   transform: translateY(-1px);
 }
 
@@ -266,7 +266,7 @@
 
 .onboarding-choice span {
   color: var(--kk-text-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -281,11 +281,11 @@
   height: 68px;
   margin: 0 auto;
   border-radius: 50%;
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
   font-size: 28px;
   font-weight: 900;
-  box-shadow: 0 12px 30px rgba(14, 159, 154, 0.12);
+  box-shadow: 0 12px 30px rgb(var(--kk-accent-rgb) / 0.12);
 }
 
 @media (max-width: 900px) {

@@ -1,10 +1,23 @@
 :root {
   --kk-navy: #0c2348;
   --kk-ocean: #0c557f;
-  --kk-teal: #0e9f9a;
-  --kk-teal-dark: #0c6f70;
+  /*
+   * Accent: blue for Ask mode (the core family app). Command mode (Agentic
+   * Services) will swap these values for green. White text on --kk-accent is
+   * 5.7:1 and on --kk-accent-dark 8.5:1, so both meet WCAG AA.
+   */
+  --kk-accent: #2563c9;
+  --kk-accent-rgb: 37 99 201;
+  --kk-accent-dark: #1a4a99;
+  --kk-accent-dark-rgb: 26 74 153;
+  --kk-accent-bright: #3b82f6;
+  /* Accent text and borders on the navy sidebar. */
+  --kk-accent-light: #93c5fd;
+  --kk-accent-light-rgb: 147 197 253;
+  --kk-accent-soft: #eaf2fd;
+  --kk-accent-soft-rgb: 234 242 253;
+  --kk-accent-ring: #c7dbf7;
   --kk-gold: #e6ad69;
-  --kk-mint: #e9fbf6;
   --kk-cool-tint: #eef2f7;
   --kk-canvas: #f7f9fb;
   --kk-card: #ffffff;
@@ -18,5 +31,5 @@
   --kk-radius-md: 14px;
   --kk-radius-lg: 20px;
   --kk-shadow-card: 0 8px 28px rgba(12, 35, 72, 0.07);
-  --kk-focus: 0 0 0 3px rgba(14, 159, 154, 0.24);
+  --kk-focus: 0 0 0 3px rgb(var(--kk-accent-rgb) / 0.3);
 }

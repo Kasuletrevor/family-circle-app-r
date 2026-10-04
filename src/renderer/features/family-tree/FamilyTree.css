@@ -18,16 +18,16 @@
   color: var(--kk-navy);
   background: var(--kk-card);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
 
 .family-tree-canvas__toolbar button:hover,
 .family-tree-canvas__toolbar button:focus-visible {
-  border-color: var(--kk-teal);
+  border-color: var(--kk-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(14, 159, 154, 0.12);
+  box-shadow: 0 0 0 3px rgb(var(--kk-accent-rgb) / 0.12);
 }
 
 .family-tree-canvas__stage {
@@ -56,7 +56,7 @@
 }
 
 .family-tree-canvas__relationship--selected {
-  stroke: var(--kk-teal-dark);
+  stroke: var(--kk-accent-dark);
   stroke-width: 3;
 }
 
@@ -70,7 +70,7 @@
 
 .family-tree-canvas__relationship-hit:focus {
   outline: none;
-  stroke: rgba(14, 159, 154, 0.16);
+  stroke: rgb(var(--kk-accent-rgb) / 0.16);
 }
 
 .family-tree-canvas__node {
@@ -93,7 +93,7 @@
 }
 
 .family-tree-canvas__node--selected .family-tree-canvas__node-card {
-  stroke: var(--kk-teal-dark);
+  stroke: var(--kk-accent-dark);
   stroke-width: 2.5;
 }
 
@@ -117,7 +117,7 @@
 }
 
 .family-tree-canvas__badge {
-  fill: var(--kk-teal-dark);
+  fill: var(--kk-accent-dark);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -135,7 +135,7 @@
   border-radius: 9px;
   color: #8b2f2f;
   background: #fff8f8;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .family-tree-canvas__summary {
@@ -148,7 +148,7 @@
 .family-tree-canvas__summary h3 {
   margin: 0 0 6px;
   color: var(--kk-navy);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .family-tree-canvas__summary ul {
@@ -164,5 +164,5 @@
 .family-tree-canvas__summary p {
   margin: 0;
   color: var(--kk-text-muted);
-  font-size: 10.5px;
+  font-size: 13px;
 }

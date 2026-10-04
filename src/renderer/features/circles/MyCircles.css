@@ -40,8 +40,8 @@
 }
 
 .my-circles__eyebrow {
-  color: var(--kk-teal-dark) !important;
-  font-size: 12px;
+  color: var(--kk-accent-dark) !important;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -60,13 +60,13 @@
 
 .my-circles__primary {
   padding: 0 17px;
-  border: 1px solid var(--kk-teal);
+  border: 1px solid var(--kk-accent);
   color: white;
-  background: var(--kk-teal);
+  background: var(--kk-accent);
 }
 
 .my-circles__primary:hover {
-  background: var(--kk-teal-dark);
+  background: var(--kk-accent-dark);
 }
 
 .my-circles__secondary {
@@ -77,8 +77,8 @@
 }
 
 .my-circles__secondary:hover:not(:disabled) {
-  border-color: var(--kk-teal);
-  background: var(--kk-mint);
+  border-color: var(--kk-accent);
+  background: var(--kk-accent-soft);
 }
 
 .my-circles__secondary:disabled {
@@ -89,12 +89,12 @@
 .my-circles__link-action {
   padding: 0 10px;
   border: 0;
-  color: var(--kk-teal-dark);
+  color: var(--kk-accent-dark);
   background: transparent;
 }
 
 .my-circles__link-action:hover {
-  background: var(--kk-mint);
+  background: var(--kk-accent-soft);
 }
 
 .my-circles__primary:focus-visible,
@@ -131,7 +131,7 @@
 }
 
 .my-circles__card--active {
-  border-color: var(--kk-teal);
+  border-color: var(--kk-accent);
 }
 
 .my-circles__card-head {
@@ -145,9 +145,9 @@
 .my-circles__empty-mark {
   display: grid;
   place-items: center;
-  border: 1px solid var(--kk-teal);
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
+  border: 1px solid var(--kk-accent);
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
   font-family: Georgia, serif;
   font-weight: 800;
 }
@@ -161,9 +161,9 @@
 .my-circles__active-label {
   padding: 5px 9px;
   border-radius: 999px;
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
-  font-size: 11px;
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
+  font-size: 13px;
   font-weight: 800;
 }
 
