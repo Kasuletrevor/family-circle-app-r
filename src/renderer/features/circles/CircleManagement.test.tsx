@@ -165,6 +165,31 @@ describe('CircleManagement', () => {
     await waitFor(() => expect(getCircleDetails).toHaveBeenCalledTimes(2))
   })
 
+  it('shows the new authoritative name after a rename, and keeps a draft while the name is unchanged', async () => {
+    const renamed = { ...ownerDetails, circle: { ...ownerDetails.circle, name: 'Kasule Clan' } }
+    const getCircleDetails = vi.fn()
+      .mockResolvedValueOnce(ownerDetails)
+      .mockResolvedValue(renamed)
+    const renameCircle = vi.fn(async () => undefined)
+    renderPage(service({ renameCircle, getCircleDetails }))
+
+    const input = await screen.findByLabelText('Circle name')
+    fireEvent.change(input, { target: { value: 'Kasule Clan' } })
+    // The draft stays while the stored name is still the one it was typed against.
+    expect(input).toHaveValue('Kasule Clan')
+    expect(screen.getByRole('button', { name: 'Save name' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(getCircleDetails).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.getByLabelText('Circle name')).toHaveValue('Kasule Clan'))
+    // The reloaded name is now authoritative, so there is nothing left to save.
+    expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+
+    // Typing again starts a new draft against the new name.
+    fireEvent.change(screen.getByLabelText('Circle name'), { target: { value: 'Kasule Clan 2' } })
+    expect(screen.getByLabelText('Circle name')).toHaveValue('Kasule Clan 2')
+  })
+
   it('deletes the Circle only after the owner types its exact name', async () => {
     const deleteCircle = vi.fn(async () => undefined)
     renderPage(service({ deleteCircle }))
