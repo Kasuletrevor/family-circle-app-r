@@ -37,8 +37,8 @@
 
 .circle-dialog__eyebrow {
   margin: 0;
-  color: var(--kk-teal-dark);
-  font-size: 11px;
+  color: var(--kk-accent-dark);
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -97,14 +97,14 @@
 .circle-dialog__field select:focus,
 .circle-dialog__close:focus-visible {
   outline: 0;
-  border-color: var(--kk-teal);
+  border-color: var(--kk-accent);
   box-shadow: var(--kk-focus);
 }
 
 .circle-dialog__hint {
   margin: -2px 0 0;
   color: var(--kk-text);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .circle-dialog__error,
@@ -114,12 +114,12 @@
   border-radius: 9px;
   color: var(--kk-navy);
   background: var(--kk-cool-tint);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
 .circle-dialog__result {
-  background: var(--kk-mint);
+  background: var(--kk-accent-soft);
 }
 
 .circle-dialog__actions {

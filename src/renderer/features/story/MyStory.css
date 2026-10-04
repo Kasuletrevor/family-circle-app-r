@@ -29,7 +29,7 @@
 
 .my-story__eyebrow {
   color: #6f7885;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -144,7 +144,7 @@
   background: #f0f2f5;
   color: #67717f;
   padding: 0.3rem 0.55rem;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 
@@ -372,7 +372,7 @@
 
 .my-story__media-list span {
   color: #77818f;
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
 }
 
 .my-story__voice {

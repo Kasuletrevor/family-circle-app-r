@@ -55,8 +55,8 @@
 }
 
 .circle-management__eyebrow {
-  color: var(--kk-teal-dark);
-  font-size: 12px;
+  color: var(--kk-accent-dark);
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -101,8 +101,8 @@
 }
 
 .circle-management__tabs a.is-active {
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
 }
 
 .circle-management__panel,
@@ -118,7 +118,7 @@
 }
 
 .circle-management__panel.is-primary {
-  border-color: color-mix(in srgb, var(--kk-teal) 45%, var(--kk-border));
+  border-color: color-mix(in srgb, var(--kk-accent) 45%, var(--kk-border));
 }
 
 .circle-management__section-head {
@@ -156,8 +156,8 @@
   place-items: center;
   border: 1px solid var(--kk-border);
   border-radius: 50%;
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
   font-weight: 800;
 }
 
@@ -174,7 +174,7 @@
 .circle-management__row-copy small {
   display: block;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .circle-management__name-line {
@@ -185,9 +185,9 @@
 .circle-management__name-line span {
   padding: 3px 7px;
   border-radius: 999px;
-  color: var(--kk-teal-dark);
-  background: var(--kk-mint);
-  font-size: 10px;
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -212,9 +212,9 @@
   align-items: center;
   justify-content: center;
   padding: 0 16px;
-  border: 1px solid var(--kk-teal);
+  border: 1px solid var(--kk-accent);
   color: white;
-  background: var(--kk-teal);
+  background: var(--kk-accent);
   text-decoration: none;
 }
 
