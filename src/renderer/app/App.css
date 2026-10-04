@@ -51,10 +51,15 @@
   flex-direction: column;
   gap: 4px;
   padding: 18px 0;
+  /* In a short window the links scroll instead of sliding under the Local AI card. */
+  overflow-y: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  scrollbar-width: thin;
 }
 
 .sidebar-link {
   display: grid;
+  flex-shrink: 0;
   min-height: 44px;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -95,6 +100,7 @@
 
 .ai-runtime-card {
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: 34px 1fr;
   gap: 10px;
   padding: 13px;
@@ -543,6 +549,38 @@
   color: var(--kk-text-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+/* Short windows (down to the 720px minimum): tighter sidebar spacing, same text size. */
+@media (max-height: 760px) {
+  .app-sidebar {
+    padding: 14px 12px 12px;
+  }
+
+  .app-sidebar__brand {
+    padding-bottom: 12px;
+  }
+
+  .app-sidebar__mode {
+    margin-top: 8px;
+  }
+
+  .app-sidebar__nav {
+    gap: 2px;
+    padding: 10px 0;
+  }
+
+  .sidebar-link {
+    min-height: 38px;
+  }
+
+  .ai-runtime-card {
+    padding: 10px 12px;
+  }
+
+  .app-sidebar__version {
+    margin-top: 6px;
+  }
 }
 
 @media (max-width: 1180px) {
