@@ -101,6 +101,10 @@ Example:
 }
 ```
 
+Each release also has `Family-Circle-Setup-<version>.zip`, made on the server from the checksum-verified installer only, as a single file at the top level. Browsers block a bare `.exe` from an unsigned publisher more often than a `.zip`, so the download page offers the zip first and the `.exe` second. `release.json` and `current.json` record it as `archive` and `archive_sha256`. After publishing, CI downloads the zip, checks its checksum, and checks that it contains exactly the verified installer. Windows SmartScreen can still warn when the extracted installer runs; code-signing the installer is the lasting fix.
+
+The download page itself lives in `deploy/demo/download.html`. Each release copies it to the server and replaces `download.html` in a single rename. It reads `current.json` and `versions.json`, and still works for older releases that have no `.zip`.
+
 `current.json` describes the release behind `latest`. `versions.json` preserves release history for the download page. Older pre-semantic demo records remain readable.
 
 ## Interrupted-finalization recovery

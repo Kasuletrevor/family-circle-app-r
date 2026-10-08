@@ -51,6 +51,10 @@ TMP_DIR="$ROOT/.publish-$VERSION-$$"
 DEST_DIR="$ROOT/$VERSION"
 IMMUTABLE_PATH="$PUBLIC_BASE_PATH/$VERSION/$INSTALLER"
 LATEST_PATH="$PUBLIC_BASE_PATH/latest/$INSTALLER"
+# The same verified installer, zipped: browsers block a bare .exe more often than a .zip.
+ARCHIVE="${INSTALLER%.exe}.zip"
+IMMUTABLE_ARCHIVE_PATH="$PUBLIC_BASE_PATH/$VERSION/$ARCHIVE"
+LATEST_ARCHIVE_PATH="$PUBLIC_BASE_PATH/latest/$ARCHIVE"
 
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
@@ -64,6 +68,19 @@ install -m 0644 "$SOURCE" "$TMP_DIR/$INSTALLER"
 printf '%s  %s\n' "$EXPECTED_SHA" "$INSTALLER" > "$TMP_DIR/$INSTALLER.sha256"
 printf '%s\n' "$VERSION" > "$TMP_DIR/VERSION"
 
+# Zip only the checksum-verified installer, as a single file at the top level.
+python3 - "$TMP_DIR/$INSTALLER" "$TMP_DIR/$ARCHIVE" <<'PY'
+import os
+import sys
+import zipfile
+
+installer, archive = sys.argv[1:3]
+with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
+    bundle.write(installer, arcname=os.path.basename(installer))
+PY
+ARCHIVE_SHA="$(sha256sum "$TMP_DIR/$ARCHIVE" | awk '{print $1}')"
+printf '%s  %s\n' "$ARCHIVE_SHA" "$ARCHIVE" > "$TMP_DIR/$ARCHIVE.sha256"
+
 python3 - \
   "$TMP_DIR/release.json" \
   "$TMP_DIR/current.json" \
@@ -76,7 +93,10 @@ python3 - \
   "$RELEASE_TYPE" \
   "$RELEASE_TITLE" \
   "$RELEASE_TAG" \
-  "$BUILD_ID" <<'PY'
+  "$BUILD_ID" \
+  "$IMMUTABLE_ARCHIVE_PATH" \
+  "$LATEST_ARCHIVE_PATH" \
+  "$ARCHIVE_SHA" <<'PY'
 import json
 import sys
 
@@ -93,6 +113,9 @@ import sys
     title,
     tag,
     build,
+    immutable_archive,
+    latest_archive,
+    archive_sha256,
 ) = sys.argv[1:]
 
 base = {
@@ -105,18 +128,19 @@ base = {
     "commit": commit,
     "published_at": published_at,
     "sha256": sha256,
+    "archive_sha256": archive_sha256,
 }
 
 with open(release_path, "w", encoding="utf-8") as handle:
-    json.dump({**base, "installer": immutable_installer}, handle, indent=2)
+    json.dump({**base, "installer": immutable_installer, "archive": immutable_archive}, handle, indent=2)
     handle.write("\n")
 
 with open(current_path, "w", encoding="utf-8") as handle:
-    json.dump({**base, "installer": latest_installer}, handle, indent=2)
+    json.dump({**base, "installer": latest_installer, "archive": latest_archive}, handle, indent=2)
     handle.write("\n")
 PY
 
-chmod 0644   "$TMP_DIR/release.json"   "$TMP_DIR/current.json"   "$TMP_DIR/VERSION"   "$TMP_DIR/$INSTALLER.sha256"
+chmod 0644   "$TMP_DIR/release.json"   "$TMP_DIR/current.json"   "$TMP_DIR/VERSION"   "$TMP_DIR/$INSTALLER.sha256"   "$TMP_DIR/$ARCHIVE"   "$TMP_DIR/$ARCHIVE.sha256"
 
 if [[ -e "$DEST_DIR" ]]; then
   python3 - \
@@ -297,6 +321,15 @@ if [[ "$PROMOTE_LATEST" == "true" ]]; then
   mv -Tf "$NEXT_LINK" "$ROOT/latest"
 else
   echo "Immutable release $VERSION verified; latest remains on the newer release."
+fi
+
+# The download page is reviewed in the repository (deploy/demo/download.html) and
+# replaced in one rename. It reads current.json and versions.json, so it works
+# with releases that have no archive too.
+if [[ -f "$STAGE_DIR/download.html" ]]; then
+  install -m 0644 "$STAGE_DIR/download.html" "$ROOT/.download.html.tmp"
+  mv -f "$ROOT/.download.html.tmp" "$ROOT/download.html"
+  echo "Download page updated"
 fi
 
 rm -rf "$STAGE_DIR"

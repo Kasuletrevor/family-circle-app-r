@@ -80,6 +80,35 @@ describe('demo server publish contract', () => {
     expect(publisher).toContain('versions.json')
   })
 
+  it('publishes a .zip of the verified installer and checks what is inside it', () => {
+    // The zip is made on the server from the checksum-verified installer only.
+    expect(publisher).toContain('ARCHIVE="${INSTALLER%.exe}.zip"')
+    expect(publisher).toContain('bundle.write(installer, arcname=os.path.basename(installer))')
+    expect(publisher).toContain('"archive": immutable_archive')
+    expect(publisher).toContain('"archive": latest_archive')
+    expect(publisher).toContain('"archive_sha256": archive_sha256')
+    // The reviewed download page replaces the live one in a single rename.
+    expect(publisher).toContain('mv -f "$ROOT/.download.html.tmp" "$ROOT/download.html"')
+    expect(workflow).toContain('deploy/demo/download.html "$DEV_SSH_USER@$DEV_SSH_HOST:$remote_stage/"')
+    // After publishing, the zip must hold exactly the verified installer.
+    expect(workflow).toContain("verify_archive /tmp/immutable-release.json 'Immutable release'")
+    expect(workflow).toContain("verify_archive /tmp/current.json 'Current release'")
+    expect(workflow).toContain('archive should contain only')
+    expect(workflow).toContain("grep -q 'Download for Windows (.zip)' /tmp/download.html")
+  })
+
+  it('offers the .zip first on the download page and still works for releases without one', () => {
+    const page = readFileSync(resolve(root, 'deploy/demo/download.html'), 'utf8')
+    expect(page).toContain('Download for Windows (.zip)')
+    expect(page).toContain('.exe installer')
+    expect(page).toContain('Windows protected your PC')
+    expect(page).toContain('href="${escapeHtml(r.archive || r.installer)}"')
+    expect(page).toContain(': `<a class="dl-btn" href="${escapeHtml(latest.installer)}">Download for Windows</a>`')
+    // Release titles come from commit messages, so they are always escaped.
+    expect(page).toContain('${escapeHtml(latest.title || shortVersion(latest.version))}')
+    expect(page).not.toMatch(/\$\{latest\.title/)
+  })
+
   it('preserves release history while giving new entries clean semantic identity', () => {
     expect(publisher).toContain('versions.append(name)')
     expect(publisher).toContain('releases.append(release)')

@@ -8,8 +8,8 @@
   :root {
     --navy: #0d1f2d;
     --navy-2: #16293a;
-    --gold: #c8a94b;
-    --gold-soft: #e5d9b0;
+    --gold: #e6ad69;
+    --gold-soft: #f6e2c6;
     --ink: #1c2b36;
     --muted: #5f7280;
     --line: #e2e8ec;
@@ -95,7 +95,21 @@
     text-decoration: none;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
-  .dl-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(200, 169, 75, 0.4); }
+  .dl-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(230, 173, 105, 0.45); }
+  .dl-actions { display: grid; gap: 8px; justify-items: center; }
+  .dl-alt { color: var(--muted); font-size: 14px; }
+  .dl-alt a { color: var(--navy); }
+  .steps {
+    flex-basis: 100%;
+    margin: 4px 0 0;
+    padding: 16px 20px 16px 38px;
+    border-radius: 12px;
+    background: #f4f7f9;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .steps strong { color: var(--navy); }
   .dl-btn.small { padding: 9px 18px; font-size: 14px; border-radius: 10px; background: var(--navy-2); color: #fff; }
   .sha {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -224,16 +238,34 @@ function render(releases, current) {
 
   const latest = releases[0];
   const impact = impactFor(latest);
+  const installerName = String(latest.installer || '').split('/').pop();
+  // A .zip passes browser download checks more easily than a bare .exe.
+  const download = latest.archive
+    ? `
+      <div class="dl-actions">
+        <a class="dl-btn" href="${escapeHtml(latest.archive)}">Download for Windows (.zip)</a>
+        <span class="dl-alt">or the <a href="${escapeHtml(latest.installer)}">.exe installer</a></span>
+      </div>`
+    : `<a class="dl-btn" href="${escapeHtml(latest.installer)}">Download for Windows</a>`;
+  const steps = latest.archive
+    ? `
+      <ol class="steps">
+        <li>Open the downloaded <strong>.zip</strong> file.</li>
+        <li>Double-click <strong>${escapeHtml(installerName)}</strong> inside it.</li>
+        <li>If Windows shows <strong>“Windows protected your PC”</strong>, choose <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+      </ol>`
+    : '';
   currentEl.innerHTML = `
     <div class="info">
       <h2>Latest build <span class="badge ${impact.cls}">${impact.label}</span></h2>
       <div class="meta">
-        <strong>${latest.title || shortVersion(latest.version)}</strong><br/>
-        ${formatDate(latest.published_at)} &middot; <code>${latest.version}</code><br/>
-        <span class="sha">SHA-256: ${latest.sha256 || 'unverified'}</span>
+        <strong>${escapeHtml(latest.title || shortVersion(latest.version))}</strong><br/>
+        ${formatDate(latest.published_at)} &middot; <code>${escapeHtml(latest.version)}</code><br/>
+        <span class="sha">SHA-256 (installer): ${escapeHtml(latest.sha256 || 'unverified')}</span>
       </div>
     </div>
-    <a class="dl-btn" href="${latest.installer}">Download for Windows</a>
+    ${download}
+    ${steps}
   `;
 
   table.style.display = '';
@@ -250,7 +282,7 @@ function render(releases, current) {
         <td><div class="title">${escapeHtml(r.title || '—')}</div></td>
         <td><span class="badge ${imp.cls}">${imp.label}</span></td>
         <td><span class="sha">${(r.sha256 || '').slice(0, 12)}…</span></td>
-        <td><a class="dl-btn small" href="${r.installer}">Download</a></td>
+        <td><a class="dl-btn small" href="${escapeHtml(r.archive || r.installer)}">${r.archive ? 'Download .zip' : 'Download'}</a></td>
       </tr>
     `;
   }).join('');
