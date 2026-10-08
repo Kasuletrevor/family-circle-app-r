@@ -15,6 +15,7 @@ on:
       - 'config/**'
       - 'third_party/**'
       - 'scripts/**'
+      - 'deploy/**'
       - 'vite*.ts'
       - 'tsconfig*.json'
       - '.github/workflows/windows-package.yml'
@@ -33,6 +34,8 @@ on:
       - 'scripts/verify-mail-api-config.mjs'
       - 'scripts/write-demo-mail-config.mjs'
       - 'scripts/write-demo-circle-config.mjs'
+      - 'scripts/publish-demo-release.sh'
+      - 'deploy/**'
       - 'src/main/**'
       - 'src/preload/**'
       - 'src/shared/**'
@@ -510,7 +513,7 @@ jobs:
 
           remote_stage="electron-release-staging/$DEMO_VERSION"
           sshpass -e ssh "$DEV_SSH_USER@$DEV_SSH_HOST" "mkdir -p '$remote_stage'"
-          sshpass -e scp "release/$INSTALLER" scripts/publish-demo-release.sh "$DEV_SSH_USER@$DEV_SSH_HOST:$remote_stage/"
+          sshpass -e scp "release/$INSTALLER" scripts/publish-demo-release.sh deploy/demo/download.html "$DEV_SSH_USER@$DEV_SSH_HOST:$remote_stage/"
 
       - name: Publish demo release atomically
         id: publish
@@ -570,6 +573,36 @@ jobs:
           curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
             -H 'Cache-Control: no-cache' "${immutable_release_url}?build=${cache_buster}" \
             -o /tmp/immutable-release.json
+
+          # The .zip must hold exactly the verified installer and match its recorded checksum.
+          verify_archive() {
+            local release_json="$1" label="$2"
+            local archive_path archive_sha
+            archive_path="$(node -p "require('$release_json').archive || ''")"
+            archive_sha="$(node -p "require('$release_json').archive_sha256 || ''")"
+            [[ -n "$archive_path" && -n "$archive_sha" ]] || { echo "$label has no archive" >&2; return 1; }
+            curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+              -H 'Cache-Control: no-cache' "https://familycircle.o2gventures.com${archive_path}?build=${cache_buster}" \
+              -o /tmp/family-circle-public.zip
+            [[ "$(sha256sum /tmp/family-circle-public.zip | awk '{print $1}')" == "$archive_sha" ]] \
+              || { echo "$label archive checksum mismatch" >&2; return 1; }
+            python3 - /tmp/family-circle-public.zip "${IMMUTABLE_PUBLIC_URL##*/}" "$EXPECTED_SHA256" "$label" <<'PY'
+          import hashlib
+          import sys
+          import zipfile
+
+          archive, installer, expected, label = sys.argv[1:5]
+          with zipfile.ZipFile(archive) as bundle:
+              names = bundle.namelist()
+              if names != [installer]:
+                  raise SystemExit(f"{label} archive should contain only {installer}, found {names}")
+              digest = hashlib.sha256(bundle.read(installer)).hexdigest()
+          if digest != expected:
+              raise SystemExit(f"{label} archive installer checksum mismatch")
+          PY
+            echo "$label archive verified: $archive_path"
+          }
+          verify_archive /tmp/immutable-release.json 'Immutable release'
 
           curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
             -H 'Cache-Control: no-cache' \
@@ -635,6 +668,13 @@ jobs:
               echo "Latest installer checksum mismatch" >&2
               exit 1
             fi
+            verify_archive /tmp/current.json 'Current release'
+            curl --fail --location --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors \
+              -H 'Cache-Control: no-cache' \
+              "https://familycircle.o2gventures.com/electron-releases/demo/download.html?build=${cache_buster}" \
+              -o /tmp/download.html
+            grep -q 'Download for Windows (.zip)' /tmp/download.html \
+              || { echo "Download page does not offer the .zip" >&2; exit 1; }
             echo "Public demo verified and current: $PUBLIC_URL"
           else
             echo "Immutable release verified; a newer semantic release remains current."
