@@ -236,7 +236,10 @@ function render(releases, current) {
     return;
   }
 
-  const latest = releases[0];
+  // current.json names the release behind "latest". An older version can be
+  // re-published after a newer one (it stays immutable but is not promoted), and
+  // would then sort first in versions.json, so never offer releases[0] blindly.
+  const latest = (current && releases.find((r) => r.version === current.version)) || current || releases[0];
   const impact = impactFor(latest);
   const installerName = String(latest.installer || '').split('/').pop();
   // A .zip passes browser download checks more easily than a bare .exe.
