@@ -107,6 +107,9 @@ describe('demo server publish contract', () => {
     // Release titles come from commit messages, so they are always escaped.
     expect(page).toContain('${escapeHtml(latest.title || shortVersion(latest.version))}')
     expect(page).not.toMatch(/\$\{latest\.title/)
+    // The main download follows current.json, not whichever release was published last.
+    expect(page).toContain('releases.find((r) => r.version === current.version)')
+    expect(page).not.toContain('const latest = releases[0];')
   })
 
   it('preserves release history while giving new entries clean semantic identity', () => {
