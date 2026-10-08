@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Family Circle Downloads</title>
+<style>
+  :root {
+    --navy: #0d1f2d;
+    --navy-2: #16293a;
+    --gold: #c8a94b;
+    --gold-soft: #e5d9b0;
+    --ink: #1c2b36;
+    --muted: #5f7280;
+    --line: #e2e8ec;
+    --bg: #f7f9fb;
+    --card: #ffffff;
+    --good: #2e7d5b;
+    --patch: #2e7d5b;
+    --minor: #275d9c;
+    --major: #b23a48;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  header {
+    background: var(--navy);
+    color: #fff;
+    padding: 56px 24px 40px;
+    text-align: center;
+  }
+  header .mark {
+    width: 88px; height: 88px;
+    border-radius: 20px;
+    background: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    padding: 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  }
+  header .mark img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  header h1 { margin: 0 0 8px; font-size: 34px; }
+  header p { margin: 0; color: #b9c9d4; font-size: 16px; }
+  main {
+    max-width: 920px;
+    margin: -28px auto 64px;
+    padding: 0 20px;
+  }
+  .current {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    box-shadow: 0 8px 24px rgba(13, 31, 45, 0.08);
+  }
+  .current .info h2 { margin: 0 0 6px; font-size: 20px; }
+  .current .info .meta { color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge.major { background: #fbe4e7; color: var(--major); }
+  .badge.minor { background: #e1edfa; color: var(--minor); }
+  .badge.patch { background: #dff2ea; color: var(--patch); }
+  .badge.unknown { background: #eceff2; color: var(--muted); }
+  .badge.latest { background: var(--gold-soft); color: var(--navy); margin-left: 6px; }
+  .dl-btn {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--navy);
+    font-weight: 700;
+    font-size: 16px;
+    padding: 14px 28px;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dl-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(200, 169, 75, 0.4); }
+  .dl-btn.small { padding: 9px 18px; font-size: 14px; border-radius: 10px; background: var(--navy-2); color: #fff; }
+  .sha {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    word-break: break-all;
+  }
+  h3.section {
+    margin: 40px 0 16px;
+    font-size: 18px;
+    color: var(--navy);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: #f4f7f9; }
+  tr:last-child td { border-bottom: none; }
+  td .ver { font-weight: 600; font-size: 14px; }
+  td .date { color: var(--muted); font-size: 13px; }
+  td .title { font-size: 14px; line-height: 1.45; }
+  .empty, .error {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--muted);
+  }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 32px 16px 48px;
+  }
+  @media (max-width: 640px) {
+    th:nth-child(4), td:nth-child(4) { display: none; }
+    .current { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="mark"><img src="kin-keepers-logo.jpg" alt="Kin-Keepers logo" /></div>
+  <h1>Family Circle Downloads</h1>
+  <p>Private by design. Install the latest verified Windows build.</p>
+</header>
+<main>
+  <section class="current" id="current">
+    <div class="info">
+      <h2>Loading latest release…</h2>
+      <div class="meta"></div>
+    </div>
+  </section>
+
+  <h3 class="section">Release history</h3>
+  <table id="history" style="display:none">
+    <thead>
+      <tr>
+        <th>Release</th>
+        <th>What changed</th>
+        <th>Impact</th>
+        <th>SHA-256</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="history-body"></tbody>
+  </table>
+  <div class="empty" id="empty" style="display:none">No releases published yet.</div>
+  <div class="error" id="error" style="display:none"></div>
+</main>
+<footer>Kin-Keepers &middot; Family Circle &middot; Verified builds published from <code>main</code></footer>
+
+<script>
+const TYPE_TO_IMPACT = {
+  feat: { label: 'minor', cls: 'minor' },
+  fix: { label: 'patch', cls: 'patch' },
+  perf: { label: 'patch', cls: 'patch' },
+  refactor: { label: 'patch', cls: 'patch' },
+  docs: { label: 'patch', cls: 'patch' },
+  chore: { label: 'patch', cls: 'patch' },
+  ci: { label: 'patch', cls: 'patch' },
+  style: { label: 'patch', cls: 'patch' },
+  build: { label: 'patch', cls: 'patch' },
+  test: { label: 'patch', cls: 'patch' },
+  revert: { label: 'patch', cls: 'patch' },
+};
+
+function impactFor(release) {
+  if (release.title && /!|BREAKING CHANGE/i.test(release.title)) {
+    return { label: 'major', cls: 'major' };
+  }
+  const type = (release.type || '').toLowerCase();
+  return TYPE_TO_IMPACT[type] || { label: 'build', cls: 'unknown' };
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
+function shortVersion(v) {
+  const m = v.match(/^(0\.1\.0)-demo-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-([0-9a-f]+)$/);
+  if (!m) return v;
+  return `${m[1]} · ${m[4]}-${m[2]}-${m[3]} ${m[5]}:${m[6]} (${m[8].slice(0,7)})`;
+}
+
+function render(releases, current) {
+  const currentEl = document.getElementById('current');
+  const table = document.getElementById('history');
+  const body = document.getElementById('history-body');
+  const latestVersion = (current && current.version) || (releases[0] && releases[0].version);
+
+  if (!releases.length) {
+    document.getElementById('empty').style.display = 'block';
+    currentEl.querySelector('.info h2').textContent = 'No releases yet';
+    return;
+  }
+
+  const latest = releases[0];
+  const impact = impactFor(latest);
+  currentEl.innerHTML = `
+    <div class="info">
+      <h2>Latest build <span class="badge ${impact.cls}">${impact.label}</span></h2>
+      <div class="meta">
+        <strong>${latest.title || shortVersion(latest.version)}</strong><br/>
+        ${formatDate(latest.published_at)} &middot; <code>${latest.version}</code><br/>
+        <span class="sha">SHA-256: ${latest.sha256 || 'unverified'}</span>
+      </div>
+    </div>
+    <a class="dl-btn" href="${latest.installer}">Download for Windows</a>
+  `;
+
+  table.style.display = '';
+  body.innerHTML = releases.map((r) => {
+    const imp = impactFor(r);
+    const isLatest = r.version === latestVersion;
+    return `
+      <tr>
+        <td>
+          <div class="ver">${shortVersion(r.version)}</div>
+          <div class="date">${formatDate(r.published_at)}</div>
+          ${isLatest ? '<span class="badge latest">current</span>' : ''}
+        </td>
+        <td><div class="title">${escapeHtml(r.title || '—')}</div></td>
+        <td><span class="badge ${imp.cls}">${imp.label}</span></td>
+        <td><span class="sha">${(r.sha256 || '').slice(0, 12)}…</span></td>
+        <td><a class="dl-btn small" href="${r.installer}">Download</a></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c] || c));
+}
+
+async function load() {
+  try {
+    const [versionsRes, currentRes] = await Promise.all([
+      fetch('versions.json', { cache: 'no-store' }),
+      fetch('current.json', { cache: 'no-store' }).then((r) => (r.ok ? r : null)),
+    ]);
+    if (!versionsRes.ok) throw new Error('versions.json not available');
+    const data = await versionsRes.json();
+    const releases = Array.isArray(data.releases) ? data.releases : [];
+    const current = currentRes ? await currentRes.json() : null;
+    render(releases, current);
+  } catch (err) {
+    document.getElementById('current').style.display = 'none';
+    const errorEl = document.getElementById('error');
+    errorEl.style.display = 'block';
+    errorEl.textContent = `Could not load release metadata: ${err.message}`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
