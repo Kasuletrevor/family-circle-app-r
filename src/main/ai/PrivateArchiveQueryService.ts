@@ -5,13 +5,15 @@ import type { VaultQueryChunk } from '../vault/VaultChunkRepository'
 import { cosineSimilarity } from '../vault/cosineSimilarity'
 import { STORY_LANGUAGES } from '../../shared/story'
 import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from './embeddingContract'
-import { fuseRankings, KeywordIndex } from './keywordSearch'
+import { contentTerms, fuseRankings, KeywordIndex } from './keywordSearch'
 import { planRetrievalQueries, selectGenerationRoute, type PrivateScopeType } from './PrivateQueryPlanner'
 
 export const MAX_RETRIEVAL_CHUNKS = 3
 const MAX_EXCERPT_CHARS = 320
 /** Keyword indexes kept in memory, one per recently asked scope. */
 const MAX_CACHED_KEYWORD_INDEXES = 3
+/** A retrieved section is cited only if it shares this many meaningful words with the answer. */
+const MIN_SHARED_ANSWER_TERMS = 2
 
 export type PrivateVaultScope =
   | { type: 'all' }
@@ -184,6 +186,24 @@ export function isNotFoundAnswer(answer: string): boolean {
   return NOT_FOUND_WORDING.some((pattern) => pattern.test(firstSentence))
 }
 
+/**
+ * The retrieved sections the answer actually drew on: those sharing at least two
+ * meaningful words (names, numbers, places) with it. When none do (a reworded or
+ * translated answer), the best-ranked section is cited so the answer keeps one source.
+ */
+export function citedCandidates<T extends { text: string }>(answer: string, ranked: T[]): T[] {
+  const answerTerms = contentTerms(answer)
+  const needed = Math.min(MIN_SHARED_ANSWER_TERMS, answerTerms.size)
+  const cited = needed === 0 ? [] : ranked.filter((candidate) => {
+    let shared = 0
+    for (const term of contentTerms(candidate.text)) {
+      if (answerTerms.has(term) && ++shared >= needed) return true
+    }
+    return false
+  })
+  return cited.length > 0 ? cited : ranked.slice(0, 1)
+}
+
 export class PrivateArchiveQueryService {
   private readonly keywordIndexes = new Map<string, KeywordIndex>()
 
@@ -291,7 +311,7 @@ export class PrivateArchiveQueryService {
     return {
       answer,
       route,
-      sources: this.deduplicateSources(ranked.map(({ candidate }) => candidate)),
+      sources: this.deduplicateSources(citedCandidates(answer, ranked.map(({ candidate }) => candidate))),
     }
   }
 

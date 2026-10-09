@@ -50,6 +50,11 @@ export function tokenize(text: string): string[] {
   return terms
 }
 
+/** The meaningful words of a text (names, numbers, places), without question words. */
+export function contentTerms(text: string): Set<string> {
+  return new Set(tokenize(text).filter((term) => !STOP_WORDS.has(term)))
+}
+
 function queryTerms(queries: string[]): string[] {
   const terms = new Set<string>()
   for (const query of queries) {

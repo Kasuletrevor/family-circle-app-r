@@ -152,8 +152,10 @@ After repairing from `1.2.0` to `1.3.0`, `offline-ai/bin/llama-b8772-bin-win-cpu
 
 **Done.** After a successful setup, and once per run when Private AI is ready (so existing installs are cleaned too), engines, models and staging inside `offline-ai` that the current manifest does not reference are deleted. Verified in the app: the old 115 MB b8772 folder was removed on launch.
 
-### 17. [ ] Sources always show the top three matches
+### 17. [x] Sources always show the top three matches
 Answers list the three highest-ranked chunks even when one is barely relevant (for example "My Story · What I do" under a question about the family doctor). Consider a similarity threshold, or showing only the sources the answer used.
+
+**Done.** The answer model still reads the top 3 sections, but a section is cited only if it shares at least two meaningful words (names, numbers, places; question words ignored) with the answer. If none do, as with a reworded or translated answer, the best-ranked section is cited. Replaying real Qwen answers: the French "Makerere" answer now cites only *Learning and education* instead of also *What I do* and *Medical summary*.
 
 ### 16. [ ] Smaller findings
 - [x] PDF extraction keeps page markers such as `-- 1 of 1 --` in the text, and they get indexed. **Done:** removed from PDF text at extraction. PDFs indexed before the fix keep the markers until they are re-indexed.

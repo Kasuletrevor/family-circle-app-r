@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isNotFoundAnswer, PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
+import { citedCandidates, isNotFoundAnswer, PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
 
 function vaultChunk(documentId: number, fileName: string, chunkIndex: number, text: string, embedding: number[]) {
   return {
@@ -87,7 +87,8 @@ describe('PrivateArchiveQueryService', () => {
   })
 
   it('ranks Story and Vault candidates together, keeps only three chunks total, and deduplicates citations by logical source', async () => {
-    const generateFast = vi.fn(async () => 'Grounded')
+    // The answer draws on both kept sources, so both are cited.
+    const generateFast = vi.fn(async () => 'Grounded in A-TOP-1 and STORY-TOP-3')
     const service = new PrivateArchiveQueryService(deps({
       vaultChunks: {
         listQueryChunks: vi.fn(async () => [
@@ -314,6 +315,45 @@ describe('PrivateArchiveQueryService', () => {
     const service = new PrivateArchiveQueryService(deps())
     const result = await service.ask({ question: 'Where was grandmother born?', scope: { type: 'vault', vault: { type: 'all' } } })
     expect(result.sources.length).toBeGreaterThan(0)
+  })
+})
+
+describe('citedCandidates', () => {
+  const doctor = { text: 'Medical summary: the family doctor is Dr. Okello at Nsambya Hospital in Kampala.' }
+  const job = { text: 'I work as a software engineer building privacy-first family apps.' }
+  const study = { text: 'I studied computer science at Makerere University and graduated in 2019.' }
+
+  it('cites only the sections the answer draws on, even when one ranked higher', () => {
+    const answer = 'The family doctor is Dr. Okello at Nsambya Hospital.'
+    expect(citedCandidates(answer, [job, doctor, study])).toEqual([doctor])
+  })
+
+  it('cites every section the answer combines', () => {
+    const answer = 'You studied at Makerere University and now work as a software engineer.'
+    expect(citedCandidates(answer, [study, doctor, job])).toEqual([study, job])
+  })
+
+  it('keeps the best-ranked section when the answer is reworded or translated', () => {
+    expect(citedCandidates("J'ai étudié l'informatique.", [study, job])).toEqual([study])
+    expect(citedCandidates('Yes.', [doctor, job])).toEqual([doctor])
+  })
+
+  it('drops the unrelated sources from real answers recorded with Qwen3.5 0.8B', () => {
+    const medical = { text: 'Medical summary. The family doctor is Dr. Okello at Nsambya Hospital.' }
+    // French answer (2026-10-02): the old top-3 also cited "What I do" and the medical summary.
+    expect(citedCandidates("J'ai étudié en informatique à Makerere University.", [job, study, medical]))
+      .toEqual([study])
+    // Combined answer (2026-10-02): the traditions memory is cited, the job memory is not.
+    const traditions = { text: 'Our family tradition is gathering in Masaka every Christmas, cooking chicken luwombo together and telling stories under the mango tree.' }
+    expect(citedCandidates(
+      'Our family tradition at Christmas involves gathering in Masaka to cook chicken luwombo together and to tell stories under a mango tree.',
+      [traditions, job, study],
+    )).toEqual([traditions])
+  })
+
+  it('does not count question words such as "the" or "is" as shared', () => {
+    const answer = 'It is the one in the city.'
+    expect(citedCandidates(answer, [job, doctor])).toEqual([job])
   })
 })
 
