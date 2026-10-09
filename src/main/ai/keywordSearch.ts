@@ -15,6 +15,16 @@ const STOP_WORDS = new Set([
   'how', 'i', 'if', 'in', 'into', 'is', 'it', 'its', 'me', 'my', 'of', 'on', 'or', 'our', 'she', 'so', 'tell',
   'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'to', 'us', 'was', 'we',
   'were', 'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'will', 'with', 'would', 'you', 'your',
+  // French, Spanish, Portuguese and Filipino function words (accents are removed before
+  // matching). Words with an English meaning, such as "son", "ma" or "kay", are left out.
+  'au', 'aux', 'avec', 'ce', 'ces', 'cette', 'dans', 'de', 'des', 'du', 'elle', 'elles', 'est', 'et', 'ete',
+  'etre', 'il', 'ils', 'je', 'la', 'le', 'les', 'leur', 'leurs', 'mes', 'mon', 'ne', 'nous', 'ou', 'par',
+  'pas', 'pour', 'qu', 'que', 'qui', 'sa', 'ses', 'sont', 'sur', 'ta', 'tes', 'ton', 'tu', 'un', 'une', 'vous',
+  'con', 'cuando', 'del', 'donde', 'el', 'ella', 'ellas', 'ellos', 'en', 'es', 'esta', 'fue', 'las', 'lo',
+  'los', 'mi', 'mis', 'para', 'por', 'quien', 'se', 'su', 'sus', 'una', 'unas', 'unos', 'y',
+  'da', 'das', 'do', 'dos', 'e', 'ela', 'elas', 'ele', 'eles', 'em', 'foi', 'meu', 'minha', 'na', 'nas',
+  'no', 'nos', 'os', 'quem', 'seu', 'sua', 'um', 'uma',
+  'ako', 'ang', 'ano', 'ay', 'kailan', 'kami', 'mga', 'ng', 'ni', 'saan', 'si', 'sila', 'sino', 'siya', 'tayo',
 ])
 
 // Chinese and Japanese are written without spaces, so they are indexed as overlapping character pairs.
@@ -82,8 +92,21 @@ export class KeywordIndex {
   private readonly postings = new Map<string, { documents: number[]; frequencies: number[] }>()
   private readonly lengths: Float64Array
   private readonly averageLength: number
+  private readonly sourceOf: number[]
+  private readonly sourceCount: number
 
-  constructor(documents: string[]) {
+  /**
+   * `sources` optionally names the document or memory each text comes from. Overlapping
+   * sections of one document then count once when judging how rare a word is.
+   */
+  constructor(documents: string[], sources?: string[]) {
+    const sourceIds = new Map<string, number>()
+    this.sourceOf = documents.map((_document, index) => {
+      const key = sources?.[index] ?? `#${index}`
+      if (!sourceIds.has(key)) sourceIds.set(key, sourceIds.size)
+      return sourceIds.get(key)!
+    })
+    this.sourceCount = sourceIds.size
     this.lengths = new Float64Array(documents.length)
     documents.forEach((document, index) => {
       const tokens = tokenize(document)
@@ -109,20 +132,21 @@ export class KeywordIndex {
   }
 
   /**
-   * How rare a word is across these texts (BM25 inverse document frequency): high for
-   * a name in one section, low for common words, in any language. A word in none of
-   * the texts, or in more than half of them, weighs 0: it cannot tell sections apart,
-   * however few there are.
+   * How rare a word is across the sources of these texts (BM25 inverse document
+   * frequency): high for a name in one source, low for common words, in any language. A
+   * word in none of the sources, or in more than half of them, weighs 0: it cannot tell
+   * sources apart, however few there are.
    */
   rarity(term: string): number {
-    const containing = this.postings.get(term)?.documents.length ?? 0
-    if (containing === 0 || containing > this.size / 2) return 0
-    return inverseFrequency(this.size, containing)
+    const documents = this.postings.get(term)?.documents ?? []
+    const containing = new Set(documents.map((document) => this.sourceOf[document])).size
+    if (containing === 0 || containing > this.sourceCount / 2) return 0
+    return inverseFrequency(this.sourceCount, containing)
   }
 
-  /** The rarity of a word found in exactly one text, the most a single word can weigh. */
+  /** The rarity of a word found in exactly one source, the most a single word can weigh. */
   get maxRarity(): number {
-    return inverseFrequency(this.size, 1)
+    return inverseFrequency(this.sourceCount, 1)
   }
 
   /**

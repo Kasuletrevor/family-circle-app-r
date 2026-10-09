@@ -354,6 +354,24 @@ describe('citedCandidates', () => {
     expect(cite('祖母はJinjaで1941年に生まれました。', [works, born], scope)).toEqual([born])
   })
 
+  it('treats overlapping sections of one document as one source when judging rarity', () => {
+    // A fact in the 150-character overlap appears in two sections of the same document.
+    const first = { text: 'Chapter one. The deed is kept in the red tin at Mbarara.' }
+    const second = { text: 'The deed is kept in the red tin at Mbarara. Chapter two begins.' }
+    const other = { text: 'Uncle Peter works in Kampala as a teacher.' }
+    const index = new KeywordIndex([first.text, second.text, other.text], ['document:1', 'document:1', 'document:2'])
+    expect(citedCandidates('The deed is in the red tin at Mbarara.', [first, other, second], index))
+      .toEqual([first, second])
+  })
+
+  it('ignores common French words even when French sections are a small minority', () => {
+    const english = Array.from({ length: 100 }, (_, n) => ({ text: `Family record ${n}: the harvest was good in Masaka that year.` }))
+    const rose = { text: 'Elle est infirmière à Mulago depuis 1990.' }
+    const grace = { text: 'Elle habite à Kampala avec ses enfants.' }
+    const scope = [...english, rose, grace]
+    expect(cite('Elle travaille à Mulago depuis 1990.', [grace, rose], scope)).toEqual([rose])
+  })
+
   it('does not cite sections that share only common words, in any language', () => {
     const french = [
       'Elle habite dans la ville de Masaka depuis 1990.',

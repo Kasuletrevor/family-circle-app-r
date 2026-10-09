@@ -336,7 +336,10 @@ export class PrivateArchiveQueryService {
     if (index) {
       this.keywordIndexes.delete(key)
     } else {
-      index = new KeywordIndex(candidates.map((candidate) => candidate.text))
+      index = new KeywordIndex(
+        candidates.map((candidate) => candidate.text),
+        candidates.map((candidate) => candidate.logicalKey),
+      )
     }
     this.keywordIndexes.set(key, index)
     while (this.keywordIndexes.size > MAX_CACHED_KEYWORD_INDEXES) {
