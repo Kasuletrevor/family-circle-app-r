@@ -106,12 +106,14 @@ export class KeywordIndex {
 
   /**
    * How rare a word is across these texts (BM25 inverse document frequency): high for
-   * a name in one section, near zero for a word in nearly all of them, in any language.
-   * A word that appears in none of the texts weighs 0.
+   * a name in one section, low for common words, in any language. A word in none of
+   * the texts, or in more than half of them, weighs 0: it cannot tell sections apart,
+   * however few there are.
    */
   rarity(term: string): number {
     const containing = this.postings.get(term)?.documents.length ?? 0
-    return containing === 0 ? 0 : inverseFrequency(this.size, containing)
+    if (containing === 0 || containing > this.size / 2) return 0
+    return inverseFrequency(this.size, containing)
   }
 
   /** The rarity of a word found in exactly one text, the most a single word can weigh. */

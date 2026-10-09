@@ -193,8 +193,9 @@ export function isNotFoundAnswer(answer: string): boolean {
  * The retrieved sections the answer actually drew on. Shared words are weighted by how
  * rare they are across the sections in scope, so one distinctive name or number is
  * enough (also when the answer was translated), while common words in any language
- * count for little. When no section qualifies, the best-ranked one is cited, so an
- * answer always keeps a source.
+ * count for little. When no section qualifies (an answer reworded or translated with
+ * no shared names or numbers), the answer cannot be traced to one section, so every
+ * section the model read is listed rather than guessing a single one.
  */
 export function citedCandidates<T extends { text: string }>(
   answer: string,
@@ -210,7 +211,7 @@ export function citedCandidates<T extends { text: string }>(
     }
     return false
   })
-  return cited.length > 0 ? cited : ranked.slice(0, 1)
+  return cited.length > 0 ? cited : ranked
 }
 
 export class PrivateArchiveQueryService {

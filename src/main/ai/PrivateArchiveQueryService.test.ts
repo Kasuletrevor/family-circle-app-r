@@ -359,9 +359,19 @@ describe('citedCandidates', () => {
       .toEqual([french[0]])
   })
 
-  it('keeps the best-ranked section when the answer shares nothing distinctive', () => {
-    expect(cite('Yes.', [doctor, job])).toEqual([doctor])
-    expect(cite('It is the one in the city.', [job, doctor])).toEqual([job])
+  it('lists every section the model read when the answer cannot be traced to one', () => {
+    // A fully translated paraphrase keeps no names or numbers, so no single section can be named.
+    const nurse = { text: 'Aunt Rose works as a nurse at the district hospital.' }
+    const scope = [nurse, job, study, doctor]
+    expect(cite('Elle est infirmière.', [job, nurse, study], scope)).toEqual([job, nurse, study])
+    expect(cite('Yes.', [doctor, job])).toEqual([doctor, job])
+  })
+
+  it('does not count a word found in most sections, even in a scope of two', () => {
+    const masaka = { text: 'Elle habite dans la ville de Masaka depuis 1990.' }
+    const kampala = { text: 'Il travaille dans la ville de Kampala comme infirmier.' }
+    // "dans la ville de" is in both sections, so only "Masaka" can tell them apart.
+    expect(cite('Elle habite dans la ville de Masaka.', [kampala, masaka], [masaka, kampala])).toEqual([masaka])
   })
 
   it('drops the unrelated sources from real answers recorded with Qwen3.5 0.8B', () => {
