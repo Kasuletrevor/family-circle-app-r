@@ -26,11 +26,13 @@ describe('SettingsService', () => {
     const destination = join(root, 'backups')
     await mkdir(join(userDataPath, 'vault', 'users', '1', 'documents'), { recursive: true })
     await mkdir(join(userDataPath, 'story', 'users', '1', 'media'), { recursive: true })
+    await mkdir(join(userDataPath, 'circle-photos', 'users', '1', 'circle'), { recursive: true })
     await mkdir(join(userDataPath, 'offline-ai'), { recursive: true })
     await mkdir(destination, { recursive: true })
 
     await writeFile(join(userDataPath, 'vault', 'users', '1', 'documents', 'letter.txt'), 'family letter')
     await writeFile(join(userDataPath, 'story', 'users', '1', 'media', 'photo.jpg'), 'photo bytes')
+    await writeFile(join(userDataPath, 'circle-photos', 'users', '1', 'circle', 'grandma.jpg'), 'portrait')
     await writeFile(join(userDataPath, 'offline-ai', 'model.gguf'), 'very large model')
     await writeFile(join(userDataPath, 'protected-session.bin'), 'secret session')
 
@@ -65,6 +67,7 @@ describe('SettingsService', () => {
     const backupRoot = join(destination, result.folderName!)
     await expect(stat(join(backupRoot, 'vault', 'users', '1', 'documents', 'letter.txt'))).resolves.toMatchObject({ size: 13 })
     await expect(stat(join(backupRoot, 'story', 'users', '1', 'media', 'photo.jpg'))).resolves.toMatchObject({ size: 11 })
+    await expect(stat(join(backupRoot, 'circle-photos', 'users', '1', 'circle', 'grandma.jpg'))).resolves.toMatchObject({ size: 8 })
     await expect(stat(join(backupRoot, 'offline-ai'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(stat(join(backupRoot, 'protected-session.bin'))).rejects.toMatchObject({ code: 'ENOENT' })
 
@@ -73,7 +76,7 @@ describe('SettingsService', () => {
       formatVersion: 1,
       createdAt,
       appVersion: '0.2.3',
-      includes: ['database', 'vault', 'story'],
+      includes: ['database', 'vault', 'story', 'circle-photos'],
       excludes: ['private-ai', 'protected-session'],
     })
 

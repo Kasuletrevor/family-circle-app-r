@@ -5,6 +5,7 @@ import type {
   CircleListItem,
   CircleNotificationRecord,
   CircleOverview,
+  CirclePhotoChoice,
   CircleTreePersonRecord,
   CircleTreePositionRecord,
   CreateCircleInput,
@@ -15,6 +16,7 @@ import type {
   SaveTreePositionInput,
 } from '../../../shared/desktopApi'
 import type { CircleClient } from './CircleClient'
+import type { PersonPhotoClient } from './PersonPhotoClient'
 import type { ActivityItem, CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 type GetOverview = () => Promise<CircleOverview>
@@ -35,6 +37,9 @@ interface CircleDesktopOperations {
   leaveCircle(): Promise<{ success: true }>
   renameCircle(input: { name: string }): Promise<{ success: true }>
   deleteCircle(input: { confirmationName: string }): Promise<{ success: true }>
+  listPhotos(): Promise<Record<string, string>>
+  choosePhoto(input: { personId: string }): Promise<CirclePhotoChoice>
+  removePhoto(input: { personId: string }): Promise<{ success: true }>
 }
 
 function defaultOverview(): Promise<CircleOverview> {
@@ -57,6 +62,9 @@ const defaultOperations: CircleDesktopOperations = {
   leaveCircle: () => window.familyCircle.circle.leaveCircle(),
   renameCircle: (input) => window.familyCircle.circle.renameCircle(input),
   deleteCircle: (input) => window.familyCircle.circle.deleteCircle(input),
+  listPhotos: () => window.familyCircle.circle.listPhotos(),
+  choosePhoto: (input) => window.familyCircle.circle.choosePhoto(input),
+  removePhoto: (input) => window.familyCircle.circle.removePhoto(input),
 }
 
 function initials(name: string): string {
@@ -125,7 +133,7 @@ function mapListItem(circle: CircleListItem): CircleSummary {
   }
 }
 
-export class DesktopCircleClient implements CircleClient {
+export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
   private readonly changeListeners = new Set<() => void>()
   private overviewInFlight: Promise<CircleOverview> | null = null
   private detailsInFlight: Promise<CircleDetails | null> | null = null
@@ -221,6 +229,7 @@ export class DesktopCircleClient implements CircleClient {
       return {
         activeCircleName: null,
         unreadNotifications: overview.notifications.filter((notification) => !notification.read).length,
+        viewerPersonId: null,
       }
     }
 
@@ -228,6 +237,7 @@ export class DesktopCircleClient implements CircleClient {
     return {
       activeCircleName: activeCircle?.name ?? overview.tree.group.name ?? null,
       unreadNotifications: overview.notifications.filter((notification) => !notification.read).length,
+      viewerPersonId: overview.viewerPersonId ?? null,
     }
   }
 
@@ -333,6 +343,18 @@ export class DesktopCircleClient implements CircleClient {
     } finally {
       this.invalidateCircleReads()
     }
+  }
+
+  listPhotos(): Promise<Record<string, string>> {
+    return this.operations.listPhotos()
+  }
+
+  choosePhoto(personId: string): Promise<CirclePhotoChoice> {
+    return this.operations.choosePhoto({ personId })
+  }
+
+  async removePhoto(personId: string): Promise<void> {
+    await this.operations.removePhoto({ personId })
   }
 
   onChange(listener: () => void): () => void {

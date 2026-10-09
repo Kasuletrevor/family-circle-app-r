@@ -2,6 +2,7 @@ import type {
   AddTreeRelationInput,
   CircleDetails,
   CircleListItem,
+  CirclePhotoChoice,
   CircleOverview,
   CreateCircleInput,
   CreateCircleResult,
@@ -88,4 +89,30 @@ export function registerCircleIpc(ipc: IpcHandleRegistrar, service: CircleIpcSer
   ipc.handle('circle:delete', (_event, payload) => service.deleteCircle({
     confirmationName: String(recordOf(payload).confirmationName ?? ''),
   }))
+}
+
+export interface CirclePhotoIpcService {
+  listPhotos(): Promise<Record<string, string>>
+  choosePhoto(personId: unknown): Promise<CirclePhotoChoice>
+  removePhoto(personId: unknown): Promise<{ success: true }>
+}
+
+const PHOTO_DATA_URL = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/
+
+function safePhotoMap(photos: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(photos).filter(([, url]) => PHOTO_DATA_URL.test(url)))
+}
+
+export function registerCirclePhotoIpc(ipc: IpcHandleRegistrar, photos: CirclePhotoIpcService): void {
+  ipc.handle('circle:photos-list', async () => safePhotoMap(await photos.listPhotos()))
+  ipc.handle('circle:photo-choose', async (_event, payload) => {
+    const result = await photos.choosePhoto(personInput(payload).personId)
+    if (result.status === 'saved') {
+      return PHOTO_DATA_URL.test(result.dataUrl)
+        ? { status: 'saved', personId: String(result.personId), dataUrl: result.dataUrl }
+        : { status: 'unsupported' }
+    }
+    return { status: result.status === 'canceled' || result.status === 'too-large' ? result.status : 'unsupported' }
+  })
+  ipc.handle('circle:photo-remove', (_event, payload) => photos.removePhoto(personInput(payload).personId))
 }

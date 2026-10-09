@@ -3,6 +3,7 @@ import { Bell, Check, ChevronDown, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { AuthUser, CircleNotificationRecord } from '../../shared/desktopApi'
 import type { CircleSummary, ShellSnapshot } from '../services/circle/types'
+import { PersonAvatar } from '../features/circles/PersonPhotos'
 import { useAppServices } from './services'
 
 function initials(name: string): string {
@@ -202,7 +203,7 @@ export function TopBar({ user, onSignOut }: { user: AuthUser; onSignOut: () => P
               setSignOutError(null)
             }}
           >
-            <span className="profile-button__avatar">{profileInitials}</span>
+            <PersonAvatar personId={shell?.viewerPersonId} initials={profileInitials} className="profile-button__avatar" />
             <span className="profile-button__copy">
               <strong>{displayName}</strong>
               <small><i aria-hidden="true" /> Private session</small>

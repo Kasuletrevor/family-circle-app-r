@@ -4,6 +4,7 @@ import type { AuthClient } from '../services/auth/AuthClient'
 import { DesktopAuthClient } from '../services/auth/DesktopAuthClient'
 import { CircleManagement } from '../features/circles/CircleManagement'
 import { MyCircles } from '../features/circles/MyCircles'
+import { PersonPhotosProvider } from '../features/circles/PersonPhotos'
 import { Home } from '../features/home/Home'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { FamilyTreePage } from '../features/family-tree/FamilyTreePage'
@@ -30,6 +31,7 @@ export function AuthenticatedApp({
   const updateAuthState = onAuthStateChange ?? (() => undefined)
 
   return (
+    <PersonPhotosProvider>
     <div className="app-shell">
       <Sidebar />
       <div className="app-shell__workspace">
@@ -50,6 +52,7 @@ export function AuthenticatedApp({
         </main>
       </div>
     </div>
+    </PersonPhotosProvider>
   )
 }
 

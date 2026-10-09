@@ -138,6 +138,7 @@ describe('DesktopCircleClient', () => {
     await expect(client.getShellSnapshot()).resolves.toEqual({
       activeCircleName: null,
       unreadNotifications: 0,
+      viewerPersonId: null,
     })
   })
 
@@ -154,6 +155,7 @@ describe('DesktopCircleClient', () => {
     await expect(shell).resolves.toEqual({
       activeCircleName: 'Test Family',
       unreadNotifications: 1,
+      viewerPersonId: 'user:88',
     })
     await expect(home).resolves.toMatchObject({ state: 'ready' })
     expect(getOverview).toHaveBeenCalledTimes(1)

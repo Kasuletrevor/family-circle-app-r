@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
@@ -15,7 +15,8 @@ import { PasswordRecoveryService } from './auth/PasswordRecoveryService'
 import { createRecoveryMailer } from './auth/RecoveryMailer'
 import { createProtectedCrypto, createSessionFile, SessionStore } from './auth/SessionStore'
 import { UserRepository } from './auth/UserRepository'
-import { registerCircleIpc } from './circle/circleIpc'
+import { registerCircleIpc, registerCirclePhotoIpc } from './circle/circleIpc'
+import { CirclePhotoService } from './circle/CirclePhotoService'
 import { CircleService } from './circle/CircleService'
 import { resolveCircleApiConfig } from './circle/CircleApiConfig'
 import { LegacyCircleAuthAdapter } from './circle/LegacyCircleAuthAdapter'
@@ -51,6 +52,7 @@ type StoryServices = ReturnType<typeof createStoryServices>
 interface AppServices extends StoryServices {
   authService: AuthService
   circleService: CircleService
+  circlePhotoService: CirclePhotoService
   vaultService: VaultService
   vaultQueryService: VaultQueryService
   privateAiService: OfflineAiAssetService
@@ -65,6 +67,7 @@ function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, services.authService)
   registerCircleIpc(ipcMain, services.circleService)
+  registerCirclePhotoIpc(ipcMain, services.circlePhotoService)
   registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock, (documentId) => (
     services.vaultIndexService.getIndexProgress(documentId)
   ))
@@ -254,6 +257,22 @@ async function createAppServices(): Promise<AppServices> {
   const services: AppServices = {
     authService: new AuthService(users, sessions, recovery, circle),
     circleService: new CircleService(sessions, users, circle, mailer),
+    circlePhotoService: new CirclePhotoService({
+      userDataPath,
+      session: sessions,
+      users,
+      images: { fromPath: (path) => nativeImage.createFromPath(path) },
+      picker: {
+        async choosePhoto() {
+          const result = await dialog.showOpenDialog({
+            title: 'Choose a photo',
+            properties: ['openFile'],
+            filters: [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png'] }],
+          })
+          return result.canceled ? null : result.filePaths[0] ?? null
+        },
+      },
+    }),
     vaultService,
     vaultQueryService,
     privateAiService,

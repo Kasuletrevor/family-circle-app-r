@@ -83,7 +83,7 @@ describe('createDesktopApi', () => {
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword', 'updateProfile', 'changePassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])
-    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle', 'renameCircle', 'deleteCircle'])
+    expect(Object.keys(api.circle)).toEqual(['getOverview', 'getMyCircles', 'getCircleDetails', 'selectCircle', 'createCircle', 'inviteMember', 'addTreeRelation', 'deleteTreeRelation', 'saveTreePosition', 'markNotificationsRead', 'resendInvitation', 'cancelInvitation', 'removeMember', 'leaveCircle', 'renameCircle', 'deleteCircle', 'listPhotos', 'choosePhoto', 'removePhoto'])
     expect(Object.keys(api.vault)).toEqual(['listDocuments', 'chooseAndUploadDocuments', 'openDocument', 'retryExtraction', 'retryIndexing', 'deleteDocument', 'ask', 'onUploadProgress'])
     expect(Object.keys(api.settings)).toEqual(['createBackup', 'openDataFolder', 'restoreBackup'])
     expect(Object.keys(api.privateAi)).toEqual(['getStatus', 'startSetup', 'pauseSetup', 'repair', 'remove', 'onProgress'])
