@@ -155,7 +155,7 @@ After repairing from `1.2.0` to `1.3.0`, `offline-ai/bin/llama-b8772-bin-win-cpu
 ### 17. [x] Sources always show the top three matches
 Answers list the three highest-ranked chunks even when one is barely relevant (for example "My Story · What I do" under a question about the family doctor). Consider a similarity threshold, or showing only the sources the answer used.
 
-**Done.** The answer model still reads the top 3 sections, but a section is cited only if it shares at least two meaningful words (names, numbers, places; question words ignored) with the answer. If none do, as with a reworded or translated answer, the best-ranked section is cited. Replaying real Qwen answers: the French "Makerere" answer now cites only *Learning and education* instead of also *What I do* and *Medical summary*.
+**Done.** The answer model still reads the top 3 sections, but a section is cited only if the words it shares with the answer are rare enough across the sections in scope (one distinctive name or number is enough, also for translated answers; common words in any language count for little). If none do, as with a reworded or translated answer, the best-ranked section is cited. Replaying real Qwen answers: the French "Makerere" answer now cites only *Learning and education* instead of also *What I do* and *Medical summary*.
 
 ### 16. [ ] Smaller findings
 - [x] PDF extraction keeps page markers such as `-- 1 of 1 --` in the text, and they get indexed. **Done:** removed from PDF text at extraction. PDFs indexed before the fix keep the markers until they are re-indexed.

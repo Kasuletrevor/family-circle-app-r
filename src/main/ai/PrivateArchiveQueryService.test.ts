@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { KeywordIndex } from './keywordSearch'
 import { citedCandidates, isNotFoundAnswer, PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
 
 function vaultChunk(documentId: number, fileName: string, chunkIndex: number, text: string, embedding: number[]) {
@@ -319,41 +320,58 @@ describe('PrivateArchiveQueryService', () => {
 })
 
 describe('citedCandidates', () => {
-  const doctor = { text: 'Medical summary: the family doctor is Dr. Okello at Nsambya Hospital in Kampala.' }
+  const doctor = { text: 'Medical summary. The family doctor is Dr. Okello at Nsambya Hospital in Kampala.' }
   const job = { text: 'I work as a software engineer building privacy-first family apps.' }
   const study = { text: 'I studied computer science at Makerere University and graduated in 2019.' }
+  const traditions = { text: 'Our family tradition is gathering in Masaka every Christmas, cooking chicken luwombo together and telling stories under the mango tree.' }
+  const archive = [doctor, job, study, traditions]
+  // Rarity is measured across every section in scope, as the service does.
+  const cite = (answer: string, ranked: Array<{ text: string }>, scope = archive) =>
+    citedCandidates(answer, ranked, new KeywordIndex(scope.map((section) => section.text)))
 
   it('cites only the sections the answer draws on, even when one ranked higher', () => {
-    const answer = 'The family doctor is Dr. Okello at Nsambya Hospital.'
-    expect(citedCandidates(answer, [job, doctor, study])).toEqual([doctor])
+    expect(cite('The family doctor is Dr. Okello at Nsambya Hospital.', [job, doctor, study])).toEqual([doctor])
   })
 
   it('cites every section the answer combines', () => {
-    const answer = 'You studied at Makerere University and now work as a software engineer.'
-    expect(citedCandidates(answer, [study, doctor, job])).toEqual([study, job])
+    expect(cite('You studied at Makerere University and now work as a software engineer.', [study, doctor, job]))
+      .toEqual([study, job])
   })
 
-  it('keeps the best-ranked section when the answer is reworded or translated', () => {
-    expect(citedCandidates("J'ai étudié l'informatique.", [study, job])).toEqual([study])
-    expect(citedCandidates('Yes.', [doctor, job])).toEqual([doctor])
+  it('cites each English section a translated answer combines, from one distinctive word each', () => {
+    const born = { text: 'Grandmother was born in Jinja in 1941.' }
+    const works = { text: 'Uncle Peter works in Kampala as a teacher.' }
+    const other = { text: 'The family gathers every Sunday after church.' }
+    const scope = [born, works, other, job, study]
+    expect(cite('Grand-mère est née à Jinja et oncle Peter travaille à Kampala.', [other, born, works], scope))
+      .toEqual([born, works])
+  })
+
+  it('does not cite sections that share only common words, in any language', () => {
+    const french = [
+      'Elle habite dans la ville de Masaka depuis 1990.',
+      'Il travaille dans la ville de Kampala comme infirmier.',
+      'Nous allons dans la ville de Jinja chaque été.',
+      'Ils sont nés dans la ville de Entebbe.',
+      'La famille se réunit dans la ville de Mbarara.',
+    ].map((text) => ({ text }))
+    expect(cite('Elle habite dans la ville de Masaka.', [french[1]!, french[0]!, french[2]!], french))
+      .toEqual([french[0]])
+  })
+
+  it('keeps the best-ranked section when the answer shares nothing distinctive', () => {
+    expect(cite('Yes.', [doctor, job])).toEqual([doctor])
+    expect(cite('It is the one in the city.', [job, doctor])).toEqual([job])
   })
 
   it('drops the unrelated sources from real answers recorded with Qwen3.5 0.8B', () => {
-    const medical = { text: 'Medical summary. The family doctor is Dr. Okello at Nsambya Hospital.' }
     // French answer (2026-10-02): the old top-3 also cited "What I do" and the medical summary.
-    expect(citedCandidates("J'ai étudié en informatique à Makerere University.", [job, study, medical]))
-      .toEqual([study])
+    expect(cite("J'ai étudié en informatique à Makerere University.", [job, study, doctor])).toEqual([study])
     // Combined answer (2026-10-02): the traditions memory is cited, the job memory is not.
-    const traditions = { text: 'Our family tradition is gathering in Masaka every Christmas, cooking chicken luwombo together and telling stories under the mango tree.' }
-    expect(citedCandidates(
+    expect(cite(
       'Our family tradition at Christmas involves gathering in Masaka to cook chicken luwombo together and to tell stories under a mango tree.',
       [traditions, job, study],
     )).toEqual([traditions])
-  })
-
-  it('does not count question words such as "the" or "is" as shared', () => {
-    const answer = 'It is the one in the city.'
-    expect(citedCandidates(answer, [job, doctor])).toEqual([job])
   })
 })
 

@@ -12,8 +12,11 @@ export const MAX_RETRIEVAL_CHUNKS = 3
 const MAX_EXCERPT_CHARS = 320
 /** Keyword indexes kept in memory, one per recently asked scope. */
 const MAX_CACHED_KEYWORD_INDEXES = 3
-/** A retrieved section is cited only if it shares this many meaningful words with the answer. */
-const MIN_SHARED_ANSWER_TERMS = 2
+/**
+ * A retrieved section is cited when the words it shares with the answer are rare enough:
+ * together at least this share of the weight of a word found in only one section.
+ */
+const CITATION_RARITY_SHARE = 0.6
 
 export type PrivateVaultScope =
   | { type: 'all' }
@@ -187,17 +190,23 @@ export function isNotFoundAnswer(answer: string): boolean {
 }
 
 /**
- * The retrieved sections the answer actually drew on: those sharing at least two
- * meaningful words (names, numbers, places) with it. When none do (a reworded or
- * translated answer), the best-ranked section is cited so the answer keeps one source.
+ * The retrieved sections the answer actually drew on. Shared words are weighted by how
+ * rare they are across the sections in scope, so one distinctive name or number is
+ * enough (also when the answer was translated), while common words in any language
+ * count for little. When no section qualifies, the best-ranked one is cited, so an
+ * answer always keeps a source.
  */
-export function citedCandidates<T extends { text: string }>(answer: string, ranked: T[]): T[] {
+export function citedCandidates<T extends { text: string }>(
+  answer: string,
+  ranked: T[],
+  words: Pick<KeywordIndex, 'rarity' | 'maxRarity'>,
+): T[] {
   const answerTerms = contentTerms(answer)
-  const needed = Math.min(MIN_SHARED_ANSWER_TERMS, answerTerms.size)
-  const cited = needed === 0 ? [] : ranked.filter((candidate) => {
-    let shared = 0
+  const needed = CITATION_RARITY_SHARE * words.maxRarity
+  const cited = ranked.filter((candidate) => {
+    let weight = 0
     for (const term of contentTerms(candidate.text)) {
-      if (answerTerms.has(term) && ++shared >= needed) return true
+      if (answerTerms.has(term) && (weight += words.rarity(term)) >= needed) return true
     }
     return false
   })
@@ -286,7 +295,8 @@ export class PrivateArchiveQueryService {
       })
       .sort((a, b) => b.score - a.score)
       .map(({ index }) => index)
-    const keywordRanking = this.keywordIndexFor(candidates).rank(queries)
+    const keywordIndex = this.keywordIndexFor(candidates)
+    const keywordRanking = keywordIndex.rank(queries)
     const ranked = fuseRankings([vectorRanking, keywordRanking], candidates.length)
       .slice(0, MAX_RETRIEVAL_CHUNKS)
       .map((index) => ({ candidate: candidates[index]! }))
@@ -311,7 +321,11 @@ export class PrivateArchiveQueryService {
     return {
       answer,
       route,
-      sources: this.deduplicateSources(citedCandidates(answer, ranked.map(({ candidate }) => candidate))),
+      sources: this.deduplicateSources(citedCandidates(
+        answer,
+        ranked.map(({ candidate }) => candidate),
+        keywordIndex,
+      )),
     }
   }
 

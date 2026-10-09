@@ -50,6 +50,10 @@ export function tokenize(text: string): string[] {
   return terms
 }
 
+function inverseFrequency(total: number, containing: number): number {
+  return Math.log(1 + (total - containing + 0.5) / (containing + 0.5))
+}
+
 /** The meaningful words of a text (names, numbers, places), without question words. */
 export function contentTerms(text: string): Set<string> {
   return new Set(tokenize(text).filter((term) => !STOP_WORDS.has(term)))
@@ -101,6 +105,21 @@ export class KeywordIndex {
   }
 
   /**
+   * How rare a word is across these texts (BM25 inverse document frequency): high for
+   * a name in one section, near zero for a word in nearly all of them, in any language.
+   * A word that appears in none of the texts weighs 0.
+   */
+  rarity(term: string): number {
+    const containing = this.postings.get(term)?.documents.length ?? 0
+    return containing === 0 ? 0 : inverseFrequency(this.size, containing)
+  }
+
+  /** The rarity of a word found in exactly one text, the most a single word can weigh. */
+  get maxRarity(): number {
+    return inverseFrequency(this.size, 1)
+  }
+
+  /**
    * One BM25 score per text (0 when no query word appears). Several queries (the
    * question and its English translation) share one bag of words.
    */
@@ -110,8 +129,7 @@ export class KeywordIndex {
     for (const term of queryTerms(queries)) {
       const posting = this.postings.get(term)
       if (!posting) continue
-      const containing = posting.documents.length
-      const idf = Math.log(1 + (count - containing + 0.5) / (containing + 0.5))
+      const idf = inverseFrequency(count, posting.documents.length)
       posting.documents.forEach((document, position) => {
         const frequency = posting.frequencies[position]!
         const lengthNorm = 1 - BM25_B + BM25_B * (this.lengths[document]! / this.averageLength)
