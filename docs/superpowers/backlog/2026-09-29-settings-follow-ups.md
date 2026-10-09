@@ -204,3 +204,11 @@ Found while testing languages and voice (#60). A repair that needed only the 8 M
 **Long-term fix:** electron-builder 27 uses `@electron/get@5`, which drops `got`; with `27.0.0-alpha.9` `npm audit` reports 0 vulnerabilities. Tried on 2026-10-03: the Windows installer builds and the app launches, once `build.publish` is set to `null` (27 crashes in `computeChannelNames` when no publish config is detected; we publish with our own script, so `null` is correct anyway). `scripts/verify-package.mjs` pins `26.15.3` and needs updating too. Decision (2026-10-03): stay on 26 until 27 is stable; revisit when the allowlist expires.
 
 **Done (2026-10-09).** `http-cache-semantics` 4.3.0 (released 2026-10-04) fixes GHSA-ch52-4w7c-c8xp, so a lockfile-only `npm audit fix` cleared it and the allowlist is empty again. electron-builder stays on 26; the 27 notes above still apply when it goes stable.
+
+### 22. [ ] Answer citations and keyword search: follow-ups from the #66 review
+#66 cites only the sources an answer drew on: shared words weighted by rarity per document or memory, words in more than half of the sources ignored, common function words of English, French, Spanish, Portuguese and Filipino ignored, and every read section listed when nothing can be traced. Codex's last review (2026-10-09) left two open points:
+
+1. **Short names that are also foreign function words (small regression from #66).** The same common-word list feeds keyword search, so a name such as "Elle", "Una" or "Ela" drops out of `Who is Elle?` and only meaning-based search finds the section. Fix: use the foreign-language words only for citations (`contentTerms`), not for search queries (`queryTerms`), or keep capitalised words in questions.
+2. **Common Chinese/Japanese character pairs in a mostly-English archive.** With 100 English sources and two Japanese ones, a pair such as the ending of "ました" looks rare and can cite an unrelated Japanese section. Fix: a short list of common CJK particles/endings, or rarity measured within each script.
+
+Both are narrow; each review round has found a narrower case. A more robust option, if attribution keeps mattering, is to ask the answer model to name the source numbers it used and fall back to this rule when it does not.
