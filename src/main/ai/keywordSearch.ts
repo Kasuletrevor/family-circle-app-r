@@ -18,8 +18,11 @@ const STOP_WORDS = new Set([
 ])
 
 // Chinese and Japanese are written without spaces, so they are indexed as overlapping character pairs.
-const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/u
-const TOKEN = /[\p{L}\p{N}]+(?:['’][\p{L}]+)?/gu
+const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u
+// Japanese text often attaches names and years directly ("Jinjaで", "1941年"), so a
+// word is first split into its CJK and non-CJK parts.
+const SCRIPT_RUNS = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+|[^\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/gu
+const TOKEN = /[\p{L}\p{N}]+(?:['\u2019][\p{L}]+)?/gu
 
 // Accents are ignored ("Nakató" matches "Nakato"). Normalising a whole text at once is
 // far cheaper than normalising each word.
@@ -28,8 +31,8 @@ function normalizeText(text: string): string {
 }
 
 function normalizeWord(word: string): string {
-  return /['’]/u.test(word)
-    ? word.replace(/['’]s$/u, '').replace(/['’]/gu, '')
+  return /['\u2019]/u.test(word)
+    ? word.replace(/['\u2019]s$/u, '').replace(/['\u2019]/gu, '')
     : word
 }
 
@@ -37,15 +40,16 @@ function normalizeWord(word: string): string {
 export function tokenize(text: string): string[] {
   const terms: string[] = []
   for (const match of normalizeText(text).matchAll(TOKEN)) {
-    const word = match[0]
-    if (CJK.test(word)) {
-      const characters = [...word]
-      if (characters.length === 1) terms.push(characters[0]!)
-      for (let index = 0; index + 1 < characters.length; index += 1) terms.push(characters[index]! + characters[index + 1]!)
-      continue
+    for (const run of match[0].match(SCRIPT_RUNS) ?? []) {
+      if (CJK.test(run)) {
+        const characters = [...run]
+        if (characters.length === 1) terms.push(characters[0]!)
+        for (let index = 0; index + 1 < characters.length; index += 1) terms.push(characters[index]! + characters[index + 1]!)
+        continue
+      }
+      const term = normalizeWord(run)
+      if (term) terms.push(term)
     }
-    const term = normalizeWord(word)
-    if (term) terms.push(term)
   }
   return terms
 }

@@ -347,6 +347,13 @@ describe('citedCandidates', () => {
       .toEqual([born, works])
   })
 
+  it('traces a Japanese answer to the English section whose name and year it kept', () => {
+    const born = { text: 'Grandmother was born in Jinja in 1941.' }
+    const works = { text: 'Uncle Peter works in Kampala as a teacher.' }
+    const scope = [born, works, job, study]
+    expect(cite('祖母はJinjaで1941年に生まれました。', [works, born], scope)).toEqual([born])
+  })
+
   it('does not cite sections that share only common words, in any language', () => {
     const french = [
       'Elle habite dans la ville de Masaka depuis 1990.',
