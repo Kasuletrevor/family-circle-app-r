@@ -150,7 +150,9 @@ export class CirclePhotoService {
       if (fileName) {
         delete index[personId]
         await this.writeIndex(folder, index)
-        await rm(join(folder, fileName), { force: true })
+        // The index write is the commit point; a file left behind (say, held open by an
+        // antivirus scan) is only unused space.
+        await rm(join(folder, fileName), { force: true }).catch(() => undefined)
       }
     })
     return { success: true }

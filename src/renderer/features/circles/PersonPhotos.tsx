@@ -56,10 +56,14 @@ export function PersonPhotosProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void load()
     // Switching, creating or leaving a Circle changes whose photos apply.
-    return circle.onChange(() => {
-      circleRef.current += 1
-      // The same person can be in several Circles; never show one Circle's photo in another.
-      setPhotos({})
+    return circle.onChange((change) => {
+      // Other updates (notifications read, a tree move, an invitation) keep the same Circle
+      // and its photos; only a switch to another Circle invalidates them.
+      if (change?.activeCircleChanged !== false) {
+        circleRef.current += 1
+        // The same person can be in several Circles; never show one Circle's photo in another.
+        setPhotos({})
+      }
       void load()
     })
   }, [circle, load])

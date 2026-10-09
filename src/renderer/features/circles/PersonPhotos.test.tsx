@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AppServicesProvider } from '../../app/services'
-import type { CircleClient } from '../../services/circle/CircleClient'
+import type { CircleChange, CircleClient } from '../../services/circle/CircleClient'
 import type { PersonPhotoClient } from '../../services/circle/PersonPhotoClient'
 import type { FamilyPerson } from '../../services/circle/types'
 import { MemberDetailsPanel } from '../home/MemberDetailsPanel'
@@ -20,14 +20,17 @@ const rose: FamilyPerson = {
 }
 
 function circleClient() {
-  const listeners = new Set<() => void>()
+  const listeners = new Set<(change: CircleChange) => void>()
   const client = {
-    onChange: vi.fn((listener: () => void) => {
+    onChange: vi.fn((listener: (change: CircleChange) => void) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     }),
   } as unknown as CircleClient
-  return { client, notify: () => listeners.forEach((listener) => listener()) }
+  return {
+    client,
+    notify: (change: CircleChange = { activeCircleChanged: true }) => listeners.forEach((listener) => listener(change)),
+  }
 }
 
 function photoClient(overrides: Partial<PersonPhotoClient> = {}): PersonPhotoClient {
@@ -165,6 +168,21 @@ describe('profile photos', () => {
     await act(async () => finish())
 
     expect(portraitImage()).toHaveAttribute('src', OTHER_CIRCLE)
+  })
+
+  it('keeps a photo saved while another kind of Circle update arrives', async () => {
+    let finish!: (value: { status: 'saved'; personId: string; dataUrl: string }) => void
+    const choosePhoto = vi.fn(() => new Promise<{ status: 'saved'; personId: string; dataUrl: string }>((resolve) => { finish = resolve }))
+    const circle = renderPanel(photoClient({ choosePhoto }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change photo of Rose Nakato' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Choose photo/ }))
+    await waitFor(() => expect(choosePhoto).toHaveBeenCalled())
+    // For example, notifications marked read or someone moved in the tree.
+    act(() => circle.notify({ activeCircleChanged: false }))
+    await act(async () => finish({ status: 'saved', personId: 'user:rose', dataUrl: NEW_PHOTO }))
+
+    await waitFor(() => expect(portraitImage()).toHaveAttribute('src', NEW_PHOTO))
   })
 
   it('shows initials and no photo button when photos are not available', () => {

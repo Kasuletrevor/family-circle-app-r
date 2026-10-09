@@ -15,7 +15,7 @@ import type {
   ResendInvitationResult,
   SaveTreePositionInput,
 } from '../../../shared/desktopApi'
-import type { CircleClient } from './CircleClient'
+import type { CircleChange, CircleClient } from './CircleClient'
 import type { PersonPhotoClient } from './PersonPhotoClient'
 import type { ActivityItem, CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
@@ -134,7 +134,7 @@ function mapListItem(circle: CircleListItem): CircleSummary {
 }
 
 export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
-  private readonly changeListeners = new Set<() => void>()
+  private readonly changeListeners = new Set<(change: CircleChange) => void>()
   private overviewInFlight: Promise<CircleOverview> | null = null
   private detailsInFlight: Promise<CircleDetails | null> | null = null
   private readonly operations: CircleDesktopOperations
@@ -245,7 +245,7 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     try {
       await this.operations.selectCircle(circleId)
     } finally {
-      this.invalidateCircleReads()
+      this.invalidateCircleReads({ activeCircleChanged: true })
     }
   }
 
@@ -253,7 +253,7 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     try {
       return await this.operations.createCircle(input)
     } finally {
-      this.invalidateCircleReads()
+      this.invalidateCircleReads({ activeCircleChanged: true })
     }
   }
 
@@ -325,7 +325,7 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     try {
       await this.operations.leaveCircle()
     } finally {
-      this.invalidateCircleReads()
+      this.invalidateCircleReads({ activeCircleChanged: true })
     }
   }
 
@@ -341,7 +341,7 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     try {
       await this.operations.deleteCircle({ confirmationName })
     } finally {
-      this.invalidateCircleReads()
+      this.invalidateCircleReads({ activeCircleChanged: true })
     }
   }
 
@@ -357,17 +357,17 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     await this.operations.removePhoto({ personId })
   }
 
-  onChange(listener: () => void): () => void {
+  onChange(listener: (change: CircleChange) => void): () => void {
     this.changeListeners.add(listener)
     return () => {
       this.changeListeners.delete(listener)
     }
   }
 
-  private invalidateCircleReads(): void {
+  private invalidateCircleReads(change: CircleChange = { activeCircleChanged: false }): void {
     this.overviewInFlight = null
     this.detailsInFlight = null
-    for (const listener of [...this.changeListeners]) listener()
+    for (const listener of [...this.changeListeners]) listener(change)
   }
 
   private readOverview(): Promise<CircleOverview> {

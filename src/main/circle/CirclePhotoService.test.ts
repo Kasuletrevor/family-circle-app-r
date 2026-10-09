@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -214,6 +214,21 @@ describe('CirclePhotoService', () => {
     const folder = join(root, 'userData', 'circle-photos', 'users', '7')
     const [circleFolder] = await readdir(folder)
     expect((await readdir(join(folder, circleFolder!))).filter((name) => name.endsWith('.jpg'))).toHaveLength(1)
+  })
+
+  it('reports a removal as done once recorded, even if the old file cannot be deleted', async () => {
+    const { root, service } = await setup()
+    await service.choosePhoto('user:88')
+    const folder = join(root, 'userData', 'circle-photos', 'users', '7')
+    const [circleFolder] = await readdir(folder)
+    const photoFolder = join(folder, circleFolder!)
+    const [photo] = (await readdir(photoFolder)).filter((name) => name.endsWith('.jpg'))
+    // A directory in place of the file makes deleting it fail, like a file held open.
+    await rm(join(photoFolder, photo!))
+    await mkdir(join(photoFolder, photo!, 'held'), { recursive: true })
+
+    await expect(service.removePhoto('user:88')).resolves.toEqual({ success: true })
+    await expect(service.listPhotos()).resolves.toEqual({})
   })
 
   it('has nothing to list before a Circle is chosen', async () => {
