@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import type { AuthUser } from '../../shared/desktopApi'
+import { noMutationLock, type MutationLock } from '../storage/MutationLock'
 
 /** Photos are shown at most this size, so they are stored at it. */
 export const PHOTO_SIZE_PX = 256
@@ -24,6 +25,11 @@ export interface CirclePhotoServiceDependencies {
   users: { getRecordById(id: number): Promise<{ activeCircleId: string | null } | null> }
   images: { fromPath(path: string): PhotoImage }
   picker: { choosePhoto(): Promise<string | null> }
+  /**
+   * The lock shared with backup, Vault and My Story writes. Photo files and their index
+   * change only while holding it, so overlapping changes and backups stay consistent.
+   */
+  mutationLock?: MutationLock
 }
 
 export type CirclePhotoChoice =
@@ -62,7 +68,11 @@ function dataUrl(bytes: Buffer): string {
  * also drops hidden metadata such as GPS location.
  */
 export class CirclePhotoService {
-  constructor(private readonly dependencies: CirclePhotoServiceDependencies) {}
+  private readonly lock: MutationLock
+
+  constructor(private readonly dependencies: CirclePhotoServiceDependencies) {
+    this.lock = dependencies.mutationLock ?? noMutationLock
+  }
 
   /** Photos for the active Circle, by person ID. */
   async listPhotos(): Promise<Record<string, string>> {
@@ -101,14 +111,18 @@ export class CirclePhotoService {
     const bytes = square.resize({ width: PHOTO_SIZE_PX, height: PHOTO_SIZE_PX, quality: 'best' }).toJPEG(85)
     if (bytes.length === 0) return { status: 'unsupported' }
 
-    await mkdir(folder, { recursive: true })
-    const fileName = `${hashed(personId)}.jpg`
-    const temporary = join(folder, `.${fileName}.tmp`)
-    await writeFile(temporary, bytes)
-    await rename(temporary, join(folder, fileName))
-    const index = await this.readIndex(folder)
-    index[personId] = fileName
-    await this.writeIndex(folder, index)
+    // The picker and image work happen before taking the lock, so an open file dialog
+    // never holds up a backup.
+    await this.lock.runExclusive(async () => {
+      await mkdir(folder, { recursive: true })
+      const fileName = `${hashed(personId)}.jpg`
+      const temporary = join(folder, `.${fileName}.${randomUUID()}.tmp`)
+      await writeFile(temporary, bytes)
+      await rename(temporary, join(folder, fileName))
+      const index = await this.readIndex(folder)
+      index[personId] = fileName
+      await this.writeIndex(folder, index)
+    })
     return { status: 'saved', personId, dataUrl: dataUrl(bytes) }
   }
 
@@ -116,13 +130,15 @@ export class CirclePhotoService {
     const personId = requirePersonId(personIdInput)
     const folder = await this.activeFolder()
     if (!folder) return { success: true }
-    const index = await this.readIndex(folder)
-    const fileName = index[personId]
-    if (fileName) {
-      delete index[personId]
-      await this.writeIndex(folder, index)
-      await rm(join(folder, fileName), { force: true })
-    }
+    await this.lock.runExclusive(async () => {
+      const index = await this.readIndex(folder)
+      const fileName = index[personId]
+      if (fileName) {
+        delete index[personId]
+        await this.writeIndex(folder, index)
+        await rm(join(folder, fileName), { force: true })
+      }
+    })
     return { success: true }
   }
 
@@ -147,7 +163,7 @@ export class CirclePhotoService {
   }
 
   private async writeIndex(folder: string, index: PhotoIndex): Promise<void> {
-    const temporary = join(folder, '.index.json.tmp')
+    const temporary = join(folder, `.index.${randomUUID()}.tmp`)
     await writeFile(temporary, JSON.stringify(index, null, 2))
     await rename(temporary, join(folder, 'index.json'))
   }

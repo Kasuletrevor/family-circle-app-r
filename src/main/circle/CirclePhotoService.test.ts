@@ -2,6 +2,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AsyncMutationLock } from '../storage/MutationLock'
 import { CirclePhotoService, MAX_PHOTO_SOURCE_BYTES, type PhotoImage } from './CirclePhotoService'
 
 const roots: string[] = []
@@ -125,6 +126,44 @@ describe('CirclePhotoService', () => {
     const index = JSON.parse(await readFile(indexPath, 'utf8')) as Record<string, string>
     await writeFile(indexPath, JSON.stringify({ ...index, 'user:99': '../../../../secret.txt' }))
     await expect(service.listPhotos()).resolves.toEqual({ 'user:88': expect.stringMatching(/^data:image\/jpeg;base64,/) })
+  })
+
+  it('keeps both photos when two are saved at the same time', async () => {
+    const root = await tempRoot()
+    const source = join(root, 'photo.png')
+    await writeFile(source, 'png')
+    const service = new CirclePhotoService({
+      userDataPath: join(root, 'userData'),
+      session: { restore: async () => ({ id: 7 } as never) },
+      users: { getRecordById: async () => ({ activeCircleId: 'circle-1' }) },
+      images: { fromPath: () => fakeImage(300, 300) },
+      picker: { choosePhoto: async () => source },
+      mutationLock: new AsyncMutationLock(),
+    })
+
+    await Promise.all(['user:1', 'user:2', 'user:3'].map((personId) => service.choosePhoto(personId)))
+
+    await expect(service.listPhotos().then(Object.keys)).resolves.toEqual(expect.arrayContaining(['user:1', 'user:2', 'user:3']))
+  })
+
+  it('waits for the shared lock, so a backup never copies a half-written photo', async () => {
+    const lock = new AsyncMutationLock()
+    const { service } = await setup()
+    const locked = new CirclePhotoService({ ...(service as unknown as { dependencies: ConstructorParameters<typeof CirclePhotoService>[0] }).dependencies, mutationLock: lock })
+
+    let releaseBackup!: () => void
+    const backup = lock.runExclusive(() => new Promise<void>((resolve) => { releaseBackup = resolve }))
+    let saved = false
+    const choosing = locked.choosePhoto('user:9').then((result) => { saved = true; return result })
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(saved).toBe(false)
+    await expect(locked.listPhotos()).resolves.toEqual({})
+
+    releaseBackup()
+    await backup
+    await expect(choosing).resolves.toMatchObject({ status: 'saved', personId: 'user:9' })
+    await expect(locked.listPhotos().then(Object.keys)).resolves.toEqual(['user:9'])
   })
 
   it('has nothing to list before a Circle is chosen', async () => {

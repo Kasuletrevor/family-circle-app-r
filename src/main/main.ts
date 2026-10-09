@@ -262,6 +262,7 @@ async function createAppServices(): Promise<AppServices> {
       session: sessions,
       users,
       images: { fromPath: (path) => nativeImage.createFromPath(path) },
+      mutationLock,
       picker: {
         async choosePhoto() {
           const result = await dialog.showOpenDialog({
