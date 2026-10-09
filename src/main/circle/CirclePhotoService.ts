@@ -113,16 +113,30 @@ export class CirclePhotoService {
 
     // The picker and image work happen before taking the lock, so an open file dialog
     // never holds up a backup.
-    await this.lock.runExclusive(async () => {
+    const saved = await this.lock.runExclusive(async () => {
+      // The person may have switched Circles (or signed out) while the picker was open;
+      // the photo was chosen for the Circle shown then, so it is not saved elsewhere.
+      if (await this.activeFolder().catch(() => null) !== folder) return false
       await mkdir(folder, { recursive: true })
-      const fileName = `${hashed(personId)}.jpg`
-      const temporary = join(folder, `.${fileName}.${randomUUID()}.tmp`)
+      // A new file name per photo, so the index rename below is the single commit point:
+      // if anything fails before it, the previous photo is still there.
+      const fileName = `${hashed(personId)}-${randomUUID().slice(0, 8)}.jpg`
+      const temporary = join(folder, `.${fileName}.tmp`)
       await writeFile(temporary, bytes)
       await rename(temporary, join(folder, fileName))
       const index = await this.readIndex(folder)
+      const previous = index[personId]
       index[personId] = fileName
-      await this.writeIndex(folder, index)
+      try {
+        await this.writeIndex(folder, index)
+      } catch (error) {
+        await rm(join(folder, fileName), { force: true }).catch(() => undefined)
+        throw error
+      }
+      if (previous && previous !== fileName) await rm(join(folder, previous), { force: true }).catch(() => undefined)
+      return true
     })
+    if (!saved) return { status: 'canceled' }
     return { status: 'saved', personId, dataUrl: dataUrl(bytes) }
   }
 
@@ -156,7 +170,7 @@ export class CirclePhotoService {
       const parsed = JSON.parse(await readFile(join(folder, 'index.json'), 'utf8')) as unknown
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
       return Object.fromEntries(Object.entries(parsed as Record<string, unknown>)
-        .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && /^[0-9a-f]{32}\.jpg$/.test(entry[1])))
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && /^[0-9a-f]{32}(-[0-9a-f]{8})?\.jpg$/.test(entry[1])))
     } catch {
       return {}
     }

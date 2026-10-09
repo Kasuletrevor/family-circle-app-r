@@ -120,6 +120,22 @@ describe('profile photos', () => {
     expect(listPhotos).toHaveBeenCalledTimes(2)
   })
 
+  it('ignores a photo that finishes saving after the Circle was switched', async () => {
+    let finish!: (value: { status: 'saved'; personId: string; dataUrl: string }) => void
+    const choosePhoto = vi.fn(() => new Promise<{ status: 'saved'; personId: string; dataUrl: string }>((resolve) => { finish = resolve }))
+    const listPhotos = vi.fn(async () => ({}))
+    const circle = renderPanel(photoClient({ choosePhoto, listPhotos }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change photo of Rose Nakato' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Choose photo/ }))
+    await waitFor(() => expect(choosePhoto).toHaveBeenCalled())
+    act(() => circle.notify())
+    await act(async () => finish({ status: 'saved', personId: 'user:rose', dataUrl: NEW_PHOTO }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change photo of Rose Nakato' })).toBeEnabled())
+    expect(portraitImage()).toBeNull()
+  })
+
   it('shows initials and no photo button when photos are not available', () => {
     renderPanel(undefined)
     expect(screen.getAllByText('RN')).toHaveLength(2)

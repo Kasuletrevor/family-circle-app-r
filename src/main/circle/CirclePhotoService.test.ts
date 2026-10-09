@@ -57,7 +57,7 @@ describe('CirclePhotoService', () => {
     const folder = join(root, 'userData', 'circle-photos', 'users', '7')
     const [circleFolder] = await readdir(folder)
     const files = await readdir(join(folder, circleFolder!))
-    expect(files.sort()).toEqual([expect.stringMatching(/^[0-9a-f]{32}\.jpg$/), 'index.json'].sort())
+    expect(files.sort()).toEqual([expect.stringMatching(/^[0-9a-f]{32}-[0-9a-f]{8}\.jpg$/), 'index.json'].sort())
     expect(files.join(' ')).not.toContain('user')
   })
 
@@ -164,6 +164,56 @@ describe('CirclePhotoService', () => {
     await backup
     await expect(choosing).resolves.toMatchObject({ status: 'saved', personId: 'user:9' })
     await expect(locked.listPhotos().then(Object.keys)).resolves.toEqual(['user:9'])
+  })
+
+  it('does not save a photo when the Circle changed while the picker was open', async () => {
+    const root = await tempRoot()
+    const source = join(root, 'photo.png')
+    await writeFile(source, 'png')
+    let activeCircleId = 'circle-1'
+    const service = new CirclePhotoService({
+      userDataPath: join(root, 'userData'),
+      session: { restore: async () => ({ id: 7 } as never) },
+      users: { getRecordById: async () => ({ activeCircleId }) },
+      images: { fromPath: () => fakeImage(300, 300) },
+      picker: { choosePhoto: async () => { activeCircleId = 'circle-2'; return source } },
+    })
+
+    await expect(service.choosePhoto('user:1')).resolves.toEqual({ status: 'canceled' })
+    await expect(service.listPhotos()).resolves.toEqual({})
+    activeCircleId = 'circle-1'
+    await expect(service.listPhotos()).resolves.toEqual({})
+  })
+
+  it('replaces a photo without leaving the old file behind', async () => {
+    const { root, service } = await setup()
+    await service.choosePhoto('user:88')
+    await service.choosePhoto('user:88')
+    const folder = join(root, 'userData', 'circle-photos', 'users', '7')
+    const [circleFolder] = await readdir(folder)
+    const files = await readdir(join(folder, circleFolder!))
+    expect(files.filter((name) => name.endsWith('.jpg'))).toHaveLength(1)
+    expect(files.some((name) => name.endsWith('.tmp'))).toBe(false)
+  })
+
+  it('keeps the previous photo when recording the new one fails', async () => {
+    // Each save produces different bytes, so the old and new photo can be told apart.
+    let saves = 0
+    const image = fakeImage(300, 300)
+    image.toJPEG = () => Buffer.from(`JPEG-${++saves}`)
+    const { root, service } = await setup({ image })
+    await service.choosePhoto('user:88')
+    const before = await service.listPhotos()
+
+    const writeIndex = vi.spyOn(service as unknown as { writeIndex(folder: string, index: object): Promise<void> }, 'writeIndex')
+      .mockRejectedValueOnce(new Error('disk full'))
+    await expect(service.choosePhoto('user:88')).rejects.toThrow('disk full')
+    writeIndex.mockRestore()
+
+    await expect(service.listPhotos()).resolves.toEqual(before)
+    const folder = join(root, 'userData', 'circle-photos', 'users', '7')
+    const [circleFolder] = await readdir(folder)
+    expect((await readdir(join(folder, circleFolder!))).filter((name) => name.endsWith('.jpg'))).toHaveLength(1)
   })
 
   it('has nothing to list before a Circle is chosen', async () => {

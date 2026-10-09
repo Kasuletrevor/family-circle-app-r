@@ -39,6 +39,8 @@ export function PersonPhotosProvider({ children }: PropsWithChildren) {
   const [busyPersonId, setBusyPersonId] = useState<string | null>(null)
   const [message, setMessage] = useState<PhotoMessage>(null)
   const loadRef = useRef(0)
+  // Counts Circle changes, so a photo chosen for one Circle is never shown in another.
+  const circleRef = useRef(0)
 
   const load = useCallback(async () => {
     if (!client) return
@@ -54,15 +56,20 @@ export function PersonPhotosProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void load()
     // Switching, creating or leaving a Circle changes whose photos apply.
-    return circle.onChange(() => { void load() })
+    return circle.onChange(() => {
+      circleRef.current += 1
+      void load()
+    })
   }, [circle, load])
 
   const choose = useCallback(async (personId: string) => {
     if (!client) return
     setBusyPersonId(personId)
     setMessage(null)
+    const chosenInCircle = circleRef.current
     try {
       const result = await client.choosePhoto(personId)
+      if (chosenInCircle !== circleRef.current) return
       if (result.status === 'saved') {
         loadRef.current += 1
         setPhotos((current) => ({ ...current, [result.personId]: result.dataUrl }))
