@@ -58,6 +58,8 @@ export function PersonPhotosProvider({ children }: PropsWithChildren) {
     // Switching, creating or leaving a Circle changes whose photos apply.
     return circle.onChange(() => {
       circleRef.current += 1
+      // The same person can be in several Circles; never show one Circle's photo in another.
+      setPhotos({})
       void load()
     })
   }, [circle, load])
@@ -87,8 +89,10 @@ export function PersonPhotosProvider({ children }: PropsWithChildren) {
     if (!client) return
     setBusyPersonId(personId)
     setMessage(null)
+    const removedInCircle = circleRef.current
     try {
       await client.removePhoto(personId)
+      if (removedInCircle !== circleRef.current) return
       loadRef.current += 1
       setPhotos((current) => {
         const next = { ...current }

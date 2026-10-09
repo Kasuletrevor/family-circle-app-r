@@ -136,6 +136,37 @@ describe('profile photos', () => {
     expect(portraitImage()).toBeNull()
   })
 
+  it('clears the previous Circle\'s photos as soon as the Circle changes', async () => {
+    const listPhotos = vi.fn()
+      .mockResolvedValueOnce({ 'user:rose': GRANDMA })
+      .mockReturnValueOnce(new Promise(() => undefined))
+    const circle = renderPanel(photoClient({ listPhotos }))
+
+    await waitFor(() => expect(portraitImage()).toHaveAttribute('src', GRANDMA))
+    act(() => circle.notify())
+    // The new Circle's photos are still loading; the old one must not stand in for them.
+    expect(portraitImage()).toBeNull()
+  })
+
+  it('ignores a removal that finishes after the Circle was switched', async () => {
+    const OTHER_CIRCLE = 'data:image/jpeg;base64,T1RIRVI='
+    let finish!: () => void
+    const removePhoto = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const listPhotos = vi.fn()
+      .mockResolvedValueOnce({ 'user:rose': GRANDMA })
+      .mockResolvedValueOnce({ 'user:rose': OTHER_CIRCLE })
+    const circle = renderPanel(photoClient({ listPhotos, removePhoto }))
+
+    await waitFor(() => expect(portraitImage()).toHaveAttribute('src', GRANDMA))
+    fireEvent.click(screen.getByRole('button', { name: 'Change photo of Rose Nakato' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove photo' }))
+    act(() => circle.notify())
+    await waitFor(() => expect(portraitImage()).toHaveAttribute('src', OTHER_CIRCLE))
+    await act(async () => finish())
+
+    expect(portraitImage()).toHaveAttribute('src', OTHER_CIRCLE)
+  })
+
   it('shows initials and no photo button when photos are not available', () => {
     renderPanel(undefined)
     expect(screen.getAllByText('RN')).toHaveLength(2)
