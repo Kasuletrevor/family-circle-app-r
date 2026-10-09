@@ -6,6 +6,13 @@ describe('tokenize', () => {
     expect(tokenize("Rose Nakató's number: UNMC-1964-0381")).toEqual(['rose', 'nakato', 'number', 'unmc', '1964', '0381'])
   })
 
+  it('keeps names and years that Japanese text attaches directly to its own characters', () => {
+    const terms = tokenize('祖母はJinjaで1941年に生まれました')
+    expect(terms).toContain('jinja')
+    expect(terms).toContain('1941')
+    expect(terms).toContain('祖母')
+  })
+
   it('splits Chinese and Japanese into overlapping character pairs', () => {
     expect(tokenize('祖母在马萨卡')).toEqual(['祖母', '母在', '在马', '马萨', '萨卡'])
     expect(tokenize('学')).toEqual(['学'])

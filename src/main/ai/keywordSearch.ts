@@ -15,11 +15,24 @@ const STOP_WORDS = new Set([
   'how', 'i', 'if', 'in', 'into', 'is', 'it', 'its', 'me', 'my', 'of', 'on', 'or', 'our', 'she', 'so', 'tell',
   'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'to', 'us', 'was', 'we',
   'were', 'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'will', 'with', 'would', 'you', 'your',
+  // French, Spanish, Portuguese and Filipino function words (accents are removed before
+  // matching). Words with an English meaning, such as "son", "ma" or "kay", are left out.
+  'au', 'aux', 'avec', 'ce', 'ces', 'cette', 'dans', 'de', 'des', 'du', 'elle', 'elles', 'est', 'et', 'ete',
+  'etre', 'il', 'ils', 'je', 'la', 'le', 'les', 'leur', 'leurs', 'mes', 'mon', 'ne', 'nous', 'ou', 'par',
+  'pas', 'pour', 'qu', 'que', 'qui', 'sa', 'ses', 'sont', 'sur', 'ta', 'tes', 'ton', 'tu', 'un', 'une', 'vous',
+  'con', 'cuando', 'del', 'donde', 'el', 'ella', 'ellas', 'ellos', 'en', 'es', 'esta', 'fue', 'las', 'lo',
+  'los', 'mi', 'mis', 'para', 'por', 'quien', 'se', 'su', 'sus', 'una', 'unas', 'unos', 'y',
+  'da', 'das', 'do', 'dos', 'e', 'ela', 'elas', 'ele', 'eles', 'em', 'foi', 'meu', 'minha', 'na', 'nas',
+  'no', 'nos', 'os', 'quem', 'seu', 'sua', 'um', 'uma',
+  'ako', 'ang', 'ano', 'ay', 'kailan', 'kami', 'mga', 'ng', 'ni', 'saan', 'si', 'sila', 'sino', 'siya', 'tayo',
 ])
 
 // Chinese and Japanese are written without spaces, so they are indexed as overlapping character pairs.
-const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/u
-const TOKEN = /[\p{L}\p{N}]+(?:['’][\p{L}]+)?/gu
+const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u
+// Japanese text often attaches names and years directly ("Jinjaで", "1941年"), so a
+// word is first split into its CJK and non-CJK parts.
+const SCRIPT_RUNS = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+|[^\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/gu
+const TOKEN = /[\p{L}\p{N}]+(?:['\u2019][\p{L}]+)?/gu
 
 // Accents are ignored ("Nakató" matches "Nakato"). Normalising a whole text at once is
 // far cheaper than normalising each word.
@@ -28,8 +41,8 @@ function normalizeText(text: string): string {
 }
 
 function normalizeWord(word: string): string {
-  return /['’]/u.test(word)
-    ? word.replace(/['’]s$/u, '').replace(/['’]/gu, '')
+  return /['\u2019]/u.test(word)
+    ? word.replace(/['\u2019]s$/u, '').replace(/['\u2019]/gu, '')
     : word
 }
 
@@ -37,17 +50,27 @@ function normalizeWord(word: string): string {
 export function tokenize(text: string): string[] {
   const terms: string[] = []
   for (const match of normalizeText(text).matchAll(TOKEN)) {
-    const word = match[0]
-    if (CJK.test(word)) {
-      const characters = [...word]
-      if (characters.length === 1) terms.push(characters[0]!)
-      for (let index = 0; index + 1 < characters.length; index += 1) terms.push(characters[index]! + characters[index + 1]!)
-      continue
+    for (const run of match[0].match(SCRIPT_RUNS) ?? []) {
+      if (CJK.test(run)) {
+        const characters = [...run]
+        if (characters.length === 1) terms.push(characters[0]!)
+        for (let index = 0; index + 1 < characters.length; index += 1) terms.push(characters[index]! + characters[index + 1]!)
+        continue
+      }
+      const term = normalizeWord(run)
+      if (term) terms.push(term)
     }
-    const term = normalizeWord(word)
-    if (term) terms.push(term)
   }
   return terms
+}
+
+function inverseFrequency(total: number, containing: number): number {
+  return Math.log(1 + (total - containing + 0.5) / (containing + 0.5))
+}
+
+/** The meaningful words of a text (names, numbers, places), without question words. */
+export function contentTerms(text: string): Set<string> {
+  return new Set(tokenize(text).filter((term) => !STOP_WORDS.has(term)))
 }
 
 function queryTerms(queries: string[]): string[] {
@@ -69,8 +92,21 @@ export class KeywordIndex {
   private readonly postings = new Map<string, { documents: number[]; frequencies: number[] }>()
   private readonly lengths: Float64Array
   private readonly averageLength: number
+  private readonly sourceOf: number[]
+  private readonly sourceCount: number
 
-  constructor(documents: string[]) {
+  /**
+   * `sources` optionally names the document or memory each text comes from. Overlapping
+   * sections of one document then count once when judging how rare a word is.
+   */
+  constructor(documents: string[], sources?: string[]) {
+    const sourceIds = new Map<string, number>()
+    this.sourceOf = documents.map((_document, index) => {
+      const key = sources?.[index] ?? `#${index}`
+      if (!sourceIds.has(key)) sourceIds.set(key, sourceIds.size)
+      return sourceIds.get(key)!
+    })
+    this.sourceCount = sourceIds.size
     this.lengths = new Float64Array(documents.length)
     documents.forEach((document, index) => {
       const tokens = tokenize(document)
@@ -96,6 +132,24 @@ export class KeywordIndex {
   }
 
   /**
+   * How rare a word is across the sources of these texts (BM25 inverse document
+   * frequency): high for a name in one source, low for common words, in any language. A
+   * word in none of the sources, or in more than half of them, weighs 0: it cannot tell
+   * sources apart, however few there are.
+   */
+  rarity(term: string): number {
+    const documents = this.postings.get(term)?.documents ?? []
+    const containing = new Set(documents.map((document) => this.sourceOf[document])).size
+    if (containing === 0 || containing > this.sourceCount / 2) return 0
+    return inverseFrequency(this.sourceCount, containing)
+  }
+
+  /** The rarity of a word found in exactly one source, the most a single word can weigh. */
+  get maxRarity(): number {
+    return inverseFrequency(this.sourceCount, 1)
+  }
+
+  /**
    * One BM25 score per text (0 when no query word appears). Several queries (the
    * question and its English translation) share one bag of words.
    */
@@ -105,8 +159,7 @@ export class KeywordIndex {
     for (const term of queryTerms(queries)) {
       const posting = this.postings.get(term)
       if (!posting) continue
-      const containing = posting.documents.length
-      const idf = Math.log(1 + (count - containing + 0.5) / (containing + 0.5))
+      const idf = inverseFrequency(count, posting.documents.length)
       posting.documents.forEach((document, position) => {
         const frequency = posting.frequencies[position]!
         const lengthNorm = 1 - BM25_B + BM25_B * (this.lengths[document]! / this.averageLength)

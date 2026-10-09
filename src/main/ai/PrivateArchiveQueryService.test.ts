@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isNotFoundAnswer, PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
+import { KeywordIndex } from './keywordSearch'
+import { citedCandidates, isNotFoundAnswer, PrivateArchiveQueryService, PrivateArchiveQueryServiceError, type PrivateArchiveQueryServiceDependencies } from './PrivateArchiveQueryService'
 
 function vaultChunk(documentId: number, fileName: string, chunkIndex: number, text: string, embedding: number[]) {
   return {
@@ -87,7 +88,8 @@ describe('PrivateArchiveQueryService', () => {
   })
 
   it('ranks Story and Vault candidates together, keeps only three chunks total, and deduplicates citations by logical source', async () => {
-    const generateFast = vi.fn(async () => 'Grounded')
+    // The answer draws on both kept sources, so both are cited.
+    const generateFast = vi.fn(async () => 'Grounded in A-TOP-1 and STORY-TOP-3')
     const service = new PrivateArchiveQueryService(deps({
       vaultChunks: {
         listQueryChunks: vi.fn(async () => [
@@ -314,6 +316,97 @@ describe('PrivateArchiveQueryService', () => {
     const service = new PrivateArchiveQueryService(deps())
     const result = await service.ask({ question: 'Where was grandmother born?', scope: { type: 'vault', vault: { type: 'all' } } })
     expect(result.sources.length).toBeGreaterThan(0)
+  })
+})
+
+describe('citedCandidates', () => {
+  const doctor = { text: 'Medical summary. The family doctor is Dr. Okello at Nsambya Hospital in Kampala.' }
+  const job = { text: 'I work as a software engineer building privacy-first family apps.' }
+  const study = { text: 'I studied computer science at Makerere University and graduated in 2019.' }
+  const traditions = { text: 'Our family tradition is gathering in Masaka every Christmas, cooking chicken luwombo together and telling stories under the mango tree.' }
+  const archive = [doctor, job, study, traditions]
+  // Rarity is measured across every section in scope, as the service does.
+  const cite = (answer: string, ranked: Array<{ text: string }>, scope = archive) =>
+    citedCandidates(answer, ranked, new KeywordIndex(scope.map((section) => section.text)))
+
+  it('cites only the sections the answer draws on, even when one ranked higher', () => {
+    expect(cite('The family doctor is Dr. Okello at Nsambya Hospital.', [job, doctor, study])).toEqual([doctor])
+  })
+
+  it('cites every section the answer combines', () => {
+    expect(cite('You studied at Makerere University and now work as a software engineer.', [study, doctor, job]))
+      .toEqual([study, job])
+  })
+
+  it('cites each English section a translated answer combines, from one distinctive word each', () => {
+    const born = { text: 'Grandmother was born in Jinja in 1941.' }
+    const works = { text: 'Uncle Peter works in Kampala as a teacher.' }
+    const other = { text: 'The family gathers every Sunday after church.' }
+    const scope = [born, works, other, job, study]
+    expect(cite('Grand-mère est née à Jinja et oncle Peter travaille à Kampala.', [other, born, works], scope))
+      .toEqual([born, works])
+  })
+
+  it('traces a Japanese answer to the English section whose name and year it kept', () => {
+    const born = { text: 'Grandmother was born in Jinja in 1941.' }
+    const works = { text: 'Uncle Peter works in Kampala as a teacher.' }
+    const scope = [born, works, job, study]
+    expect(cite('祖母はJinjaで1941年に生まれました。', [works, born], scope)).toEqual([born])
+  })
+
+  it('treats overlapping sections of one document as one source when judging rarity', () => {
+    // A fact in the 150-character overlap appears in two sections of the same document.
+    const first = { text: 'Chapter one. The deed is kept in the red tin at Mbarara.' }
+    const second = { text: 'The deed is kept in the red tin at Mbarara. Chapter two begins.' }
+    const other = { text: 'Uncle Peter works in Kampala as a teacher.' }
+    const index = new KeywordIndex([first.text, second.text, other.text], ['document:1', 'document:1', 'document:2'])
+    expect(citedCandidates('The deed is in the red tin at Mbarara.', [first, other, second], index))
+      .toEqual([first, second])
+  })
+
+  it('ignores common French words even when French sections are a small minority', () => {
+    const english = Array.from({ length: 100 }, (_, n) => ({ text: `Family record ${n}: the harvest was good in Masaka that year.` }))
+    const rose = { text: 'Elle est infirmière à Mulago depuis 1990.' }
+    const grace = { text: 'Elle habite à Kampala avec ses enfants.' }
+    const scope = [...english, rose, grace]
+    expect(cite('Elle travaille à Mulago depuis 1990.', [grace, rose], scope)).toEqual([rose])
+  })
+
+  it('does not cite sections that share only common words, in any language', () => {
+    const french = [
+      'Elle habite dans la ville de Masaka depuis 1990.',
+      'Il travaille dans la ville de Kampala comme infirmier.',
+      'Nous allons dans la ville de Jinja chaque été.',
+      'Ils sont nés dans la ville de Entebbe.',
+      'La famille se réunit dans la ville de Mbarara.',
+    ].map((text) => ({ text }))
+    expect(cite('Elle habite dans la ville de Masaka.', [french[1]!, french[0]!, french[2]!], french))
+      .toEqual([french[0]])
+  })
+
+  it('lists every section the model read when the answer cannot be traced to one', () => {
+    // A fully translated paraphrase keeps no names or numbers, so no single section can be named.
+    const nurse = { text: 'Aunt Rose works as a nurse at the district hospital.' }
+    const scope = [nurse, job, study, doctor]
+    expect(cite('Elle est infirmière.', [job, nurse, study], scope)).toEqual([job, nurse, study])
+    expect(cite('Yes.', [doctor, job])).toEqual([doctor, job])
+  })
+
+  it('does not count a word found in most sections, even in a scope of two', () => {
+    const masaka = { text: 'Elle habite dans la ville de Masaka depuis 1990.' }
+    const kampala = { text: 'Il travaille dans la ville de Kampala comme infirmier.' }
+    // "dans la ville de" is in both sections, so only "Masaka" can tell them apart.
+    expect(cite('Elle habite dans la ville de Masaka.', [kampala, masaka], [masaka, kampala])).toEqual([masaka])
+  })
+
+  it('drops the unrelated sources from real answers recorded with Qwen3.5 0.8B', () => {
+    // French answer (2026-10-02): the old top-3 also cited "What I do" and the medical summary.
+    expect(cite("J'ai étudié en informatique à Makerere University.", [job, study, doctor])).toEqual([study])
+    // Combined answer (2026-10-02): the traditions memory is cited, the job memory is not.
+    expect(cite(
+      'Our family tradition at Christmas involves gathering in Masaka to cook chicken luwombo together and to tell stories under a mango tree.',
+      [traditions, job, study],
+    )).toEqual([traditions])
   })
 })
 

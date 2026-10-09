@@ -5,13 +5,18 @@ import type { VaultQueryChunk } from '../vault/VaultChunkRepository'
 import { cosineSimilarity } from '../vault/cosineSimilarity'
 import { STORY_LANGUAGES } from '../../shared/story'
 import { EMBEDDING_INDEX_VERSION, EMBEDDING_MODEL_ID } from './embeddingContract'
-import { fuseRankings, KeywordIndex } from './keywordSearch'
+import { contentTerms, fuseRankings, KeywordIndex } from './keywordSearch'
 import { planRetrievalQueries, selectGenerationRoute, type PrivateScopeType } from './PrivateQueryPlanner'
 
 export const MAX_RETRIEVAL_CHUNKS = 3
 const MAX_EXCERPT_CHARS = 320
 /** Keyword indexes kept in memory, one per recently asked scope. */
 const MAX_CACHED_KEYWORD_INDEXES = 3
+/**
+ * A retrieved section is cited when the words it shares with the answer are rare enough:
+ * together at least this share of the weight of a word found in only one section.
+ */
+const CITATION_RARITY_SHARE = 0.6
 
 export type PrivateVaultScope =
   | { type: 'all' }
@@ -184,6 +189,31 @@ export function isNotFoundAnswer(answer: string): boolean {
   return NOT_FOUND_WORDING.some((pattern) => pattern.test(firstSentence))
 }
 
+/**
+ * The retrieved sections the answer actually drew on. Shared words are weighted by how
+ * rare they are across the sections in scope, so one distinctive name or number is
+ * enough (also when the answer was translated), while common words in any language
+ * count for little. When no section qualifies (an answer reworded or translated with
+ * no shared names or numbers), the answer cannot be traced to one section, so every
+ * section the model read is listed rather than guessing a single one.
+ */
+export function citedCandidates<T extends { text: string }>(
+  answer: string,
+  ranked: T[],
+  words: Pick<KeywordIndex, 'rarity' | 'maxRarity'>,
+): T[] {
+  const answerTerms = contentTerms(answer)
+  const needed = CITATION_RARITY_SHARE * words.maxRarity
+  const cited = ranked.filter((candidate) => {
+    let weight = 0
+    for (const term of contentTerms(candidate.text)) {
+      if (answerTerms.has(term) && (weight += words.rarity(term)) >= needed) return true
+    }
+    return false
+  })
+  return cited.length > 0 ? cited : ranked
+}
+
 export class PrivateArchiveQueryService {
   private readonly keywordIndexes = new Map<string, KeywordIndex>()
 
@@ -266,7 +296,8 @@ export class PrivateArchiveQueryService {
       })
       .sort((a, b) => b.score - a.score)
       .map(({ index }) => index)
-    const keywordRanking = this.keywordIndexFor(candidates).rank(queries)
+    const keywordIndex = this.keywordIndexFor(candidates)
+    const keywordRanking = keywordIndex.rank(queries)
     const ranked = fuseRankings([vectorRanking, keywordRanking], candidates.length)
       .slice(0, MAX_RETRIEVAL_CHUNKS)
       .map((index) => ({ candidate: candidates[index]! }))
@@ -291,7 +322,11 @@ export class PrivateArchiveQueryService {
     return {
       answer,
       route,
-      sources: this.deduplicateSources(ranked.map(({ candidate }) => candidate)),
+      sources: this.deduplicateSources(citedCandidates(
+        answer,
+        ranked.map(({ candidate }) => candidate),
+        keywordIndex,
+      )),
     }
   }
 
@@ -301,7 +336,10 @@ export class PrivateArchiveQueryService {
     if (index) {
       this.keywordIndexes.delete(key)
     } else {
-      index = new KeywordIndex(candidates.map((candidate) => candidate.text))
+      index = new KeywordIndex(
+        candidates.map((candidate) => candidate.text),
+        candidates.map((candidate) => candidate.logicalKey),
+      )
     }
     this.keywordIndexes.set(key, index)
     while (this.keywordIndexes.size > MAX_CACHED_KEYWORD_INDEXES) {
