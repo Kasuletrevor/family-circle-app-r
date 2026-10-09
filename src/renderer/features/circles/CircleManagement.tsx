@@ -4,6 +4,7 @@ import { useAppServices } from '../../app/services'
 import type { CircleManagementSnapshot } from '../../services/circle/types'
 import { ConfirmCircleActionDialog } from './ConfirmCircleActionDialog'
 import { InviteMemberDialog } from './InviteMemberDialog'
+import { PersonAvatar } from './PersonPhotos'
 import './CircleManagement.css'
 
 type LoadState =
@@ -268,7 +269,11 @@ export function CircleManagement({ initialSection }: { initialSection: 'members'
           <div className="circle-management__list">
             {details.members.map((member) => (
               <article className="circle-management__row" key={member.personId}>
-                <div className="circle-management__avatar" aria-hidden="true">{member.name.trim().charAt(0).toUpperCase() || 'K'}</div>
+                <PersonAvatar
+                  personId={member.personId}
+                  initials={member.name.trim().charAt(0).toUpperCase() || 'K'}
+                  className="circle-management__avatar"
+                />
                 <div className="circle-management__row-copy">
                   <div className="circle-management__name-line">
                     <h3>{member.name}</h3>

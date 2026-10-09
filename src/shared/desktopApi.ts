@@ -149,6 +149,13 @@ export interface CircleNotificationRecord {
   read: boolean
 }
 
+/** A photo is a square JPEG data URL; nothing about the original file is exposed. */
+export type CirclePhotoChoice =
+  | { status: 'saved'; personId: string; dataUrl: string }
+  | { status: 'canceled' }
+  | { status: 'unsupported' }
+  | { status: 'too-large' }
+
 export interface CircleListItem {
   id: string
   name: string
@@ -436,6 +443,10 @@ export interface DesktopApi {
     leaveCircle(): Promise<{ success: true }>
     renameCircle(input: { name: string }): Promise<{ success: true }>
     deleteCircle(input: { confirmationName: string }): Promise<{ success: true }>
+    /** Profile photos chosen on this computer for people in the active Circle, by person ID. */
+    listPhotos(): Promise<Record<string, string>>
+    choosePhoto(input: { personId: string }): Promise<CirclePhotoChoice>
+    removePhoto(input: { personId: string }): Promise<{ success: true }>
   }
   vault: {
     listDocuments(): Promise<VaultDocumentSummary[]>

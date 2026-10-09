@@ -36,7 +36,7 @@ interface LocalBackupManifest {
   formatVersion: 1
   createdAt: number
   appVersion: string
-  includes: ['database', 'vault', 'story']
+  includes: ['database', 'vault', 'story', 'circle-photos']
   excludes: ['private-ai', 'protected-session']
 }
 
@@ -123,12 +123,13 @@ export class SettingsService {
       this.dependencies.db.exec(`VACUUM INTO ${sqlString(databasePath)}`)
       await copyDirectoryIfPresent(join(this.dependencies.userDataPath, 'vault'), join(backupRoot, 'vault'))
       await copyDirectoryIfPresent(join(this.dependencies.userDataPath, 'story'), join(backupRoot, 'story'))
+      await copyDirectoryIfPresent(join(this.dependencies.userDataPath, 'circle-photos'), join(backupRoot, 'circle-photos'))
 
       const manifest: LocalBackupManifest = {
         formatVersion: 1,
         createdAt,
         appVersion: this.dependencies.appVersion,
-        includes: ['database', 'vault', 'story'],
+        includes: ['database', 'vault', 'story', 'circle-photos'],
         excludes: ['private-ai', 'protected-session'],
       }
       await writeFile(join(backupRoot, 'backup.json'), JSON.stringify(manifest, null, 2), 'utf8')

@@ -5,6 +5,7 @@ import type {
   CircleContext,
   CircleDetails,
   CircleListItem,
+  CirclePhotoChoice,
   CircleOverview,
   CreateCircleInput,
   CreateCircleResult,
@@ -77,6 +78,9 @@ type DesktopChannel =
   | 'circle:leave'
   | 'circle:rename'
   | 'circle:delete'
+  | 'circle:photos-list'
+  | 'circle:photo-choose'
+  | 'circle:photo-remove'
   | 'vault:list'
   | 'vault:choose-and-upload'
   | 'vault:open'
@@ -427,6 +431,17 @@ function safeSpeechResult(value: unknown): SpeechPublicResult {
   return { status: raw.status === 'no-voice' ? 'no-voice' : 'unsupported' }
 }
 
+const PHOTO_DATA_URL = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/
+
+function safePhotoChoice(value: unknown): CirclePhotoChoice {
+  const raw = recordOf(value)
+  if (raw.status === 'saved' && typeof raw.dataUrl === 'string' && PHOTO_DATA_URL.test(raw.dataUrl)) {
+    return { status: 'saved', personId: String(raw.personId ?? ''), dataUrl: raw.dataUrl }
+  }
+  if (raw.status === 'canceled' || raw.status === 'too-large') return { status: raw.status }
+  return { status: 'unsupported' }
+}
+
 const noopSubscribe: Subscribe = () => () => undefined
 
 export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubscribe): DesktopApi {
@@ -534,6 +549,18 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       async deleteCircle(input: { confirmationName: string }) {
         await invoke('circle:delete', { confirmationName: String(input?.confirmationName ?? '') })
+        return { success: true as const }
+      },
+      async listPhotos() {
+        const raw = recordOf(await invoke('circle:photos-list'))
+        return Object.fromEntries(Object.entries(raw)
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && PHOTO_DATA_URL.test(entry[1])))
+      },
+      async choosePhoto(input: { personId: string }) {
+        return safePhotoChoice(await invoke('circle:photo-choose', { personId: String(input?.personId ?? '') }))
+      },
+      async removePhoto(input: { personId: string }) {
+        await invoke('circle:photo-remove', { personId: String(input?.personId ?? '') })
         return { success: true as const }
       },
     },
