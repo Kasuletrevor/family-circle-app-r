@@ -25,8 +25,8 @@ export function fakeAgenticClient(overrides: Partial<AgenticClient> = {}) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     }),
-    ...overrides,
     emitState: (status: PartnerViewStatus) => listeners.forEach((listener) => listener(status)),
   }
-  return client
+  // Overrides replace methods at run time; the mock types stay for assertions.
+  return Object.assign(client, overrides) as typeof client
 }
