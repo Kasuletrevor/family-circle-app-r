@@ -29,12 +29,23 @@ export interface AuthIpcService {
   complete(nextAction: OnboardingNextAction): Promise<AuthState>
 }
 
-export function registerAuthIpc(ipc: IpcHandleRegistrar, service: AuthIpcService): void {
+export interface AuthIpcHooks {
+  /** Runs after every sign-out attempt, e.g. to close partner pages signed in for this account. */
+  onSignedOut?(): void
+}
+
+export function registerAuthIpc(ipc: IpcHandleRegistrar, service: AuthIpcService, hooks: AuthIpcHooks = {}): void {
   ipc.handle('auth:restore', () => service.restore())
   ipc.handle('auth:sign-in', (_event, payload) => service.signIn(payload as SignInInput))
   ipc.handle('auth:check-invitation', (_event, payload) => service.checkInvitation(String(payload ?? '')))
   ipc.handle('auth:register', (_event, payload) => service.register(payload as RegisterInput))
-  ipc.handle('auth:sign-out', () => service.signOut())
+  ipc.handle('auth:sign-out', async () => {
+    try {
+      return await service.signOut()
+    } finally {
+      hooks.onSignedOut?.()
+    }
+  })
   ipc.handle('auth:request-password-reset', (_event, payload) => service.requestPasswordReset(String(payload ?? '')))
   ipc.handle('auth:reset-password', (_event, payload) => service.resetPassword(payload as ResetPasswordInput))
   ipc.handle('auth:update-profile', (_event, payload) => service.updateProfile(String(payload ?? '')))

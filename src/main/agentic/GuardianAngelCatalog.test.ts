@@ -91,6 +91,35 @@ describe('GuardianAngelCatalog', () => {
     expect(await catalog(hanging).get()).toEqual({ status: 'unavailable' })
   })
 
+  it('times out a response whose body stalls after the headers', async () => {
+    const stalled = vi.fn(async (_url: unknown, init?: RequestInit) => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('['))
+        init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')))
+      },
+    }), { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+    expect(await catalog(stalled).get()).toEqual({ status: 'unavailable' })
+  })
+
+  it('stops reading an oversized response at the size limit', async () => {
+    const pulls = { count: 0 }
+    const endless = vi.fn(async () => new Response(new ReadableStream({
+      pull(controller) {
+        pulls.count += 1
+        controller.enqueue(new Uint8Array(256 * 1024))
+      },
+    }), { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+    expect(await catalog(endless).get()).toEqual({ status: 'unavailable' })
+    expect(pulls.count).toBeLessThan(20)
+  })
+
+  it('refuses a response that announces a size over the limit', async () => {
+    const big = vi.fn(async () => new Response('[]', {
+      headers: { 'content-type': 'application/json', 'content-length': String(50 * 1024 * 1024) },
+    })) as unknown as typeof fetch
+    expect(await catalog(big).get()).toEqual({ status: 'unavailable' })
+  })
+
   it('ignores a damaged saved copy', async () => {
     const cachePath = join(folder, 'catalog.json')
     await writeFile(cachePath, JSON.stringify({ version: 1, fetchedAt: 5, templates: [{ id: 'x' }] }))

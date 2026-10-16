@@ -82,4 +82,18 @@ describe('registerAuthIpc', () => {
     expect(service.restore).not.toHaveBeenCalledWith(electronEvent)
     expect(service.signIn).not.toHaveBeenCalledWith(electronEvent, signIn)
   })
+
+  it('runs the signed-out hook after sign-out, even when sign-out fails', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const signOut = vi.fn()
+      .mockResolvedValueOnce({ success: true as const })
+      .mockRejectedValueOnce(new Error('session file locked'))
+    const onSignedOut = vi.fn()
+    registerAuthIpc({ handle: (channel, handler) => { handlers.set(channel, handler) } }, { signOut } as never, { onSignedOut })
+
+    await expect(handlers.get('auth:sign-out')?.({})).resolves.toEqual({ success: true })
+    expect(onSignedOut).toHaveBeenCalledTimes(1)
+    await expect(handlers.get('auth:sign-out')?.({})).rejects.toThrow('session file locked')
+    expect(onSignedOut).toHaveBeenCalledTimes(2)
+  })
 })

@@ -53,23 +53,42 @@ export class GuardianAngelCatalog {
     }
   }
 
-  private async request(url: string): Promise<Response> {
+  /**
+   * Downloads a response of at most `maxBytes`. The timeout covers the whole body, and the
+   * body is read in chunks so an oversized or endless response is never held in memory.
+   */
+  private async download(url: string, maxBytes: number): Promise<{ bytes: Buffer; type: string }> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
       const response = await this.deps.fetch(url, { signal: controller.signal, credentials: 'omit', redirect: 'error' })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response
+      if (Number(response.headers.get('content-length') ?? 0) > maxBytes) throw new Error('Response too large')
+      const type = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('Empty response')
+      const chunks: Uint8Array[] = []
+      let total = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        total += value.byteLength
+        if (total > maxBytes) {
+          void reader.cancel().catch(() => undefined)
+          throw new Error('Response too large')
+        }
+        chunks.push(value)
+      }
+      return { bytes: Buffer.concat(chunks), type }
     } finally {
       clearTimeout(timer)
+      controller.abort()
     }
   }
 
   private async fetchTemplates(): Promise<GuardianAngelTemplate[]> {
-    const response = await this.request(CATALOG_URL)
-    const text = await response.text()
-    if (text.length > MAX_LIST_BYTES) throw new Error('Catalog too large')
-    const entries = sanitizeCatalog(JSON.parse(text))
+    const { bytes } = await this.download(CATALOG_URL, MAX_LIST_BYTES)
+    const entries = sanitizeCatalog(JSON.parse(bytes.toString('utf8')))
     if (entries.length === 0) throw new Error('No templates')
     return Promise.all(entries.map(async ({ template, avatarPath }) => ({
       ...template,
@@ -79,11 +98,8 @@ export class GuardianAngelCatalog {
 
   private async fetchAvatar(path: string): Promise<string | null> {
     try {
-      const response = await this.request(`${TEMPLATE_SITE}${path}`)
-      const type = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
-      if (!AVATAR_TYPES.has(type)) return null
-      const bytes = Buffer.from(await response.arrayBuffer())
-      if (bytes.length === 0 || bytes.length > MAX_AVATAR_BYTES) return null
+      const { bytes, type } = await this.download(`${TEMPLATE_SITE}${path}`, MAX_AVATAR_BYTES)
+      if (!AVATAR_TYPES.has(type) || bytes.length === 0) return null
       return `data:${type};base64,${bytes.toString('base64')}`
     } catch {
       return null

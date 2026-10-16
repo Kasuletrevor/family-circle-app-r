@@ -71,7 +71,10 @@ interface AppServices extends StoryServices {
 function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-version', () => app.getVersion())
   ipcMain.handle('app:get-platform', () => process.platform)
-  registerAuthIpc(ipcMain, services.authService)
+  registerAuthIpc(ipcMain, services.authService, {
+    // A partner page signed in for this account must not keep running after sign-out.
+    onSignedOut: () => partnerViews?.destroyAll(),
+  })
   registerCircleIpc(ipcMain, services.circleService)
   registerCirclePhotoIpc(ipcMain, services.circlePhotoService)
   registerVaultIpc(ipcMain, services.vaultService, services.vaultQueryService, services.mutationLock, (documentId) => (
