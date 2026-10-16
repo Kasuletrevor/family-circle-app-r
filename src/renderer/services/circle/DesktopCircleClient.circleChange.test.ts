@@ -62,6 +62,23 @@ describe('DesktopCircleClient Circle changes', () => {
     expect(changes).not.toHaveBeenCalled()
   })
 
+  it('announces an explicit switch once, not again when the next overview confirms it', async () => {
+    let active = 'g-1'
+    const client = new DesktopCircleClient(async () => overview(active), () => 0, {
+      selectCircle: async (circleId) => { active = circleId; return { success: true } },
+    })
+    await client.getOverview()
+    const changes = vi.fn()
+    client.onChange(changes)
+
+    await client.selectCircle('g-2')
+    await client.getOverview()
+    await Promise.resolve()
+
+    expect(changes).toHaveBeenCalledTimes(1)
+    expect(changes).toHaveBeenCalledWith({ activeCircleChanged: true })
+  })
+
   it('announces a switch only when selecting a Circle succeeds', async () => {
     const selectCircle = vi.fn()
       .mockRejectedValueOnce(new Error('That Circle is no longer available to your account'))

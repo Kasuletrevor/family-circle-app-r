@@ -390,6 +390,9 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
   private invalidateCircleReads(change: CircleChange = { activeCircleChanged: false }): void {
     this.overviewInFlight = null
     this.detailsInFlight = null
+    // The switch is announced here, so the overview that confirms it only records the
+    // new Circle instead of announcing the same switch a second time.
+    if (change.activeCircleChanged) this.lastActiveCircleId = undefined
     for (const listener of [...this.changeListeners]) listener(change)
   }
 
