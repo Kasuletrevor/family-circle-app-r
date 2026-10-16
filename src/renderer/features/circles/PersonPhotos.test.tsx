@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AppServicesProvider } from '../../app/services'
+import type { CircleOverview } from '../../../shared/desktopApi'
 import type { CircleChange, CircleClient } from '../../services/circle/CircleClient'
 import type { PersonPhotoClient } from '../../services/circle/PersonPhotoClient'
 import type { FamilyPerson } from '../../services/circle/types'
@@ -22,6 +23,7 @@ const rose: FamilyPerson = {
 function circleClient() {
   const listeners = new Set<(change: CircleChange) => void>()
   const client = {
+    getOverview: vi.fn(async () => ({ status: 'ready' })),
     onChange: vi.fn((listener: (change: CircleChange) => void) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -183,6 +185,19 @@ describe('profile photos', () => {
     await act(async () => finish({ status: 'saved', personId: 'user:rose', dataUrl: NEW_PHOTO }))
 
     await waitFor(() => expect(portraitImage()).toHaveAttribute('src', NEW_PHOTO))
+  })
+
+  it('reads photos only after the Circle overview has settled which Circle is active', async () => {
+    let settle!: () => void
+    const circle = circleClient()
+    circle.client.getOverview = vi.fn(() => new Promise<CircleOverview>((resolve) => { settle = () => resolve({ status: 'ready' } as never) }))
+    const listPhotos = vi.fn(async () => ({ 'user:rose': GRANDMA }))
+    renderPanel(photoClient({ listPhotos }), circle)
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(listPhotos).not.toHaveBeenCalled()
+    await act(async () => settle())
+    await waitFor(() => expect(portraitImage()).toHaveAttribute('src', GRANDMA))
   })
 
   it('shows initials and no photo button when photos are not available', () => {

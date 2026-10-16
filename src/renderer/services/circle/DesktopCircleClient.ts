@@ -136,6 +136,8 @@ function mapListItem(circle: CircleListItem): CircleSummary {
 export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
   private readonly changeListeners = new Set<(change: CircleChange) => void>()
   private overviewInFlight: Promise<CircleOverview> | null = null
+  /** The active Circle last seen in an overview; undefined until the first one arrives. */
+  private lastActiveCircleId: string | null | undefined = undefined
   private detailsInFlight: Promise<CircleDetails | null> | null = null
   private readonly operations: CircleDesktopOperations
 
@@ -242,18 +244,23 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
   }
 
   async selectCircle(circleId: string): Promise<void> {
+    let switched = false
     try {
       await this.operations.selectCircle(circleId)
+      switched = true
     } finally {
-      this.invalidateCircleReads({ activeCircleChanged: true })
+      this.invalidateCircleReads({ activeCircleChanged: switched })
     }
   }
 
   async createCircle(input: CreateCircleInput): Promise<CreateCircleResult> {
+    let switched = false
     try {
-      return await this.operations.createCircle(input)
+      const result = await this.operations.createCircle(input)
+      switched = true
+      return result
     } finally {
-      this.invalidateCircleReads({ activeCircleChanged: true })
+      this.invalidateCircleReads({ activeCircleChanged: switched })
     }
   }
 
@@ -322,10 +329,12 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
   }
 
   async leaveCircle(): Promise<void> {
+    let switched = false
     try {
       await this.operations.leaveCircle()
+      switched = true
     } finally {
-      this.invalidateCircleReads({ activeCircleChanged: true })
+      this.invalidateCircleReads({ activeCircleChanged: switched })
     }
   }
 
@@ -338,10 +347,12 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
   }
 
   async deleteCircle(confirmationName: string): Promise<void> {
+    let switched = false
     try {
       await this.operations.deleteCircle({ confirmationName })
+      switched = true
     } finally {
-      this.invalidateCircleReads({ activeCircleChanged: true })
+      this.invalidateCircleReads({ activeCircleChanged: switched })
     }
   }
 
@@ -364,6 +375,18 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     }
   }
 
+  /**
+   * The server can change the active Circle on its own, for example when the saved one
+   * was removed and another is chosen in its place. Any such change is announced once.
+   */
+  private noticeActiveCircle(overview: CircleOverview): void {
+    const activeCircleId = overview.status === 'ready' ? overview.activeCircleId : null
+    const previous = this.lastActiveCircleId
+    this.lastActiveCircleId = activeCircleId
+    if (previous === undefined || previous === activeCircleId) return
+    for (const listener of [...this.changeListeners]) listener({ activeCircleChanged: true })
+  }
+
   private invalidateCircleReads(change: CircleChange = { activeCircleChanged: false }): void {
     this.overviewInFlight = null
     this.detailsInFlight = null
@@ -376,8 +399,9 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     const request = this.fetchOverview()
     this.overviewInFlight = request
     void request.then(
-      () => {
+      (overview) => {
         if (this.overviewInFlight === request) this.overviewInFlight = null
+        this.noticeActiveCircle(overview)
       },
       () => {
         if (this.overviewInFlight === request) this.overviewInFlight = null

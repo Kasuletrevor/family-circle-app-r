@@ -46,12 +46,16 @@ export function PersonPhotosProvider({ children }: PropsWithChildren) {
     if (!client) return
     const request = ++loadRef.current
     try {
+      // The overview settles which Circle is active (the server may have replaced one that
+      // was removed), so photos are read only after it.
+      await circle.getOverview().catch(() => undefined)
+      if (request !== loadRef.current) return
       const next = await client.listPhotos()
       if (request === loadRef.current) setPhotos(next)
     } catch {
       if (request === loadRef.current) setPhotos({})
     }
-  }, [client])
+  }, [circle, client])
 
   useEffect(() => {
     void load()
