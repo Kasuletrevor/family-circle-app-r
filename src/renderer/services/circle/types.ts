@@ -76,7 +76,7 @@ export type HomeReadySnapshot = {
   relationships: FamilyRelationship[]
   selectedPersonId: string
   /** The signed-in person in this tree, who gets the "You" badge; null when not in it. */
-  viewerPersonId?: string | null
+  viewerPersonId: string | null
 }
 
 export type HomeEmptySnapshot = {

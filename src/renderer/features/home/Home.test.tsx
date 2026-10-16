@@ -29,6 +29,8 @@ describe('Home', () => {
     expect(screen.getByRole('heading', { name: 'Trevor Kasule' })).toBeInTheDocument()
     expect(screen.getByText("David's Birthday")).toBeInTheDocument()
     expect(screen.getByText('Jose accepted your invitation')).toBeInTheDocument()
+    // The demo data marks Trevor as the signed-in person.
+    expect(screen.getByRole('button', { name: /Trevor Kasule/ }).querySelector('.family-person__you')).toHaveTextContent('You')
   })
 
   it('shows an intentional empty state when the protected account has no shared Circle', async () => {

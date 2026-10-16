@@ -120,7 +120,7 @@ export function Home() {
             people={snapshot.people}
             relationships={snapshot.relationships}
             selectedPersonId={selectedPerson?.id ?? ''}
-            viewerPersonId={snapshot.viewerPersonId ?? null}
+            viewerPersonId={snapshot.viewerPersonId}
             onSelectPerson={setSelectedPersonId}
           />
         )}

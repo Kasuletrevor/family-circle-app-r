@@ -67,6 +67,7 @@ const homeSnapshot: HomeSnapshot = {
     { id: 'rel-peter-emma', fromPersonId: 'peter', toPersonId: 'emma', kind: 'parent' },
   ],
   selectedPersonId: 'trevor',
+  viewerPersonId: 'trevor',
 }
 
 const managementSnapshot: CircleManagementSnapshot = {
