@@ -79,7 +79,7 @@ describe('createDesktopApi', () => {
     const subscribe = vi.fn(() => () => undefined)
     const api = createDesktopApi(invoke, subscribe)
 
-    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'settings', 'privateAi', 'story', 'speech'])
+    expect(Object.keys(api)).toEqual(['app', 'auth', 'onboarding', 'circle', 'vault', 'settings', 'privateAi', 'story', 'speech', 'agentic'])
     expect(Object.keys(api.app)).toEqual(['getVersion', 'getPlatform'])
     expect(Object.keys(api.auth)).toEqual(['restore', 'signIn', 'checkInvitation', 'register', 'signOut', 'requestPasswordReset', 'resetPassword', 'updateProfile', 'changePassword'])
     expect(Object.keys(api.onboarding)).toEqual(['getState', 'setInitialPassword', 'updateProfile', 'getCircleContext', 'complete'])

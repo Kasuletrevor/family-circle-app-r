@@ -1,3 +1,11 @@
+import type {
+  GuardianAngelCatalogResult,
+  PartnerServiceKey,
+  PartnerViewBounds,
+  PartnerViewCommand,
+  PartnerViewStatus,
+  PartnerViewTarget,
+} from './agentic'
 import type { StoryFieldKey, StoryLanguage } from './story'
 import type { StoryPublicState, StoryVersionSummary } from './storyPublic'
 
@@ -474,4 +482,13 @@ export interface DesktopApi {
   }
   story: StoryDesktopApi
   speech: SpeechDesktopApi
+  /** Agentic Services: the public Guardian Angel catalog and isolated partner web views. */
+  agentic: {
+    getCatalog(input?: { refresh?: boolean }): Promise<GuardianAngelCatalogResult>
+    openView(input: { service: PartnerServiceKey; target?: PartnerViewTarget }): Promise<{ success: true }>
+    setViewBounds(input: { service: PartnerServiceKey } & PartnerViewBounds): Promise<{ success: true }>
+    hideView(input: { service: PartnerServiceKey }): Promise<{ success: true }>
+    viewCommand(input: { service: PartnerServiceKey; command: PartnerViewCommand }): Promise<{ success: true }>
+    onViewState(listener: (status: PartnerViewStatus) => void): () => void
+  }
 }
