@@ -29,6 +29,7 @@ interface SavedCatalog { version: 1; fetchedAt: number; templates: GuardianAngel
 export class GuardianAngelCatalog {
   private memory: SavedCatalog | null = null
   private lastFetchFailed = false
+  private inFlight: Promise<GuardianAngelCatalogResult> | null = null
   private readonly now: () => number
   private readonly timeoutMs: number
 
@@ -41,6 +42,12 @@ export class GuardianAngelCatalog {
     if (!options.refresh && !this.lastFetchFailed && this.memory && this.now() - this.memory.fetchedAt < MEMORY_LIFETIME_MS) {
       return { status: 'ready', templates: this.memory.templates, fetchedAt: this.memory.fetchedAt, stale: false }
     }
+    // Repeated Retry clicks share one download, so the size and time limits hold overall.
+    this.inFlight ??= this.refresh().finally(() => { this.inFlight = null })
+    return this.inFlight
+  }
+
+  private async refresh(): Promise<GuardianAngelCatalogResult> {
     try {
       const templates = await this.fetchTemplates()
       const saved: SavedCatalog = { version: 1, fetchedAt: this.now(), templates }

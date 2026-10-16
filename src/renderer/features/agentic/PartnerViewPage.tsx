@@ -12,6 +12,9 @@ const SERVICE_NAMES: Record<PartnerServiceKey, string> = {
   marketplace: 'Marketplace',
 }
 
+/** The newest page open per service, so a late, older open never hides a newer view. */
+const latestOpen = new Map<PartnerServiceKey, number>()
+
 function targetFrom(template: string | null, page: string | null): PartnerViewTarget {
   if (template) return { kind: 'template', templateId: template }
   if (page === 'care-builder') return { kind: 'care-builder' }
@@ -46,12 +49,15 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
   useEffect(() => {
     if (!agentic) return undefined
     let active = true
+    const openNumber = (latestOpen.get(service) ?? 0) + 1
+    latestOpen.set(service, openNumber)
     setOpened(false)
     void agentic.openView(service, target)
       .then(() => {
         if (active) setOpened(true)
-        // The page was left while the view was opening; the main process just showed it.
-        else void agentic.hideView(service).catch(() => undefined)
+        // The page was left while the view was opening and the main process just showed it.
+        // Hide it, unless a newer page for this service has opened it since.
+        else if (latestOpen.get(service) === openNumber) void agentic.hideView(service).catch(() => undefined)
       })
       .catch(() => { if (active) setState('failed') })
     return () => { active = false }

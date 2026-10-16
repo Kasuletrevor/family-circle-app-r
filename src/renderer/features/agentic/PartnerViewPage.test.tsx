@@ -96,6 +96,40 @@ describe('PartnerViewPage', () => {
     expect(agentic.hideView).toHaveBeenCalledWith('ubercare')
   })
 
+  it('keeps the newer view when an older open finishes after a quick leave and return', async () => {
+    let finishFirstOpen!: () => void
+    const agentic = fakeAgenticClient()
+    agentic.openView.mockImplementationOnce(() => new Promise<undefined>((resolve) => { finishFirstOpen = () => resolve(undefined) }))
+    function Nav() {
+      const navigate = useNavigate()
+      return (
+        <>
+          <button type="button" onClick={() => navigate('/vault')}>Go to vault</button>
+          <button type="button" onClick={() => navigate('/agentic/ubercare')}>Back to UberCare</button>
+        </>
+      )
+    }
+    render(
+      <AppServicesProvider services={{ circle: new MockCircleClient(), agentic }}>
+        <MemoryRouter initialEntries={['/agentic/ubercare']}>
+          <Nav />
+          <Routes>
+            <Route path="/agentic/ubercare" element={<PartnerViewPage service="ubercare" />} />
+            <Route path="/vault" element={<p>Vault page</p>} />
+          </Routes>
+        </MemoryRouter>
+      </AppServicesProvider>,
+    )
+    await waitFor(() => expect(agentic.openView).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Go to vault' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to UberCare' }))
+    await waitFor(() => expect(agentic.setViewBounds).toHaveBeenCalled())
+    agentic.hideView.mockClear()
+
+    await act(async () => finishFirstOpen())
+    expect(agentic.hideView).not.toHaveBeenCalled()
+  })
+
   it('hides the view while a menu is open and when leaving the page', async () => {
     const agentic = renderView('/agentic/ubercare', 'ubercare')
     await waitFor(() => expect(agentic.setViewBounds).toHaveBeenCalled())

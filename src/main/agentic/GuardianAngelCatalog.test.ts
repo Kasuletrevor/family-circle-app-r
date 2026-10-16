@@ -160,6 +160,22 @@ describe('GuardianAngelCatalog', () => {
     if (result.status === 'ready') expect(result.templates.every((template) => template.avatar === null)).toBe(true)
   })
 
+  it('shares one download between overlapping refreshes', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const fetchImpl = vi.fn(async () => {
+      await gate
+      return response(JSON.stringify([entry(1, { avatar_src: null })]))
+    }) as unknown as typeof fetch
+    const service = catalog(fetchImpl)
+
+    const results = [service.get({ refresh: true }), service.get({ refresh: true }), service.get({ refresh: true })]
+    release()
+    const settled = await Promise.all(results)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(settled.every((result) => result.status === 'ready')).toBe(true)
+  })
+
   it('ignores a damaged saved copy', async () => {
     const cachePath = join(folder, 'catalog.json')
     await writeFile(cachePath, JSON.stringify({ version: 1, fetchedAt: 5, templates: [{ id: 'x' }] }))
