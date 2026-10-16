@@ -1,7 +1,7 @@
 # Agentic Services, first slice: catalog and secure views
 
 Date: 2026-10-16
-Status: approved design, awaiting spec review
+Status: approved; plan in `docs/superpowers/plans/2026-10-16-agentic-services.md`
 
 ## Goal
 
@@ -22,8 +22,8 @@ is a later slice.
 - A new sidebar group, **Agentic Services**, with three entries:
   Guardian Angel (`/agentic/guardian-angel`), UberCare (`/agentic/ubercare`)
   and Marketplace (`/agentic/marketplace`).
-- While any `/agentic/*` route is open the whole frame turns green and the top
-  bar shows a **COMMAND MODE** badge. Any core page returns to blue Ask mode.
+- While any `/agentic/*` route is open the whole frame turns green and the
+  existing sidebar mode badge reads **Command mode** (it reads Ask mode elsewhere). Any core page returns to blue Ask mode.
 - Green is applied by overriding the role-based accent tokens
   (`--kk-accent*`) under `[data-mode="command"]` on the app root:
   accent `#15803d`, sidebar background `#0f3d2c`. Gold `#e6ad69` is unchanged.
@@ -70,7 +70,7 @@ Used for UberCare (`https://remotecarers.net/worker/`), Marketplace
 
   ```ts
   interface GuardianAngelTemplate {
-    id: string                    // validated: [A-Za-z0-9_-]{1,64}
+    id: string                    // the API sends a number; kept as digits, [1-9][0-9]{0,9}
     name: string                  // trimmed, max 120 chars
     description: string           // trimmed, max 600 chars
     category: string              // known key or 'other'
@@ -80,8 +80,9 @@ Used for UberCare (`https://remotecarers.net/worker/`), Marketplace
   }
   ```
 
-  Everything else (`created_by`, model, tools, slug, internal fields) is
-  dropped. Entries that fail validation are skipped, not fatal.
+  The API sends rules as keys (`no_medical_advice`); they become plain
+  sentences ("No medical advice"). Everything else (`created_by`, model,
+  tools, slug, internal fields) is dropped. Entries that fail validation are skipped, not fatal.
 - Avatars: `avatar_src` must be a path on `https://kin-keepers.ai`; each is
   downloaded once (size cap 512 KB, image content types only) and returned as
   a data URL, so the renderer never loads remote content. Failed avatars fall
@@ -94,7 +95,11 @@ Used for UberCare (`https://remotecarers.net/worker/`), Marketplace
 
 **`PartnerViews`** (`src/main/agentic/PartnerViews.ts`)
 
-- Fixed service table (the renderer names a key, never a URL):
+- Fixed service table (the renderer names a key, never a URL). Partitions are
+  per Family Circle account: the name ends with `-{accountKey}` (16 hex chars of
+  a sha256 of the local user id), so two people on one Windows login never share
+  a partner sign-in. Opening a view for a different account first destroys the
+  previous account's views.
 
   | key | start URL | allowed hosts | partition |
   |---|---|---|---|
@@ -127,7 +132,9 @@ Used for UberCare (`https://remotecarers.net/worker/`), Marketplace
 **IPC** (all inputs validated in the handler)
 
 - `agentic:catalog` `{ refresh?: boolean }` returns the catalog result.
-- `agentic:open-view` `{ service, templateId? }`.
+- `agentic:open-view` `{ service, target? }`, where target is
+  `{ kind: 'start' } | { kind: 'template', templateId } | { kind: 'care-builder' }`.
+  Without a target an open view is shown again on its current page.
 - `agentic:set-view-bounds` `{ service, x, y, width, height }`.
 - `agentic:hide-view` `{ service }`.
 - `agentic:view-command` `{ service, command: 'back' | 'reload' | 'open-external' }`.
@@ -141,12 +148,13 @@ Used for UberCare (`https://remotecarers.net/worker/`), Marketplace
   interface and `MockAgenticClient` back the tests and the preview harness.
 - Routes: `/agentic/guardian-angel` shows `GuardianAngelPage`;
   `/agentic/ubercare`, `/agentic/marketplace` and
-  `/agentic/guardian-angel/view` show `PartnerViewPage`.
+  `/agentic/guardian-angel/view` (`?template={id}` or `?page=care-builder`)
+  show `PartnerViewPage`.
 - `PartnerViewPage` measures its view slot with `ResizeObserver` (plus window
   resize) and sends bounds; it hides the view on unmount.
-- `App` sets `data-mode="command"` on the app root when the path starts with
-  `/agentic/`; `Sidebar` gains the Agentic Services group; `TopBar` shows the
-  badge.
+- `App` sets `data-mode="command"` (otherwise `ask`) on the app root when the
+  path starts with `/agentic/`; `Sidebar` gains the Agentic Services group and
+  its mode badge follows the route.
 - Menus and dialogs cannot draw above a `WebContentsView`, so while a partner
   view is visible the app hides it when a modal or the top-bar menu opens and
   shows it again after.
