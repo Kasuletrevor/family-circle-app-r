@@ -40,6 +40,6 @@ describe('renderer design rules', () => {
     const nav = appCss.match(/\.app-sidebar__nav \{([^}]*)\}/)![1]!
     expect(nav).toMatch(/overflow-y:\s*auto/)
     expect(appCss).toMatch(/\.sidebar-link \{[^}]*flex-shrink:\s*0/)
-    expect(appCss).toMatch(/@media \(max-height: 760px\)/)
+    expect(appCss).toMatch(/@media \(max-height: 900px\)/)
   })
 })

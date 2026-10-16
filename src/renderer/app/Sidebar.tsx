@@ -147,7 +147,7 @@ export function Sidebar({ getVersion = defaultGetVersion }: { getVersion?: () =>
         </div>
         <div>
           <strong>Local AI</strong>
-          <span>{PRIVATE_AI_MODELS.answers} · on this computer</span>
+          <span className="ai-runtime-card__model">{PRIVATE_AI_MODELS.answers} · on this computer</span>
           <span className={`ai-runtime-card__status${aiReady ? ' ai-runtime-card__status--ready' : ''}`}>
             <i aria-hidden="true" /> {aiStatusLabel(aiState)}
           </span>

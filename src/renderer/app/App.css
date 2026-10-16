@@ -605,8 +605,9 @@
   overflow: hidden;
 }
 
-/* Short windows (down to the 720px minimum): tighter sidebar spacing, same text size. */
-@media (max-height: 760px) {
+/* Short windows (down to the 720px minimum): tighter sidebar spacing, same text size, so both
+   navigation groups fit in common laptop windows. */
+@media (max-height: 900px) {
   .app-sidebar {
     padding: 14px 12px 12px;
   }
@@ -625,7 +626,7 @@
   }
 
   .sidebar-link {
-    min-height: 38px;
+    min-height: 36px;
   }
 
   .app-sidebar__group + .app-sidebar__group {
@@ -639,6 +640,13 @@
 
   .app-sidebar__version {
     margin-top: 6px;
+  }
+}
+
+/* Very short windows: the Local AI card keeps its status and drops the model line. */
+@media (max-height: 800px) {
+  .ai-runtime-card__model {
+    display: none !important;
   }
 }
 
