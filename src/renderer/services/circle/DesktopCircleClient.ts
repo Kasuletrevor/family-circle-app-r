@@ -400,8 +400,11 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
     this.overviewInFlight = request
     void request.then(
       (overview) => {
-        if (this.overviewInFlight === request) this.overviewInFlight = null
-        this.noticeActiveCircle(overview)
+        // A request superseded by a newer one (after a switch) must not move the
+        // tracked Circle back or announce a switch that did not happen.
+        const current = this.overviewInFlight === request
+        if (current) this.overviewInFlight = null
+        if (current) this.noticeActiveCircle(overview)
       },
       () => {
         if (this.overviewInFlight === request) this.overviewInFlight = null

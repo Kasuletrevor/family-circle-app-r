@@ -231,6 +231,26 @@ describe('CirclePhotoService', () => {
     await expect(service.listPhotos()).resolves.toEqual({})
   })
 
+  it('never overwrites a photo index it cannot read', async () => {
+    const { root, service } = await setup()
+    await service.choosePhoto('user:1')
+    await service.choosePhoto('user:2')
+    const folder = join(root, 'userData', 'circle-photos', 'users', '7')
+    const [circleFolder] = await readdir(folder)
+    const indexPath = join(folder, circleFolder!, 'index.json')
+    const saved = await readFile(indexPath, 'utf8')
+    // A damaged index, for example a write cut short by a crash.
+    await writeFile(indexPath, saved.slice(0, 10))
+
+    await expect(service.choosePhoto('user:3')).rejects.toThrow('Saved photos could not be read')
+    await expect(service.removePhoto('user:1')).rejects.toThrow('Saved photos could not be read')
+    await expect(readFile(indexPath, 'utf8')).resolves.toBe(saved.slice(0, 10))
+
+    // Restoring the index brings every photo back.
+    await writeFile(indexPath, saved)
+    await expect(service.listPhotos().then((photos) => Object.keys(photos).sort())).resolves.toEqual(['user:1', 'user:2'])
+  })
+
   it('has nothing to list before a Circle is chosen', async () => {
     const { service } = await setup({ activeCircleId: null })
     await expect(service.listPhotos()).resolves.toEqual({})

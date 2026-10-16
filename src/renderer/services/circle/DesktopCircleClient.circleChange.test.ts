@@ -35,6 +35,33 @@ describe('DesktopCircleClient Circle changes', () => {
     expect(changes).not.toHaveBeenCalled()
   })
 
+  it('ignores an overview that was superseded by a newer one', async () => {
+    const pending: Array<(value: CircleOverview) => void> = []
+    const client = new DesktopCircleClient(() => new Promise<CircleOverview>((resolve) => { pending.push(resolve) }), () => 0, {
+      selectCircle: async () => ({ success: true }),
+    })
+    const changes = vi.fn()
+
+    const first = client.getOverview()
+    pending[0]!(overview('g-1'))
+    await first
+    await Promise.resolve()
+
+    const stale = client.getOverview() // still for Circle A when the switch happens
+    await client.selectCircle('g-2')
+    client.onChange(changes)
+    const fresh = client.getOverview()
+    pending[2]!(overview('g-2'))
+    await fresh
+    await Promise.resolve()
+    changes.mockClear()
+
+    pending[1]!(overview('g-1'))
+    await stale
+    await Promise.resolve()
+    expect(changes).not.toHaveBeenCalled()
+  })
+
   it('announces a switch only when selecting a Circle succeeds', async () => {
     const selectCircle = vi.fn()
       .mockRejectedValueOnce(new Error('That Circle is no longer available to your account'))

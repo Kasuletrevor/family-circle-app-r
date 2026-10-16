@@ -167,15 +167,30 @@ export class CirclePhotoService {
     return join(this.dependencies.userDataPath, 'circle-photos', 'users', String(user.id), hashed(circleId))
   }
 
+  /**
+   * Only a missing index means "no photos yet". Any other read or parse failure is an
+   * error: treating it as empty would let the next save replace the index with a single
+   * entry and orphan every other photo.
+   */
   private async readIndex(folder: string): Promise<PhotoIndex> {
+    let text: string
     try {
-      const parsed = JSON.parse(await readFile(join(folder, 'index.json'), 'utf8')) as unknown
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-      return Object.fromEntries(Object.entries(parsed as Record<string, unknown>)
-        .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && /^[0-9a-f]{32}(-[0-9a-f]{8})?\.jpg$/.test(entry[1])))
-    } catch {
-      return {}
+      text = await readFile(join(folder, 'index.json'), 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+      throw new CirclePhotoError('Saved photos could not be read. Please try again.')
     }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      throw new CirclePhotoError('Saved photos could not be read. Please try again.')
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new CirclePhotoError('Saved photos could not be read. Please try again.')
+    }
+    return Object.fromEntries(Object.entries(parsed as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && /^[0-9a-f]{32}(-[0-9a-f]{8})?\.jpg$/.test(entry[1])))
   }
 
   private async writeIndex(folder: string, index: PhotoIndex): Promise<void> {
