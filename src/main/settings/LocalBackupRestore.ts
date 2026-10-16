@@ -16,7 +16,7 @@ const PENDING_DIR = 'pending-restore'
 const STAGING_DIR = 'pending-restore.tmp'
 const SAFETY_DIR = 'pre-restore'
 const MARKER_FILE = 'restore.json'
-const DATA_DIRECTORIES = ['vault', 'story'] as const
+const DATA_DIRECTORIES = ['vault', 'story', 'circle-photos'] as const
 const SQLITE_SIDE_FILES = ['-wal', '-shm'] as const
 
 export interface BackupManifest {

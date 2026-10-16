@@ -36,7 +36,7 @@ describe('DesktopCircleClient Family Tree overview', () => {
     resolveOverview(overview)
 
     await expect(treeOverview).resolves.toEqual(overview)
-    await expect(shell).resolves.toEqual({ activeCircleName: 'Kasule Family', unreadNotifications: 0 })
+    await expect(shell).resolves.toEqual({ activeCircleName: 'Kasule Family', unreadNotifications: 0, viewerPersonId: 'user:alice' })
     expect(fetchOverview).toHaveBeenCalledTimes(1)
   })
 })

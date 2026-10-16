@@ -18,6 +18,8 @@ export type CircleManagementSnapshot = CircleDetails
 export type ShellSnapshot = {
   activeCircleName: string | null
   unreadNotifications: number
+  /** The signed-in person in the active Circle's tree, for showing their photo. */
+  viewerPersonId?: string | null
 }
 
 export type HomeMetrics = {

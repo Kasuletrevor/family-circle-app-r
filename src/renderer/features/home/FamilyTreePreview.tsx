@@ -1,5 +1,6 @@
 import { List, Network, Plus } from 'lucide-react'
 import type { FamilyPerson, FamilyRelationship } from '../../services/circle/types'
+import { PersonAvatar } from '../circles/PersonPhotos'
 
 type FamilyTreePreviewProps = {
   people: FamilyPerson[]
@@ -53,7 +54,7 @@ export function FamilyTreePreview({
                     aria-pressed={selected}
                     onClick={() => onSelectPerson(person.id)}
                   >
-                    <span className="family-person__avatar" aria-hidden="true">{person.initials}</span>
+                    <PersonAvatar personId={person.id} initials={person.initials} className="family-person__avatar" />
                     <strong>{person.name}</strong>
                     <small>{person.birthYear ?? person.role}</small>
                     {selected && <span className="family-person__you">You</span>}

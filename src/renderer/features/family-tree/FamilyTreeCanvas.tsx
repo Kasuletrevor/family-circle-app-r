@@ -8,6 +8,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 import type { CircleTreePersonRecord, SaveTreePositionInput } from '../../../shared/desktopApi'
+import { usePersonPhotos } from '../circles/PersonPhotos'
 import { relationshipSentence } from './familyTreeLabels'
 import {
   buildRelationshipPaths,
@@ -19,6 +20,19 @@ import './FamilyTree.css'
 
 const NODE_WIDTH = 180
 const NODE_HEIGHT = 84
+// A photo, when one is set on this computer, sits at the left of the card.
+const PHOTO_SIZE = 46
+const PHOTO_X = 12
+const PHOTO_Y = (NODE_HEIGHT - PHOTO_SIZE) / 2
+// About as many characters of a 14px bold name as fit beside the photo.
+const NAME_CHARS_BESIDE_PHOTO = 13
+
+function fitName(name: string): string {
+  const characters = [...name]
+  return characters.length <= NAME_CHARS_BESIDE_PHOTO
+    ? name
+    : `${characters.slice(0, NAME_CHARS_BESIDE_PHOTO - 1).join('').trimEnd()}…`
+}
 const VIEWPORT_WIDTH = 900
 const VIEWPORT_HEIGHT = 560
 const MIN_SCALE = 0.25
@@ -127,6 +141,7 @@ export function FamilyTreeCanvas({
   onPositionChange,
 }: FamilyTreeCanvasProps) {
   const nodes = useMemo(() => visibleNodes(layout), [layout])
+  const { photoFor } = usePersonPhotos()
   const [localPositions, setLocalPositions] = useState<Record<string, Position>>(() => positionsFromLayout(layout))
   const [view, setView] = useState<ViewTransform>({ scale: 1, x: 48, y: 48 })
   const [saveError, setSaveError] = useState(false)
@@ -324,8 +339,11 @@ export function FamilyTreeCanvas({
               )
             })}
 
-            {renderedLayout.nodes.map((node) => {
+            {renderedLayout.nodes.map((node, nodeIndex) => {
               const selected = selection?.type === 'person' && selection.personId === node.id
+              const photo = photoFor(node.id)
+              const textX = photo ? PHOTO_X + PHOTO_SIZE + 10 : 14
+              const shownName = photo ? fitName(node.name) : node.name
               const draggable = canDrag(node)
               const isViewer = node.id === viewerPersonId
               const className = [
@@ -351,11 +369,31 @@ export function FamilyTreeCanvas({
                   onPointerDown={(event) => handleNodePointerDown(event, node)}
                 >
                   <rect className="family-tree-canvas__node-card" width={NODE_WIDTH} height={NODE_HEIGHT} rx={12} />
-                  <text className="family-tree-canvas__node-name" x={14} y={27}>{node.name}</text>
-                  <text className="family-tree-canvas__node-role" x={14} y={48}>{node.role}</text>
-                  {isViewer ? <text className="family-tree-canvas__badge" x={14} y={69}>You</text> : null}
+                  {photo ? (
+                    <>
+                      <clipPath id={`family-tree-photo-${nodeIndex}`}>
+                        <circle cx={PHOTO_X + PHOTO_SIZE / 2} cy={PHOTO_Y + PHOTO_SIZE / 2} r={PHOTO_SIZE / 2} />
+                      </clipPath>
+                      <image
+                        className="family-tree-canvas__photo"
+                        href={photo}
+                        x={PHOTO_X}
+                        y={PHOTO_Y}
+                        width={PHOTO_SIZE}
+                        height={PHOTO_SIZE}
+                        preserveAspectRatio="xMidYMid slice"
+                        clipPath={`url(#family-tree-photo-${nodeIndex})`}
+                      />
+                    </>
+                  ) : null}
+                  <text className="family-tree-canvas__node-name" x={textX} y={27}>
+                    {shownName}
+                    {shownName !== node.name ? <title>{node.name}</title> : null}
+                  </text>
+                  <text className="family-tree-canvas__node-role" x={textX} y={48}>{node.role}</text>
+                  {isViewer ? <text className="family-tree-canvas__badge" x={textX} y={69}>You</text> : null}
                   {node.kind === 'placeholder' ? (
-                    <text className="family-tree-canvas__badge family-tree-canvas__badge--record" x={14} y={69}>Family record</text>
+                    <text className="family-tree-canvas__badge family-tree-canvas__badge--record" x={textX} y={69}>Family record</text>
                   ) : null}
                 </g>
               )

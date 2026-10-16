@@ -10,6 +10,11 @@ import type {
 } from '../../../shared/desktopApi'
 import type { CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
+export interface CircleChange {
+  /** True when a different Circle may now be active (select, create, leave, delete). */
+  activeCircleChanged: boolean
+}
+
 export interface CircleClient {
   getOverview(): Promise<CircleOverview>
   getHomeSnapshot(): Promise<HomeSnapshot>
@@ -30,5 +35,5 @@ export interface CircleClient {
   renameCircle(name: string): Promise<void>
   deleteCircle(confirmationName: string): Promise<void>
   /** Notifies after any Circle change made through this client (select, create, leave, rename, delete…). */
-  onChange(listener: () => void): () => void
+  onChange(listener: (change: CircleChange) => void): () => void
 }

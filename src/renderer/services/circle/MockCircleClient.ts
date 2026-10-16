@@ -8,7 +8,7 @@ import type {
   ResendInvitationResult,
   SaveTreePositionInput,
 } from '../../../shared/desktopApi'
-import type { CircleClient } from './CircleClient'
+import type { CircleChange, CircleClient } from './CircleClient'
 import type { CircleManagementSnapshot, CircleSummary, HomeSnapshot, ShellSnapshot } from './types'
 
 const circles: CircleSummary[] = [
@@ -88,7 +88,7 @@ const managementSnapshot: CircleManagementSnapshot = {
 
 export class MockCircleClient implements CircleClient {
   private activeCircleId = 'kasule-family'
-  private readonly changeListeners = new Set<() => void>()
+  private readonly changeListeners = new Set<(change: CircleChange) => void>()
 
   async getOverview(): Promise<CircleOverview> {
     const active = circles.find((circle) => circle.id === this.activeCircleId)
@@ -160,7 +160,7 @@ export class MockCircleClient implements CircleClient {
   async selectCircle(circleId: string): Promise<void> {
     if (!circles.some((circle) => circle.id === circleId)) throw new Error('Circle was not found')
     this.activeCircleId = circleId
-    this.notifyChange()
+    this.notifyChange({ activeCircleChanged: true })
   }
 
   async createCircle(_input: CreateCircleInput): Promise<CreateCircleResult> {
@@ -197,7 +197,7 @@ export class MockCircleClient implements CircleClient {
     const currentIndex = circles.findIndex((circle) => circle.id === this.activeCircleId)
     const fallback = circles.find((_circle, index) => index !== currentIndex)
     this.activeCircleId = fallback?.id ?? ''
-    this.notifyChange()
+    this.notifyChange({ activeCircleChanged: true })
   }
 
   async renameCircle(name: string): Promise<void> {
@@ -210,14 +210,14 @@ export class MockCircleClient implements CircleClient {
     await this.leaveCircle()
   }
 
-  onChange(listener: () => void): () => void {
+  onChange(listener: (change: CircleChange) => void): () => void {
     this.changeListeners.add(listener)
     return () => {
       this.changeListeners.delete(listener)
     }
   }
 
-  private notifyChange(): void {
-    for (const listener of [...this.changeListeners]) listener()
+  private notifyChange(change: CircleChange = { activeCircleChanged: false }): void {
+    for (const listener of [...this.changeListeners]) listener(change)
   }
 }

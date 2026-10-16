@@ -39,6 +39,8 @@ async function makeBackup(root: string, options: {
   await mkdir(join(folder, 'story', 'users', '1', 'media'), { recursive: true })
   await writeFile(join(folder, 'vault', 'users', '1', 'documents', 'letter.txt'), options.vaultText ?? 'backup letter')
   await writeFile(join(folder, 'story', 'users', '1', 'media', 'photo.jpg'), 'backup photo')
+  await mkdir(join(folder, 'circle-photos', 'users', '1', 'c'), { recursive: true })
+  await writeFile(join(folder, 'circle-photos', 'users', '1', 'c', 'grandma.jpg'), 'backup portrait')
   await writeDatabase(join(folder, 'family.db'), options.emails ?? ['ada@example.test'])
   if (options.manifest !== null) {
     await writeFile(join(folder, 'backup.json'), JSON.stringify(options.manifest ?? {
@@ -55,6 +57,8 @@ async function makeBackup(root: string, options: {
 async function makeLiveData(userDataPath: string): Promise<string> {
   await mkdir(join(userDataPath, 'vault', 'users', '1', 'documents'), { recursive: true })
   await mkdir(join(userDataPath, 'story'), { recursive: true })
+  await mkdir(join(userDataPath, 'circle-photos', 'users', '1', 'c'), { recursive: true })
+  await writeFile(join(userDataPath, 'circle-photos', 'users', '1', 'c', 'grandma.jpg'), 'current portrait')
   await mkdir(join(userDataPath, 'offline-ai'), { recursive: true })
   await writeFile(join(userDataPath, 'vault', 'users', '1', 'documents', 'letter.txt'), 'current letter')
   await writeFile(join(userDataPath, 'offline-ai', 'model.gguf'), 'model')
@@ -119,6 +123,7 @@ describe('stageRestore and applyPendingRestore', () => {
 
     await expect(readFile(join(userDataPath, 'vault', 'users', '1', 'documents', 'letter.txt'), 'utf8')).resolves.toBe('backup letter')
     await expect(readFile(join(userDataPath, 'story', 'users', '1', 'media', 'photo.jpg'), 'utf8')).resolves.toBe('backup photo')
+    await expect(readFile(join(userDataPath, 'circle-photos', 'users', '1', 'c', 'grandma.jpg'), 'utf8')).resolves.toBe('backup portrait')
     await expect(stat(`${databasePath}-wal`)).rejects.toMatchObject({ code: 'ENOENT' })
     const restored = new DatabaseSync(databasePath, { readOnly: true })
     expect(restored.prepare('SELECT email FROM users').get()).toEqual({ email: 'ada@example.test' })
@@ -126,6 +131,8 @@ describe('stageRestore and applyPendingRestore', () => {
 
     await expect(readFile(join(userDataPath, 'pre-restore', 'vault', 'users', '1', 'documents', 'letter.txt'), 'utf8'))
       .resolves.toBe('current letter')
+    await expect(readFile(join(userDataPath, 'pre-restore', 'circle-photos', 'users', '1', 'c', 'grandma.jpg'), 'utf8'))
+      .resolves.toBe('current portrait')
     await expect(readFile(join(userDataPath, 'pre-restore', 'family.db-wal'), 'utf8')).resolves.toBe('stale wal')
     // Files outside the backup scope are untouched.
     await expect(readFile(join(userDataPath, 'offline-ai', 'model.gguf'), 'utf8')).resolves.toBe('model')
