@@ -42,6 +42,14 @@ import type {
   VoicePublicProgress,
   VoicePublicStatus,
 } from '../shared/desktopApi'
+import {
+  isGuardianAngelTemplate,
+  isPartnerServiceKey,
+  publicTemplate,
+  type GuardianAngelCatalogResult,
+  type PartnerViewStatus,
+  type PartnerViewTarget,
+} from '../shared/agentic'
 import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus, type StoryLanguage } from '../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
 
@@ -114,9 +122,14 @@ type DesktopChannel =
   | 'story:voice-repair-setup'
   | 'speech:list-voices'
   | 'speech:synthesize'
+  | 'agentic:catalog'
+  | 'agentic:open-view'
+  | 'agentic:set-view-bounds'
+  | 'agentic:hide-view'
+  | 'agentic:view-command'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
-type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress'
+type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress' | 'agentic:view-state'
 type Subscribe = (channel: DesktopEventChannel, listener: (payload: unknown) => void) => () => void
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -444,6 +457,29 @@ function safePhotoChoice(value: unknown): CirclePhotoChoice {
 
 const noopSubscribe: Subscribe = () => () => undefined
 
+function safeCatalog(value: unknown): GuardianAngelCatalogResult {
+  const raw = recordOf(value)
+  if (raw.status !== 'ready' || !Array.isArray(raw.templates) || typeof raw.fetchedAt !== 'number') return { status: 'unavailable' }
+  return {
+    status: 'ready',
+    templates: raw.templates.filter(isGuardianAngelTemplate).map(publicTemplate),
+    fetchedAt: raw.fetchedAt,
+    stale: raw.stale === true,
+  }
+}
+
+function safeViewTarget(value: PartnerViewTarget | undefined): PartnerViewTarget | undefined {
+  if (!value) return undefined
+  return value.kind === 'template' ? { kind: 'template', templateId: String(value.templateId) } : { kind: value.kind }
+}
+
+function safeViewStatus(value: unknown): PartnerViewStatus | null {
+  const raw = recordOf(value)
+  if (!isPartnerServiceKey(raw.service)) return null
+  const state = raw.state === 'loading' || raw.state === 'ready' || raw.state === 'failed' ? raw.state : 'failed'
+  return { service: raw.service, state, canGoBack: raw.canGoBack === true }
+}
+
 export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubscribe): DesktopApi {
   return {
     app: {
@@ -701,6 +737,34 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
           text: String(input.text ?? ''),
           language: input.language,
         }))
+      },
+    },
+    agentic: {
+      async getCatalog(input) {
+        return safeCatalog(await invoke('agentic:catalog', { refresh: input?.refresh === true }))
+      },
+      async openView(input) {
+        const target = safeViewTarget(input.target)
+        await invoke('agentic:open-view', target ? { service: input.service, target } : { service: input.service })
+        return { success: true as const }
+      },
+      async setViewBounds(input) {
+        await invoke('agentic:set-view-bounds', { service: input.service, x: input.x, y: input.y, width: input.width, height: input.height })
+        return { success: true as const }
+      },
+      async hideView(input) {
+        await invoke('agentic:hide-view', { service: input.service })
+        return { success: true as const }
+      },
+      async viewCommand(input) {
+        await invoke('agentic:view-command', { service: input.service, command: input.command })
+        return { success: true as const }
+      },
+      onViewState(listener) {
+        return subscribe('agentic:view-state', (payload) => {
+          const status = safeViewStatus(payload)
+          if (status) listener(status)
+        })
       },
     },
   }
