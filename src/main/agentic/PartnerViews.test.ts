@@ -1,0 +1,116 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { PartnerServiceKey, PartnerViewState } from '../../shared/agentic'
+import { PartnerViews, type PartnerViewHandle } from './PartnerViews'
+
+type FakeHandle = PartnerViewHandle & { url: string; visible: boolean }
+
+function setup(account: string | null = 'acct1') {
+  const views: Array<{
+    service: PartnerServiceKey
+    partition: string
+    handle: FakeHandle
+    status: (state: PartnerViewState, canGoBack: boolean) => void
+  }> = []
+  const host = {
+    createView: vi.fn((service: PartnerServiceKey, partition: string, onStatus: (state: PartnerViewState, canGoBack: boolean) => void) => {
+      const handle: FakeHandle = {
+        url: '',
+        visible: false,
+        load: vi.fn((url: string) => { handle.url = url }),
+        setBounds: vi.fn(),
+        setVisible: vi.fn((visible: boolean) => { handle.visible = visible }),
+        goBack: vi.fn(),
+        currentUrl: () => handle.url,
+        destroy: vi.fn(),
+      }
+      views.push({ service, partition, handle, status: onStatus })
+      return handle
+    }),
+    openExternal: vi.fn(),
+    contentSize: () => ({ width: 1000, height: 700 }),
+  }
+  let key = account
+  const emit = vi.fn()
+  const manager = new PartnerViews({ host, accountKey: async () => key, emit })
+  return { manager, host, views, emit, signInAs: (next: string | null) => { key = next } }
+}
+
+describe('PartnerViews', () => {
+  it('creates a view on first open at the start page in the account partition', async () => {
+    const { manager, views } = setup()
+    await manager.open('ubercare')
+    expect(views).toHaveLength(1)
+    expect(views[0]!.partition).toBe('persist:agentic-ubercare-acct1')
+    expect(views[0]!.handle.url).toBe('https://remotecarers.net/worker/')
+    expect(views[0]!.handle.visible).toBe(true)
+  })
+
+  it('keeps the current page when shown again, and loads a template when asked', async () => {
+    const { manager, views } = setup()
+    await manager.open('guardian-angel')
+    views[0]!.handle.url = 'https://kin-keepers.ai/dashboard'
+    await manager.open('guardian-angel')
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/dashboard')
+    await manager.open('guardian-angel', { kind: 'template', templateId: '7' })
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/templates/7')
+  })
+
+  it('shows one view at a time', async () => {
+    const { manager, views } = setup()
+    await manager.open('ubercare')
+    await manager.open('marketplace')
+    expect(views.map((view) => view.handle.visible)).toEqual([false, true])
+  })
+
+  it('refuses to open without a signed-in account', async () => {
+    const { manager, host } = setup(null)
+    await expect(manager.open('ubercare')).rejects.toThrow()
+    expect(host.createView).not.toHaveBeenCalled()
+  })
+
+  it('drops the previous account views when someone else signs in', async () => {
+    const { manager, views, signInAs } = setup()
+    await manager.open('ubercare')
+    signInAs('acct2')
+    await manager.open('ubercare')
+    expect(views[0]!.handle.destroy).toHaveBeenCalled()
+    expect(views[1]!.partition).toBe('persist:agentic-ubercare-acct2')
+  })
+
+  it('clamps bounds and ignores unopened services', async () => {
+    const { manager, views } = setup()
+    manager.setBounds('ubercare', { x: 0, y: 0, width: 10, height: 10 })
+    await manager.open('ubercare')
+    manager.setBounds('ubercare', { x: 100, y: 50, width: 5000, height: 5000 })
+    expect(views[0]!.handle.setBounds).toHaveBeenLastCalledWith({ x: 100, y: 50, width: 900, height: 650 })
+    expect(() => manager.setBounds('ubercare', { x: 'x' })).toThrow()
+  })
+
+  it('runs back, reload and open-in-browser', async () => {
+    const { manager, views, host } = setup()
+    await manager.open('guardian-angel', { kind: 'template', templateId: '7' })
+    manager.command('guardian-angel', 'back')
+    expect(views[0]!.handle.goBack).toHaveBeenCalled()
+    manager.command('guardian-angel', 'open-external')
+    expect(host.openExternal).toHaveBeenCalledWith('https://kin-keepers.ai/templates/7')
+    views[0]!.handle.url = 'chrome-error://chromewebdata/'
+    manager.command('guardian-angel', 'reload')
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/templates/7')
+  })
+
+  it('passes view status to the screen', async () => {
+    const { manager, views, emit } = setup()
+    await manager.open('marketplace')
+    views[0]!.status('failed', false)
+    expect(emit).toHaveBeenCalledWith({ service: 'marketplace', state: 'failed', canGoBack: false })
+  })
+
+  it('hides and destroys views', async () => {
+    const { manager, views } = setup()
+    await manager.open('ubercare')
+    manager.hide('ubercare')
+    expect(views[0]!.handle.visible).toBe(false)
+    manager.destroyAll()
+    expect(views[0]!.handle.destroy).toHaveBeenCalled()
+  })
+})

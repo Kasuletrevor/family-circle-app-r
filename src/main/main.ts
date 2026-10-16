@@ -1,6 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import { registerAgenticIpc } from './agentic/agenticIpc'
+import { createElectronPartnerViewHost } from './agentic/electronPartnerViewHost'
+import { GuardianAngelCatalog } from './agentic/GuardianAngelCatalog'
+import { PartnerViews } from './agentic/PartnerViews'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
 import { InteractiveAiGate } from './ai/InteractiveAiGate'
 import { NomicClient } from './ai/NomicClient'
@@ -46,6 +51,7 @@ import { createWindowOptions } from './windowOptions'
 let mainWindow: BrowserWindow | null = null
 let database: DatabaseSync | null = null
 let aiRuntimeManager: AiRuntimeManager | null = null
+let partnerViews: PartnerViews | null = null
 
 type StoryServices = ReturnType<typeof createStoryServices>
 
@@ -99,6 +105,21 @@ function registerDesktopIpc(services: AppServices) {
       services.vaultIndexService,
       services.storyIndexService,
     ).catch(() => undefined)
+  })
+  registerAgenticIpc(ipcMain, {
+    catalog: new GuardianAngelCatalog({
+      fetch: (input, init) => fetch(input, init),
+      cachePath: join(app.getPath('userData'), 'agentic', 'catalog.json'),
+    }),
+    views: {
+      open: async (service, target) => {
+        if (!partnerViews) throw new Error('The Family Circle window is not ready')
+        await partnerViews.open(service, target)
+      },
+      setBounds: (service, bounds) => partnerViews?.setBounds(service, bounds),
+      hide: (service) => partnerViews?.hide(service),
+      command: (service, command) => partnerViews?.command(service, command),
+    },
   })
 }
 
@@ -292,11 +313,22 @@ async function createAppServices(): Promise<AppServices> {
   return services
 }
 
-function createMainWindow() {
+function createMainWindow(sessions: SessionStore) {
   const preloadPath = join(__dirname, '../preload/preload.js')
   mainWindow = new BrowserWindow(createWindowOptions(preloadPath))
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  const window = mainWindow
+  partnerViews = new PartnerViews({
+    host: createElectronPartnerViewHost(window),
+    async accountKey() {
+      const user = await sessions.restore()
+      return user ? createHash('sha256').update(`agentic:${user.id}`).digest('hex').slice(0, 16) : null
+    },
+    emit(status) {
+      if (!window.isDestroyed()) window.webContents.send('agentic:view-state', status)
+    },
+  })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL
@@ -307,6 +339,8 @@ function createMainWindow() {
   }
 
   mainWindow.on('closed', () => {
+    partnerViews?.destroyAll()
+    partnerViews = null
     mainWindow = null
   })
 }
@@ -314,10 +348,10 @@ function createMainWindow() {
 void app.whenReady().then(async () => {
   const services = await createAppServices()
   registerDesktopIpc(services)
-  createMainWindow()
+  createMainWindow(services.sessions)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow(services.sessions)
   })
 })
 
