@@ -120,6 +120,29 @@ describe('GuardianAngelCatalog', () => {
     expect(await catalog(big).get()).toEqual({ status: 'unavailable' })
   })
 
+  it('limits the number of templates, parallel avatar downloads and total avatar size', async () => {
+    let inFlight = 0
+    let mostInFlight = 0
+    const avatar = Buffer.alloc(400 * 1024, 1)
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url) === CATALOG_URL) return response(JSON.stringify(Array.from({ length: 150 }, (_, index) => entry(index + 1))))
+      inFlight += 1
+      mostInFlight = Math.max(mostInFlight, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      inFlight -= 1
+      return response(avatar, { type: 'image/png' })
+    }) as unknown as typeof fetch
+    const result = await new GuardianAngelCatalog({ fetch: fetchImpl, cachePath: join(folder, 'catalog.json'), timeoutMs: 5_000 }).get()
+    if (result.status !== 'ready') throw new Error('expected ready')
+
+    expect(result.templates).toHaveLength(100)
+    expect(mostInFlight).toBeLessThanOrEqual(6)
+    // 8 MiB of 400 KiB avatars is 20; the rest show initials.
+    expect(result.templates.filter((template) => template.avatar).length).toBe(20)
+    // Downloads already running when the budget runs out may finish, but no new ones start.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(1 + 20 + 6)
+  })
+
   it('ignores a damaged saved copy', async () => {
     const cachePath = join(folder, 'catalog.json')
     await writeFile(cachePath, JSON.stringify({ version: 1, fetchedAt: 5, templates: [{ id: 'x' }] }))

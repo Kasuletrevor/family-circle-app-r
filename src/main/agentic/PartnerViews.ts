@@ -33,6 +33,8 @@ interface OpenView { handle: PartnerViewHandle; requestedUrl: string }
 export class PartnerViews {
   private readonly views = new Map<PartnerServiceKey, OpenView>()
   private account: string | null = null
+  /** Bumped by destroyAll(), so opens that started earlier are dropped. */
+  private generation = 0
 
   constructor(private readonly deps: {
     host: PartnerViewsHost
@@ -41,7 +43,10 @@ export class PartnerViews {
   }) {}
 
   async open(service: PartnerServiceKey, target?: PartnerViewTarget): Promise<void> {
+    const generation = this.generation
     const account = await this.deps.accountKey()
+    // Sign-out closed everything while the account was being checked; this open belongs to the old session.
+    if (generation !== this.generation) return
     if (!account) throw new Error('Sign in to Family Circle first')
     if (account !== this.account) {
       // Partner sign-ins belong to one Family Circle account; never show them to another.
@@ -87,6 +92,7 @@ export class PartnerViews {
   }
 
   destroyAll(): void {
+    this.generation += 1
     for (const view of this.views.values()) view.handle.destroy()
     this.views.clear()
   }

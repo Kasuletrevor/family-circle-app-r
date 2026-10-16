@@ -105,6 +105,17 @@ describe('PartnerViews', () => {
     expect(emit).toHaveBeenCalledWith({ service: 'marketplace', state: 'failed', canGoBack: false })
   })
 
+  it('drops an open that was still checking the account when everything was closed', async () => {
+    let finishCheck!: (key: string) => void
+    const { manager, host } = setup()
+    ;(manager as unknown as { deps: { accountKey(): Promise<string | null> } }).deps.accountKey = () => new Promise((resolve) => { finishCheck = resolve })
+    const opening = manager.open('ubercare')
+    manager.destroyAll()
+    finishCheck('acct1')
+    await opening
+    expect(host.createView).not.toHaveBeenCalled()
+  })
+
   it('hides and destroys views', async () => {
     const { manager, views } = setup()
     await manager.open('ubercare')
