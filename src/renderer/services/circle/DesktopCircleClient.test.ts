@@ -103,6 +103,7 @@ describe('DesktopCircleClient', () => {
         kind: 'sibling',
       }],
       selectedPersonId: 'user:88',
+      viewerPersonId: 'user:88',
     })
     expect(getOverview).toHaveBeenCalledTimes(1)
   })

@@ -6,6 +6,8 @@ type FamilyTreePreviewProps = {
   people: FamilyPerson[]
   relationships: FamilyRelationship[]
   selectedPersonId: string
+  /** The signed-in person; the "You" badge marks them, whoever is selected. */
+  viewerPersonId?: string | null
   onSelectPerson(personId: string): void
 }
 
@@ -13,6 +15,7 @@ export function FamilyTreePreview({
   people,
   relationships,
   selectedPersonId,
+  viewerPersonId = null,
   onSelectPerson,
 }: FamilyTreePreviewProps) {
   const generations = [0, 1, 2]
@@ -57,7 +60,7 @@ export function FamilyTreePreview({
                     <PersonAvatar personId={person.id} initials={person.initials} className="family-person__avatar" />
                     <strong>{person.name}</strong>
                     <small>{person.birthYear ?? person.role}</small>
-                    {selected && <span className="family-person__you">You</span>}
+                    {person.id === viewerPersonId && <span className="family-person__you">You</span>}
                   </button>
                 )
               })}
