@@ -48,7 +48,11 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
     let active = true
     setOpened(false)
     void agentic.openView(service, target)
-      .then(() => { if (active) setOpened(true) })
+      .then(() => {
+        if (active) setOpened(true)
+        // The page was left while the view was opening; the main process just showed it.
+        else void agentic.hideView(service).catch(() => undefined)
+      })
       .catch(() => { if (active) setState('failed') })
     return () => { active = false }
   }, [agentic, service, target])

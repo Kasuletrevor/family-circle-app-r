@@ -143,6 +143,23 @@ describe('GuardianAngelCatalog', () => {
     expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(1 + 20 + 6)
   })
 
+  it('gives avatars an overall time budget so stalled images cannot hold up the catalog', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === CATALOG_URL) return response(JSON.stringify(Array.from({ length: 30 }, (_, index) => entry(index + 1))))
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      })
+    }) as unknown as typeof fetch
+    const service = new GuardianAngelCatalog({ fetch: fetchImpl, cachePath: join(folder, 'catalog.json'), timeoutMs: 1_000, avatarBudgetMs: 100 })
+
+    const started = Date.now()
+    const result = await service.get()
+    // Without a budget this would take ceil(30 / 6) x 1 s.
+    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(result).toMatchObject({ status: 'ready' })
+    if (result.status === 'ready') expect(result.templates.every((template) => template.avatar === null)).toBe(true)
+  })
+
   it('ignores a damaged saved copy', async () => {
     const cachePath = join(folder, 'catalog.json')
     await writeFile(cachePath, JSON.stringify({ version: 1, fetchedAt: 5, templates: [{ id: 'x' }] }))

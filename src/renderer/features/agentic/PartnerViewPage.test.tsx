@@ -74,6 +74,28 @@ describe('PartnerViewPage', () => {
     expect(screen.queryByText(/Couldn't open/)).not.toBeInTheDocument()
   })
 
+  it('hides a view whose open finishes after the page was left', async () => {
+    let finishOpen!: () => void
+    const agentic = fakeAgenticClient()
+    agentic.openView.mockImplementationOnce(() => new Promise<undefined>((resolve) => { finishOpen = () => resolve(undefined) }))
+    render(
+      <AppServicesProvider services={{ circle: new MockCircleClient(), agentic }}>
+        <MemoryRouter initialEntries={['/agentic/ubercare']}>
+          <Leave />
+          <Routes>
+            <Route path="/agentic/ubercare" element={<PartnerViewPage service="ubercare" />} />
+            <Route path="/vault" element={<p>Vault page</p>} />
+          </Routes>
+        </MemoryRouter>
+      </AppServicesProvider>,
+    )
+    await waitFor(() => expect(agentic.openView).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'Go to vault' }))
+    expect(agentic.hideView).not.toHaveBeenCalled()
+    await act(async () => finishOpen())
+    expect(agentic.hideView).toHaveBeenCalledWith('ubercare')
+  })
+
   it('hides the view while a menu is open and when leaving the page', async () => {
     const agentic = renderView('/agentic/ubercare', 'ubercare')
     await waitFor(() => expect(agentic.setViewBounds).toHaveBeenCalled())

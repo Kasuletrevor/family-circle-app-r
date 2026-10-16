@@ -19,6 +19,8 @@ export interface GuardianAngelCatalogDeps {
   cachePath: string
   now?: () => number
   timeoutMs?: number
+  /** Overall time allowed for avatars; images are optional, so they never hold up the list for long. */
+  avatarBudgetMs?: number
 }
 
 interface SavedCatalog { version: 1; fetchedAt: number; templates: GuardianAngelTemplate[] }
@@ -60,9 +62,9 @@ export class GuardianAngelCatalog {
    * Downloads a response of at most `maxBytes`. The timeout covers the whole body, and the
    * body is read in chunks so an oversized or endless response is never held in memory.
    */
-  private async download(url: string, maxBytes: number): Promise<{ bytes: Buffer; type: string }> {
+  private async download(url: string, maxBytes: number, timeoutMs = this.timeoutMs): Promise<{ bytes: Buffer; type: string }> {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const response = await this.deps.fetch(url, { signal: controller.signal, credentials: 'omit', redirect: 'error' })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -98,12 +100,15 @@ export class GuardianAngelCatalog {
     // A few downloads at a time, and a total budget, so a huge list cannot exhaust memory.
     let next = 0
     let avatarBytes = 0
+    const deadline = Date.now() + (this.deps.avatarBudgetMs ?? 8_000)
     const worker = async () => {
       while (next < entries.length && avatarBytes < MAX_TOTAL_AVATAR_BYTES) {
+        const remaining = deadline - Date.now()
+        if (remaining <= 0) break
         const index = next++
         const path = entries[index]!.avatarPath
         if (!path) continue
-        const avatar = await this.fetchAvatar(path)
+        const avatar = await this.fetchAvatar(path, Math.min(this.timeoutMs, remaining))
         if (!avatar) continue
         if (avatarBytes + avatar.bytes > MAX_TOTAL_AVATAR_BYTES) {
           avatarBytes = MAX_TOTAL_AVATAR_BYTES
@@ -117,9 +122,9 @@ export class GuardianAngelCatalog {
     return templates
   }
 
-  private async fetchAvatar(path: string): Promise<{ dataUrl: string; bytes: number } | null> {
+  private async fetchAvatar(path: string, timeoutMs: number): Promise<{ dataUrl: string; bytes: number } | null> {
     try {
-      const { bytes, type } = await this.download(`${TEMPLATE_SITE}${path}`, MAX_AVATAR_BYTES)
+      const { bytes, type } = await this.download(`${TEMPLATE_SITE}${path}`, MAX_AVATAR_BYTES, timeoutMs)
       if (!AVATAR_TYPES.has(type) || bytes.length === 0) return null
       return { dataUrl: `data:${type};base64,${bytes.toString('base64')}`, bytes: bytes.length }
     } catch {
