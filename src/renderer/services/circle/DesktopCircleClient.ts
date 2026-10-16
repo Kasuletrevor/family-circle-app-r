@@ -203,6 +203,7 @@ export class DesktopCircleClient implements CircleClient, PersonPhotoClient {
         kind: relation.kind,
       })),
       selectedPersonId,
+      viewerPersonId: overview.viewerPersonId ?? null,
     }
   }
 

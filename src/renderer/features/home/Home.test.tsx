@@ -29,6 +29,8 @@ describe('Home', () => {
     expect(screen.getByRole('heading', { name: 'Trevor Kasule' })).toBeInTheDocument()
     expect(screen.getByText("David's Birthday")).toBeInTheDocument()
     expect(screen.getByText('Jose accepted your invitation')).toBeInTheDocument()
+    // The demo data marks Trevor as the signed-in person.
+    expect(screen.getByRole('button', { name: /Trevor Kasule/ }).querySelector('.family-person__you')).toHaveTextContent('You')
   })
 
   it('shows an intentional empty state when the protected account has no shared Circle', async () => {
@@ -85,6 +87,36 @@ describe('Home', () => {
     expect(screen.queryByLabelText(/^Stories:/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^Memories:/)).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the "You" badge on the signed-in person when someone else is selected', async () => {
+    const overview: CircleOverview = {
+      status: 'ready',
+      activeCircleId: 'g-1',
+      viewerPersonId: 'user:88',
+      circles: [{ id: 'g-1', name: 'Test Family', role: 'Family member' }],
+      tree: {
+        group: { id: 'g-1', name: 'Test Family' },
+        people: [
+          { id: 'user:88', kind: 'user', name: 'Member Example', email: 'member@example.test', role: 'Family member' },
+          { id: 'user:99', kind: 'user', name: 'Samuel Ssempa', email: 'samuel@example.test', role: 'Family member' },
+        ],
+        relations: [{ id: 'r-1', kind: 'sibling', aPersonId: 'user:88', bPersonId: 'user:99' }],
+        positions: [],
+      },
+      notifications: [],
+    }
+    renderHome(new DesktopCircleClient(async () => overview) as unknown as CircleClient)
+
+    const you = (name: string) => screen.getByRole('button', { name: new RegExp(name) }).querySelector('.family-person__you')
+    expect(await screen.findByRole('button', { name: /Samuel Ssempa/ })).toBeInTheDocument()
+    expect(you('Member Example')).toHaveTextContent('You')
+    expect(you('Samuel Ssempa')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Samuel Ssempa/ }))
+    expect(screen.getByRole('button', { name: /Samuel Ssempa/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(you('Samuel Ssempa')).toBeNull()
+    expect(you('Member Example')).toHaveTextContent('You')
   })
 
   it('shows an error state and retries the same service boundary', async () => {
