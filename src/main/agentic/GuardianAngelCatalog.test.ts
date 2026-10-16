@@ -1,0 +1,113 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CATALOG_URL, GuardianAngelCatalog } from './GuardianAngelCatalog'
+
+const PNG = Buffer.from('89504e470d0a1a0a', 'hex')
+const entry = (id: number, extra: Record<string, unknown> = {}) => ({
+  id, name: `Angel ${id}`, description: 'Helps', category: 'family_update', is_curated: true,
+  avatar_src: `/avatars/${id}.png`, trust_boundaries: ['no_medical_advice'], escalation_triggers: [],
+  created_by: 'creator@example.test', ...extra,
+})
+
+function response(body: string | Buffer, init: { status?: number; type?: string } = {}) {
+  return new Response(body, { status: init.status ?? 200, headers: { 'content-type': init.type ?? 'application/json' } })
+}
+
+let folder: string
+beforeEach(async () => { folder = await mkdtemp(join(tmpdir(), 'ga-catalog-')) })
+afterEach(async () => { await rm(folder, { recursive: true, force: true }) })
+
+function catalog(fetchImpl: typeof fetch, now = () => 1_000) {
+  return new GuardianAngelCatalog({ fetch: fetchImpl, cachePath: join(folder, 'agentic', 'catalog.json'), now, timeoutMs: 50 })
+}
+
+describe('GuardianAngelCatalog', () => {
+  it('fetches without credentials, inlines avatars and caches the result', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => (
+      String(url) === CATALOG_URL
+        ? response(JSON.stringify([entry(1), entry(2, { avatar_src: null })]))
+        : response(PNG, { type: 'image/png' })
+    )) as unknown as typeof fetch
+    const result = await catalog(fetchImpl).get()
+
+    expect(result).toMatchObject({ status: 'ready', stale: false, fetchedAt: 1_000 })
+    if (result.status !== 'ready') throw new Error('expected ready')
+    expect(result.templates[0]!.avatar).toBe(`data:image/png;base64,${PNG.toString('base64')}`)
+    expect(result.templates[1]!.avatar).toBeNull()
+    expect(fetchImpl).toHaveBeenCalledWith(CATALOG_URL, expect.objectContaining({ credentials: 'omit', redirect: 'error' }))
+    expect(fetchImpl).toHaveBeenCalledWith('https://kin-keepers.ai/avatars/1.png', expect.anything())
+    const saved = await readFile(join(folder, 'agentic', 'catalog.json'), 'utf8')
+    expect(saved).not.toContain('example.test')
+  })
+
+  it('skips avatars that are too large or not images', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url) === CATALOG_URL) return response(JSON.stringify([entry(1), entry(2)]))
+      if (String(url).endsWith('/1.png')) return response(Buffer.alloc(600 * 1024), { type: 'image/png' })
+      return response('<svg/>', { type: 'image/svg+xml' })
+    }) as unknown as typeof fetch
+    const result = await catalog(fetchImpl).get()
+    if (result.status !== 'ready') throw new Error('expected ready')
+    expect(result.templates.map((template) => template.avatar)).toEqual([null, null])
+  })
+
+  it('serves the saved copy as stale when the service cannot be reached', async () => {
+    const ok = vi.fn(async (url: string | URL | Request) => (
+      String(url) === CATALOG_URL ? response(JSON.stringify([entry(1)])) : response(PNG, { type: 'image/png' })
+    )) as unknown as typeof fetch
+    await catalog(ok).get()
+
+    const offline = vi.fn(async () => { throw new TypeError('fetch failed') }) as unknown as typeof fetch
+    const result = await catalog(offline, () => 9_000).get()
+    expect(result).toMatchObject({ status: 'ready', stale: true, fetchedAt: 1_000 })
+  })
+
+  it('keeps calling a copy stale after a failed refresh', async () => {
+    let online = true
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (!online) throw new TypeError('fetch failed')
+      return String(url) === CATALOG_URL ? response(JSON.stringify([entry(1, { avatar_src: null })])) : response(PNG)
+    }) as unknown as typeof fetch
+    const service = catalog(fetchImpl)
+    await service.get()
+    online = false
+    expect(await service.get({ refresh: true })).toMatchObject({ stale: true })
+    expect(await service.get()).toMatchObject({ stale: true })
+  })
+
+  it('treats bad JSON, error statuses and empty lists as failures', async () => {
+    for (const body of [response('not json'), response('[]'), response('{}', { status: 500 })]) {
+      const result = await catalog(vi.fn(async () => body) as unknown as typeof fetch).get()
+      expect(result).toEqual({ status: 'unavailable' })
+    }
+  })
+
+  it('times out a hanging request', async () => {
+    const hanging = vi.fn((_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+    })) as unknown as typeof fetch
+    expect(await catalog(hanging).get()).toEqual({ status: 'unavailable' })
+  })
+
+  it('ignores a damaged saved copy', async () => {
+    const cachePath = join(folder, 'catalog.json')
+    await writeFile(cachePath, JSON.stringify({ version: 1, fetchedAt: 5, templates: [{ id: 'x' }] }))
+    const offline = vi.fn(async () => { throw new Error('offline') }) as unknown as typeof fetch
+    const result = await new GuardianAngelCatalog({ fetch: offline, cachePath, timeoutMs: 50 }).get()
+    expect(result).toEqual({ status: 'unavailable' })
+  })
+
+  it('reuses a fresh copy in memory unless asked to refresh', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => (
+      String(url) === CATALOG_URL ? response(JSON.stringify([entry(1, { avatar_src: null })])) : response(PNG)
+    )) as unknown as typeof fetch
+    const service = catalog(fetchImpl)
+    await service.get()
+    await service.get()
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    await service.get({ refresh: true })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+})
