@@ -551,6 +551,60 @@
   line-height: 1.6;
 }
 
+/*
+ * COMMAND mode (Agentic Services): the same role tokens in green. White text on
+ * #15803d is 5.0:1 and on #166534 7.1:1 (WCAG AA). --kk-focus is computed where
+ * it is declared, so it is restated here.
+ */
+.app-shell[data-mode='command'] {
+  --kk-accent: #15803d;
+  --kk-accent-rgb: 21 128 61;
+  --kk-accent-dark: #166534;
+  --kk-accent-dark-rgb: 22 101 52;
+  --kk-accent-bright: #22c55e;
+  --kk-accent-light: #86efac;
+  --kk-accent-light-rgb: 134 239 172;
+  --kk-accent-soft: #eaf7ee;
+  --kk-accent-soft-rgb: 234 247 238;
+  --kk-accent-ring: #bfe5cb;
+  --kk-focus: 0 0 0 3px rgb(21 128 61 / 0.3);
+}
+
+.app-shell[data-mode='command'] .app-sidebar {
+  background:
+    radial-gradient(circle at 0 0, rgb(var(--kk-accent-rgb) / 0.22), transparent 32%),
+    linear-gradient(180deg, #0f3d2c 0%, #0a2d20 100%);
+}
+
+.app-sidebar__group {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: inherit;
+}
+
+.app-sidebar__group + .app-sidebar__group {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.app-sidebar__group-title {
+  margin: 0 0 4px;
+  padding: 0 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Partner web views fill the content area exactly. */
+.app-shell__content:has(> .partner-view) {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* Short windows (down to the 720px minimum): tighter sidebar spacing, same text size. */
 @media (max-height: 760px) {
   .app-sidebar {
@@ -572,6 +626,11 @@
 
   .sidebar-link {
     min-height: 38px;
+  }
+
+  .app-sidebar__group + .app-sidebar__group {
+    margin-top: 8px;
+    padding-top: 8px;
   }
 
   .ai-runtime-card {

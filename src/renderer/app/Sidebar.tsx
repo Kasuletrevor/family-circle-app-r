@@ -4,14 +4,17 @@ import {
   BookOpen,
   Bot,
   CircleUserRound,
+  HeartHandshake,
   Home,
   LockKeyhole,
   MailPlus,
   Network,
   Settings,
+  ShieldCheck,
+  Store,
   UsersRound,
 } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { PRIVATE_AI_MODELS } from '../../shared/privateAiModels'
 import { BrandMark } from '../design-system/BrandMark'
 import { DesktopPrivateAiClient } from '../services/ai/DesktopPrivateAiClient'
@@ -34,6 +37,31 @@ export const navigationItems: NavigationItem[] = [
   { label: 'AI Assistant', to: '/ai', icon: Bot },
   { label: 'Settings', to: '/settings', icon: Settings },
 ]
+
+export const agenticNavigationItems: NavigationItem[] = [
+  { label: 'Guardian Angel', to: '/agentic/guardian-angel', icon: ShieldCheck },
+  { label: 'UberCare', to: '/agentic/ubercare', icon: HeartHandshake },
+  { label: 'Marketplace', to: '/agentic/marketplace', icon: Store },
+]
+
+/** Agentic Services run in COMMAND mode (green); everything else is Ask mode (blue). */
+export function isCommandPath(pathname: string): boolean {
+  return pathname === '/agentic' || pathname.startsWith('/agentic/')
+}
+
+function SidebarLink({ label, to, icon: Icon }: NavigationItem) {
+  return (
+    <NavLink
+      end={to === '/'}
+      to={to}
+      aria-label={label}
+      className={({ isActive }) => `sidebar-link${isActive ? ' sidebar-link--active' : ''}`}
+    >
+      <Icon size={19} strokeWidth={1.9} aria-hidden="true" />
+      <span>{label}</span>
+    </NavLink>
+  )
+}
 
 function aiStatusLabel(state: PrivateAiState | 'checking' | 'unavailable'): string {
   switch (state) {
@@ -58,6 +86,7 @@ export function Sidebar({ getVersion = defaultGetVersion }: { getVersion?: () =>
   const privateAi = useMemo(() => new DesktopPrivateAiClient(), [])
   const [aiState, setAiState] = useState<PrivateAiState | 'checking' | 'unavailable'>('checking')
   const [version, setVersion] = useState<string | null>(null)
+  const modeLabel = isCommandPath(useLocation().pathname) ? 'Command mode' : 'Ask mode'
 
   useEffect(() => {
     let active = true
@@ -98,24 +127,19 @@ export function Sidebar({ getVersion = defaultGetVersion }: { getVersion?: () =>
     <aside className="app-sidebar">
       <div className="app-sidebar__brand">
         <BrandMark />
-        {/* Family Circle has an ASK mode (this blue workspace); COMMAND mode will use its own colour. */}
-        <span className="app-sidebar__mode" aria-label="Current mode: Ask mode">Ask mode</span>
+        {/* Ask mode is the blue family workspace; Agentic Services switch to green Command mode. */}
+        <span className="app-sidebar__mode" aria-label={`Current mode: ${modeLabel}`}>{modeLabel}</span>
       </div>
 
-      <nav className="app-sidebar__nav" aria-label="Primary navigation">
-        {navigationItems.map(({ label, to, icon: Icon }) => (
-          <NavLink
-            key={to}
-            end={to === '/'}
-            to={to}
-            aria-label={label}
-            className={({ isActive }) => `sidebar-link${isActive ? ' sidebar-link--active' : ''}`}
-          >
-            <Icon size={19} strokeWidth={1.9} aria-hidden="true" />
-            <span>{label}</span>
-          </NavLink>
-        ))}
-      </nav>
+      <div className="app-sidebar__nav">
+        <nav className="app-sidebar__group" aria-label="Primary navigation">
+          {navigationItems.map((item) => <SidebarLink key={item.to} {...item} />)}
+        </nav>
+        <nav className="app-sidebar__group" aria-labelledby="agentic-services-heading">
+          <h2 id="agentic-services-heading" className="app-sidebar__group-title">Agentic Services</h2>
+          {agenticNavigationItems.map((item) => <SidebarLink key={item.to} {...item} />)}
+        </nav>
+      </div>
 
       <div className="ai-runtime-card" aria-label="Local AI status">
         <div className="ai-runtime-card__icon" aria-hidden="true">
