@@ -132,6 +132,31 @@ describe('KinKeepersConnection', () => {
     expect(calls[1]).toMatchObject({ url: `${KIN_KEEPERS_API}/api/auth/logout`, body: { refresh_token: 'refresh-1' } })
   })
 
+  it('still cancels a newer exchange after an older cancelled one finishes', async () => {
+    let deliverA!: (response: Response) => void
+    let deliverB!: (response: Response) => void
+    const { connection, calls } = setup([
+      new Promise<Response>((resolve) => { deliverA = resolve }),
+      new Promise<Response>((resolve) => { deliverB = resolve }),
+      json(200, { message: 'Logged out successfully' }),
+      json(200, { message: 'Logged out successfully' }),
+    ])
+    connection.begin()
+    const first = connection.complete(CODE)
+    connection.cancel()
+    connection.begin()
+    const second = connection.complete(CODE)
+    deliverA(json(200, tokenBody(1)))
+    await expect(first).resolves.toBe(false)
+    connection.cancel()
+    deliverB(json(200, tokenBody(2)))
+    await expect(second).resolves.toBe(false)
+    expect(connection.status()).toEqual({ status: 'disconnected' })
+    await expect(connection.accessToken()).resolves.toBeNull()
+    await vi.waitFor(() => expect(calls).toHaveLength(4))
+    expect(calls.slice(2).map((call) => call.body)).toEqual([{ refresh_token: 'refresh-1' }, { refresh_token: 'refresh-2' }])
+  })
+
   it("never lets an old session's refresh clear the new session's refresh", async () => {
     let finishOld!: (response: Response) => void
     const { connection, calls, advance } = await connected([

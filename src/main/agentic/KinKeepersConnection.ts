@@ -48,7 +48,8 @@ export class KinKeepersConnection {
   private tokens: Tokens | null = null
   private attempt: { verifier: string; expiresAt: number } | null = null
   private refreshing: Promise<string | null> | null = null
-  private exchanging = false
+  /** Token exchanges still waiting for the server; a count, so an older one finishing never hides a newer one. */
+  private exchanges = 0
   private problem: 'connect-failed' | 'ended' | undefined
   private account: string | null = null
   /** Bumped whenever the connection is dropped, so late responses from an old session are ignored. */
@@ -87,10 +88,10 @@ export class KinKeepersConnection {
   }
 
   cancel(): void {
-    if (!this.attempt && !this.exchanging) return
+    if (!this.attempt && this.exchanges === 0) return
     this.attempt = null
     // An exchange already under way must not connect after Cancel; its tokens are revoked.
-    if (this.exchanging) this.generation += 1
+    if (this.exchanges > 0) this.generation += 1
     this.changed()
   }
 
@@ -101,10 +102,10 @@ export class KinKeepersConnection {
     if (!attempt) return false
     if (attempt.expiresAt <= this.now() || !CODE.test(code)) return this.failConnect()
     const generation = this.generation
-    this.exchanging = true
+    this.exchanges += 1
     const tokens = await this.requestTokens('/api/auth/app/token', { code, verifier: attempt.verifier })
       .catch(() => null)
-      .finally(() => { this.exchanging = false })
+      .finally(() => { this.exchanges -= 1 })
     if (generation !== this.generation) {
       // Cancelled or disconnected while the exchange was running: the new session must not outlive it.
       if (tokens) void this.logout(tokens)
