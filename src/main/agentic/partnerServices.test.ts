@@ -33,6 +33,14 @@ describe('targetUrl', () => {
     expect(() => targetUrl('ubercare', { kind: 'template', templateId: '7' })).toThrow()
     expect(() => targetUrl('ubercare', { kind: 'care-builder' })).toThrow()
   })
+
+  it('builds the settings and test pages of an own angel', () => {
+    expect(targetUrl('guardian-angel', { kind: 'angel', angelId: '12', page: 'edit' })).toBe('https://kin-keepers.ai/agents/12/edit')
+    expect(targetUrl('guardian-angel', { kind: 'angel', angelId: '12', page: 'run' })).toBe('https://kin-keepers.ai/agents/12/run')
+    expect(() => targetUrl('guardian-angel', { kind: 'angel', angelId: '1/../2', page: 'edit' })).toThrow()
+    expect(() => targetUrl('guardian-angel', { kind: 'angel', angelId: '12', page: 'delete' as never })).toThrow()
+    expect(() => targetUrl('ubercare', { kind: 'angel', angelId: '12', page: 'edit' })).toThrow()
+  })
 })
 
 describe('clampBounds', () => {

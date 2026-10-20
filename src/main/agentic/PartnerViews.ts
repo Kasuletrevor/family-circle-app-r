@@ -22,6 +22,8 @@ export interface PartnerViewsHost {
     service: PartnerServiceKey,
     partition: string,
     onStatus: (state: PartnerViewState, canGoBack: boolean) => void,
+    /** Asked about every main-frame navigation; true means it was handled and must not go ahead. */
+    intercept: (url: string) => boolean,
   ): PartnerViewHandle
   openExternal(url: string): void
   contentSize(): { width: number; height: number }
@@ -40,9 +42,21 @@ export class PartnerViews {
     host: PartnerViewsHost
     accountKey(): Promise<string | null>
     emit(status: PartnerViewStatus): void
+    /** Takes navigations Family Circle handles itself, such as the end of a Kin-Keepers.ai connection. */
+    interceptNavigation?(service: PartnerServiceKey, url: string): boolean
   }) {}
 
   async open(service: PartnerServiceKey, target?: PartnerViewTarget): Promise<void> {
+    await this.show(service, target ? targetUrl(service, target) : undefined)
+  }
+
+  /** Opens an address built in the main process, such as the connect page; only the service's own hosts. */
+  async openPage(service: PartnerServiceKey, url: string): Promise<void> {
+    if (decideNavigation(service, url) !== 'allow') throw new Error('Not a partner page')
+    await this.show(service, url)
+  }
+
+  private async show(service: PartnerServiceKey, url: string | undefined): Promise<void> {
     const generation = this.generation
     const account = await this.deps.accountKey()
     // Sign-out closed everything while the account was being checked; this open belongs to the old session.
@@ -55,16 +69,19 @@ export class PartnerViews {
     }
     let view = this.views.get(service)
     if (!view) {
-      const handle = this.deps.host.createView(service, partitionFor(service, account), (state, canGoBack) => {
-        this.deps.emit({ service, state, canGoBack })
-      })
+      const handle = this.deps.host.createView(
+        service,
+        partitionFor(service, account),
+        (state, canGoBack) => this.deps.emit({ service, state, canGoBack }),
+        (address) => this.intercept(service, address),
+      )
       view = { handle, requestedUrl: '' }
       this.views.set(service, view)
-      target ??= { kind: 'start' }
+      url ??= PARTNER_SERVICES[service].startUrl
     }
-    if (target) {
-      view.requestedUrl = targetUrl(service, target)
-      view.handle.load(view.requestedUrl)
+    if (url) {
+      view.requestedUrl = url
+      view.handle.load(url)
     }
     for (const [key, other] of this.views) other.handle.setVisible(key === service)
   }
@@ -89,6 +106,18 @@ export class PartnerViews {
     if (command === 'back') view.handle.goBack()
     else if (command === 'reload') view.handle.load(page)
     else this.deps.host.openExternal(page)
+  }
+
+  private intercept(service: PartnerServiceKey, url: string): boolean {
+    if (!this.deps.interceptNavigation?.(service, url)) return false
+    // Leave the handled page once the navigation event is over.
+    queueMicrotask(() => {
+      const view = this.views.get(service)
+      if (!view) return
+      view.requestedUrl = PARTNER_SERVICES[service].startUrl
+      view.handle.load(view.requestedUrl)
+    })
+    return true
   }
 
   destroyAll(): void {

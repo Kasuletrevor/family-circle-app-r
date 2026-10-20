@@ -32,6 +32,10 @@ export function targetUrl(service: PartnerServiceKey, target: PartnerViewTarget)
   if (target.kind === 'start') return PARTNER_SERVICES[service].startUrl
   if (service !== 'guardian-angel') throw new Error('Only Guardian Angel has template pages')
   if (target.kind === 'care-builder') return 'https://kin-keepers.ai/care-builder'
+  if (target.kind === 'angel') {
+    if (!TEMPLATE_ID.test(target.angelId) || (target.page !== 'edit' && target.page !== 'run')) throw new Error('Invalid angel page')
+    return `https://kin-keepers.ai/agents/${target.angelId}/${target.page}`
+  }
   if (!TEMPLATE_ID.test(target.templateId)) throw new Error('Invalid template')
   return `https://kin-keepers.ai/templates/${target.templateId}`
 }
