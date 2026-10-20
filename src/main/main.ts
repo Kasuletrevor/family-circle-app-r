@@ -2,9 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } 
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import { createAngelsController, type AngelsController } from './agentic/angelsController'
 import { registerAgenticIpc } from './agentic/agenticIpc'
 import { createElectronPartnerViewHost } from './agentic/electronPartnerViewHost'
 import { GuardianAngelCatalog } from './agentic/GuardianAngelCatalog'
+import { KinKeepersConnection } from './agentic/KinKeepersConnection'
+import { MyGuardianAngels } from './agentic/MyGuardianAngels'
 import { PartnerViews } from './agentic/PartnerViews'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
 import { InteractiveAiGate } from './ai/InteractiveAiGate'
@@ -52,6 +55,20 @@ let mainWindow: BrowserWindow | null = null
 let database: DatabaseSync | null = null
 let aiRuntimeManager: AiRuntimeManager | null = null
 let partnerViews: PartnerViews | null = null
+let angels: AngelsController | null = null
+// The Kin-Keepers.ai connection; its tokens stay in this process's memory only.
+const angelConnection = new KinKeepersConnection({
+  fetch: (input, init) => fetch(input, init),
+  onChange(connection) {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic:angel-connection-changed', connection)
+  },
+})
+
+/** A stable, private key for the signed-in Family Circle account, used to keep partner sign-ins apart. */
+async function agenticAccountKey(sessions: SessionStore): Promise<string | null> {
+  const user = await sessions.restore()
+  return user ? createHash('sha256').update(`agentic:${user.id}`).digest('hex').slice(0, 16) : null
+}
 
 type StoryServices = ReturnType<typeof createStoryServices>
 
@@ -73,7 +90,10 @@ function registerDesktopIpc(services: AppServices) {
   ipcMain.handle('app:get-platform', () => process.platform)
   registerAuthIpc(ipcMain, services.authService, {
     // A partner page signed in for this account must not keep running after sign-out.
-    onSignedOut: () => partnerViews?.destroyAll(),
+    onSignedOut: () => {
+      partnerViews?.destroyAll()
+      void angelConnection.disconnect()
+    },
   })
   registerCircleIpc(ipcMain, services.circleService)
   registerCirclePhotoIpc(ipcMain, services.circlePhotoService)
@@ -109,11 +129,29 @@ function registerDesktopIpc(services: AppServices) {
       services.storyIndexService,
     ).catch(() => undefined)
   })
-  registerAgenticIpc(ipcMain, {
-    catalog: new GuardianAngelCatalog({
+  const catalog = new GuardianAngelCatalog({
+    fetch: (input, init) => fetch(input, init),
+    cachePath: join(app.getPath('userData'), 'agentic', 'catalog.json'),
+  })
+  angels = createAngelsController({
+    connection: angelConnection,
+    angels: new MyGuardianAngels({
       fetch: (input, init) => fetch(input, init),
-      cachePath: join(app.getPath('userData'), 'agentic', 'catalog.json'),
+      connection: angelConnection,
+      async templates() {
+        const result = await catalog.get()
+        return result.status === 'ready' ? result.templates : []
+      },
     }),
+    async openPage(service, url) {
+      if (!partnerViews) throw new Error('The Family Circle window is not ready')
+      await partnerViews.openPage(service, url)
+    },
+    accountKey: () => agenticAccountKey(services.sessions),
+  })
+  registerAgenticIpc(ipcMain, {
+    catalog,
+    angels,
     views: {
       open: async (service, target) => {
         if (!partnerViews) throw new Error('The Family Circle window is not ready')
@@ -324,13 +362,11 @@ function createMainWindow(sessions: SessionStore) {
   const window = mainWindow
   partnerViews = new PartnerViews({
     host: createElectronPartnerViewHost(window),
-    async accountKey() {
-      const user = await sessions.restore()
-      return user ? createHash('sha256').update(`agentic:${user.id}`).digest('hex').slice(0, 16) : null
-    },
+    accountKey: () => agenticAccountKey(sessions),
     emit(status) {
       if (!window.isDestroyed()) window.webContents.send('agentic:view-state', status)
     },
+    interceptNavigation: (service, url) => angels?.interceptNavigation(service, url) ?? false,
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
 
