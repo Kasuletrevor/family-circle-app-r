@@ -10,7 +10,7 @@ const AVATAR_PATH = /^\/avatars\/[A-Za-z0-9_-]{1,80}\.(png|jpe?g|webp)$/
 // C0/C1 controls plus bidi and zero-width formatting characters.
 const UNSAFE_CHARACTERS = /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g
 
-function cleanText(value: unknown, max: number): string {
+export function cleanText(value: unknown, max: number): string {
   if (typeof value !== 'string') return ''
   return value.replace(UNSAFE_CHARACTERS, '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
@@ -21,7 +21,7 @@ export function humanizeRule(value: string): string {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : ''
 }
 
-function rules(value: unknown): string[] {
+export function rules(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
     .filter((item): item is string => typeof item === 'string')
@@ -30,7 +30,8 @@ function rules(value: unknown): string[] {
     .slice(0, 12)
 }
 
-function templateId(value: unknown): string | null {
+/** A positive numeric catalog id as a string, or null. */
+export function catalogId(value: unknown): string | null {
   if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value < 1e10) return String(value)
   if (typeof value === 'string' && /^[1-9][0-9]{0,9}$/.test(value)) return value
   return null
@@ -45,7 +46,7 @@ export function sanitizeCatalog(raw: unknown): SanitizedTemplate[] {
     if (item == null || typeof item !== 'object') continue
     const entry = item as Record<string, unknown>
     if (entry.is_curated !== true) continue
-    const id = templateId(entry.id)
+    const id = catalogId(entry.id)
     const name = cleanText(entry.name, 120)
     if (!id || !name || seen.has(id)) continue
     seen.add(id)
