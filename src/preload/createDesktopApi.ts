@@ -44,11 +44,17 @@ import type {
 } from '../shared/desktopApi'
 import {
   isGuardianAngelTemplate,
+  isMyGuardianAngel,
   isPartnerServiceKey,
+  publicAngel,
   publicTemplate,
+  safeAngelConnection,
+  type AddAngelResult,
   type GuardianAngelCatalogResult,
+  type MyAngelsResult,
   type PartnerViewStatus,
   type PartnerViewTarget,
+  type RemoveAngelResult,
 } from '../shared/agentic'
 import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus, type StoryLanguage } from '../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
@@ -127,9 +133,17 @@ type DesktopChannel =
   | 'agentic:set-view-bounds'
   | 'agentic:hide-view'
   | 'agentic:view-command'
+  | 'agentic:angel-connection'
+  | 'agentic:connect'
+  | 'agentic:cancel-connect'
+  | 'agentic:disconnect'
+  | 'agentic:my-angels'
+  | 'agentic:add-angel'
+  | 'agentic:remove-angel'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress' | 'agentic:view-state'
+  | 'agentic:angel-connection-changed'
 type Subscribe = (channel: DesktopEventChannel, listener: (payload: unknown) => void) => () => void
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -470,7 +484,28 @@ function safeCatalog(value: unknown): GuardianAngelCatalogResult {
 
 function safeViewTarget(value: PartnerViewTarget | undefined): PartnerViewTarget | undefined {
   if (!value) return undefined
-  return value.kind === 'template' ? { kind: 'template', templateId: String(value.templateId) } : { kind: value.kind }
+  if (value.kind === 'template') return { kind: 'template', templateId: String(value.templateId) }
+  if (value.kind === 'angel') return { kind: 'angel', angelId: String(value.angelId), page: value.page === 'run' ? 'run' : 'edit' }
+  return { kind: value.kind }
+}
+
+function safeMyAngels(value: unknown): MyAngelsResult {
+  const raw = recordOf(value)
+  if (raw.status === 'ready' && Array.isArray(raw.angels)) {
+    return { status: 'ready', angels: raw.angels.filter(isMyGuardianAngel).map(publicAngel) }
+  }
+  return raw.status === 'disconnected' ? { status: 'disconnected' } : { status: 'unavailable' }
+}
+
+function safeAddAngel(value: unknown): AddAngelResult {
+  const raw = recordOf(value)
+  if (raw.status === 'added' && isMyGuardianAngel(raw.angel)) return { status: 'added', angel: publicAngel(raw.angel) }
+  return raw.status === 'disconnected' || raw.status === 'not-found' ? { status: raw.status } : { status: 'unavailable' }
+}
+
+function safeRemoveAngel(value: unknown): RemoveAngelResult {
+  const status = recordOf(value).status
+  return status === 'removed' || status === 'disconnected' || status === 'not-yours' ? { status } : { status: 'unavailable' }
 }
 
 function safeViewStatus(value: unknown): PartnerViewStatus | null {
@@ -765,6 +800,33 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
           const status = safeViewStatus(payload)
           if (status) listener(status)
         })
+      },
+      async getAngelConnection() {
+        return safeAngelConnection(await invoke('agentic:angel-connection'))
+      },
+      async connectAngels() {
+        await invoke('agentic:connect')
+        return { success: true as const }
+      },
+      async cancelConnectAngels() {
+        await invoke('agentic:cancel-connect')
+        return { success: true as const }
+      },
+      async disconnectAngels() {
+        await invoke('agentic:disconnect')
+        return { success: true as const }
+      },
+      async getMyAngels() {
+        return safeMyAngels(await invoke('agentic:my-angels'))
+      },
+      async addAngel(input) {
+        return safeAddAngel(await invoke('agentic:add-angel', { templateId: String(input.templateId) }))
+      },
+      async removeAngel(input) {
+        return safeRemoveAngel(await invoke('agentic:remove-angel', { angelId: String(input.angelId) }))
+      },
+      onAngelConnection(listener) {
+        return subscribe('agentic:angel-connection-changed', (payload) => listener(safeAngelConnection(payload)))
       },
     },
   }
