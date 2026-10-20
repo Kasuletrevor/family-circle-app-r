@@ -30,6 +30,15 @@ describe('angelsController', () => {
     expect(openPage).toHaveBeenCalledWith('guardian-angel', 'https://kin-keepers.ai/connect?app=family-circle&challenge=abc')
   })
 
+  it('shares one attempt between overlapping Connect requests', async () => {
+    const { controller, connection, openPage } = setup()
+    await Promise.all([controller.connect(), controller.connect()])
+    expect(connection.begin).toHaveBeenCalledTimes(1)
+    expect(openPage).toHaveBeenCalledTimes(1)
+    await controller.connect()
+    expect(connection.begin).toHaveBeenCalledTimes(2)
+  })
+
   it('refuses to connect and reports disconnected when nobody is signed in', async () => {
     const { controller, connection, angels } = setup(null)
     await expect(controller.connect()).rejects.toThrow()

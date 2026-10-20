@@ -30,14 +30,21 @@ export function createAngelsController(deps: AngelsControllerDeps): AngelsContro
     return account !== null
   }
 
+  // Overlapping Connect requests share one attempt: a second begin() would replace the verifier
+  // the first page's code must be exchanged with.
+  let connecting: Promise<void> | null = null
+
   return {
     async connection() {
       await signedIn()
       return deps.connection.status()
     },
-    async connect() {
-      if (!await signedIn()) throw new Error('Sign in to Family Circle first')
-      await deps.openPage('guardian-angel', deps.connection.begin())
+    connect() {
+      connecting ??= (async () => {
+        if (!await signedIn()) throw new Error('Sign in to Family Circle first')
+        await deps.openPage('guardian-angel', deps.connection.begin())
+      })().finally(() => { connecting = null })
+      return connecting
     },
     cancelConnect() {
       deps.connection.cancel()

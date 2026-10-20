@@ -84,6 +84,8 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
   const [removing, setRemoving] = useState(false)
   const finishedAdd = useRef<string | null>(null)
   const latestLoad = useRef(0)
+  const connectingRef = useRef(false)
+  const [connecting, setConnecting] = useState(false)
   const connected = connection?.status === 'connected'
 
   const load = useCallback(async () => {
@@ -133,13 +135,19 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
   }, [agentic, connected, pendingAdd, setParams, load])
 
   const connect = async () => {
-    if (!agentic) return
+    // A ref, not state, so a quick double click still starts one connection.
+    if (!agentic || connectingRef.current) return
+    connectingRef.current = true
+    setConnecting(true)
     setNotice(null)
     try {
       await agentic.connect()
       navigate(`${GUARDIAN_ANGEL_VIEW}?page=connect`)
     } catch {
       setNotice(UNREACHABLE)
+    } finally {
+      connectingRef.current = false
+      setConnecting(false)
     }
   }
 
@@ -181,7 +189,7 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
           ? <p className="ga-page__problem" role="alert">{CONNECTION_ENDED}</p>
           : null}
         {notice ? <p className="ga-notice" role="status">{notice}</p> : null}
-        <button type="button" className="agentic-button agentic-button--primary" onClick={() => void connect()}>
+        <button type="button" className="agentic-button agentic-button--primary" disabled={connecting} onClick={() => void connect()}>
           <LogIn size={16} aria-hidden="true" />
           {connection.status === 'disconnected' && connection.problem === 'connect-failed' ? 'Try again' : 'Connect Kin-Keepers.ai'}
         </button>

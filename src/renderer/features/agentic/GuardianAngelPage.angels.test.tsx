@@ -58,6 +58,22 @@ describe('My Guardian Angels', () => {
     expect(agentic.connect).toHaveBeenCalledTimes(1)
   })
 
+  it('starts one connection however quickly Connect is clicked', async () => {
+    const agentic = fakeAgenticClient()
+    let finish!: () => void
+    agentic.connect.mockImplementation(() => new Promise<undefined>((resolve) => { finish = () => resolve(undefined) }))
+    renderAt('/agentic/guardian-angel?tab=mine', agentic)
+    const button = await screen.findByRole('button', { name: 'Connect Kin-Keepers.ai' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    await waitFor(() => expect(button).toBeDisabled())
+    fireEvent.click(button)
+    expect(agentic.connect).toHaveBeenCalledTimes(1)
+    await act(async () => finish())
+    await waitFor(() => expect(where()).toBe('/agentic/guardian-angel/view?page=connect'))
+    expect(agentic.connect).toHaveBeenCalledTimes(1)
+  })
+
   it('says why a connection ended or failed', async () => {
     const ended = fakeAgenticClient()
     ended.getAngelConnection.mockResolvedValue({ status: 'disconnected', problem: 'ended' })
