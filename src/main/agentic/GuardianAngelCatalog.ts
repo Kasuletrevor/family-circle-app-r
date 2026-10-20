@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { isGuardianAngelTemplate, type GuardianAngelCatalogResult, type GuardianAngelTemplate } from '../../shared/agentic'
 import { sanitizeCatalog } from './catalogSanitizer'
+import { limitedRequest } from './limitedRequest'
 
 export const CATALOG_URL = 'https://agentback.kin-keepers.ai/api/agno/agents/public'
 export const TEMPLATE_SITE = 'https://kin-keepers.ai'
@@ -65,37 +66,11 @@ export class GuardianAngelCatalog {
     }
   }
 
-  /**
-   * Downloads a response of at most `maxBytes`. The timeout covers the whole body, and the
-   * body is read in chunks so an oversized or endless response is never held in memory.
-   */
+  /** Downloads a successful response of at most `maxBytes`, with the timeout over the whole body. */
   private async download(url: string, maxBytes: number, timeoutMs = this.timeoutMs): Promise<{ bytes: Buffer; type: string }> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const response = await this.deps.fetch(url, { signal: controller.signal, credentials: 'omit', redirect: 'error' })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      if (Number(response.headers.get('content-length') ?? 0) > maxBytes) throw new Error('Response too large')
-      const type = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('Empty response')
-      const chunks: Uint8Array[] = []
-      let total = 0
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        total += value.byteLength
-        if (total > maxBytes) {
-          void reader.cancel().catch(() => undefined)
-          throw new Error('Response too large')
-        }
-        chunks.push(value)
-      }
-      return { bytes: Buffer.concat(chunks), type }
-    } finally {
-      clearTimeout(timer)
-      controller.abort()
-    }
+    const response = await limitedRequest(this.deps.fetch, url, {}, { maxBytes, timeoutMs })
+    if (response.status < 200 || response.status >= 300) throw new Error(`HTTP ${response.status}`)
+    return response
   }
 
   private async fetchTemplates(): Promise<GuardianAngelTemplate[]> {
