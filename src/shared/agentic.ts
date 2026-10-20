@@ -44,6 +44,10 @@ export type PartnerViewTarget =
   | { kind: 'start' }
   | { kind: 'template'; templateId: string }
   | { kind: 'care-builder' }
+  | { kind: 'angel'; angelId: string; page: AngelPage }
+
+/** Pages for one of the person's own angels on kin-keepers.ai: its settings or its test page. */
+export type AngelPage = 'edit' | 'run'
 
 export type PartnerViewState = 'loading' | 'ready' | 'failed'
 export interface PartnerViewStatus { service: PartnerServiceKey; state: PartnerViewState; canGoBack: boolean }
@@ -81,4 +85,84 @@ export function publicTemplate(template: GuardianAngelTemplate): GuardianAngelTe
     escalationTriggers: [...template.escalationTriggers],
     avatar: template.avatar,
   }
+}
+
+/** One of the person's own Guardian Angels on Kin-Keepers.ai, in the safe shape. */
+export interface MyGuardianAngel {
+  id: string
+  name: string
+  description: string
+  /** The template it was added from, when known. */
+  templateId: string | null
+  templateName: string | null
+  avatar: string | null
+  usesCloudAi: boolean
+  runCount: number
+  /** ISO time in UTC. */
+  lastRunAt: string | null
+  trustBoundaries: string[]
+  escalationTriggers: string[]
+}
+
+export type AngelConnection =
+  | { status: 'disconnected'; problem?: 'connect-failed' | 'ended' }
+  | { status: 'connecting' }
+  | { status: 'connected'; email: string | null }
+
+export type MyAngelsResult =
+  | { status: 'ready'; angels: MyGuardianAngel[] }
+  | { status: 'disconnected' }
+  | { status: 'unavailable' }
+
+export type AddAngelResult =
+  | { status: 'added'; angel: MyGuardianAngel }
+  | { status: 'disconnected' | 'not-found' | 'unavailable' }
+
+export type RemoveAngelResult = { status: 'removed' | 'disconnected' | 'not-yours' | 'unavailable' }
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}$/
+
+/** Checks the safe angel shape (used in the preload). */
+export function isMyGuardianAngel(value: unknown): value is MyGuardianAngel {
+  if (value == null || typeof value !== 'object') return false
+  const raw = value as Record<string, unknown>
+  return typeof raw.id === 'string' && TEMPLATE_ID.test(raw.id)
+    && typeof raw.name === 'string' && raw.name.length > 0 && raw.name.length <= 120
+    && typeof raw.description === 'string' && raw.description.length <= 600
+    && (raw.templateId === null || (typeof raw.templateId === 'string' && TEMPLATE_ID.test(raw.templateId)))
+    && (raw.templateName === null || (typeof raw.templateName === 'string' && raw.templateName.length <= 120))
+    && (raw.avatar === null || (typeof raw.avatar === 'string' && AVATAR_DATA_URL.test(raw.avatar)))
+    && typeof raw.usesCloudAi === 'boolean'
+    && typeof raw.runCount === 'number' && Number.isSafeInteger(raw.runCount) && raw.runCount >= 0
+    && (raw.lastRunAt === null || (typeof raw.lastRunAt === 'string' && ISO_TIME.test(raw.lastRunAt)))
+    && isTextList(raw.trustBoundaries) && isTextList(raw.escalationTriggers)
+}
+
+/** Keeps only the safe fields of an angel, so nothing extra crosses a boundary. */
+export function publicAngel(angel: MyGuardianAngel): MyGuardianAngel {
+  return {
+    id: angel.id,
+    name: angel.name,
+    description: angel.description,
+    templateId: angel.templateId,
+    templateName: angel.templateName,
+    avatar: angel.avatar,
+    usesCloudAi: angel.usesCloudAi,
+    runCount: angel.runCount,
+    lastRunAt: angel.lastRunAt,
+    trustBoundaries: [...angel.trustBoundaries],
+    escalationTriggers: [...angel.escalationTriggers],
+  }
+}
+
+export function safeAngelConnection(value: unknown): AngelConnection {
+  const raw = value != null && typeof value === 'object' ? value as Record<string, unknown> : {}
+  if (raw.status === 'connected') {
+    return { status: 'connected', email: typeof raw.email === 'string' && EMAIL.test(raw.email) ? raw.email : null }
+  }
+  if (raw.status === 'connecting') return { status: 'connecting' }
+  return raw.problem === 'connect-failed' || raw.problem === 'ended'
+    ? { status: 'disconnected', problem: raw.problem }
+    : { status: 'disconnected' }
 }
