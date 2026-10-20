@@ -68,8 +68,15 @@ export function createElectronPartnerViewHost(window: BrowserWindow): PartnerVie
       })
       contents.on('did-stop-loading', () => { if (!failed) onStatus('ready', canGoBack()) })
       contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
-        // A client-side route change cannot be stopped, but its address is still handled.
-        if (isMainFrame) intercept(url)
+        // A client-side route change cannot be stopped, but its address is still handled. It is
+        // already in the history, so once the view is back on its start page the history is
+        // cleared and Back can never return to it.
+        if (isMainFrame && intercept(url)) {
+          contents.once('did-stop-loading', () => {
+            if (!contents.isDestroyed()) contents.navigationHistory.clear()
+          })
+          return
+        }
         onStatus('ready', canGoBack())
       })
       contents.on('render-process-gone', () => onStatus('failed', false))
