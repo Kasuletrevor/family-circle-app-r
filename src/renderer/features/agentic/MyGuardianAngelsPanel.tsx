@@ -88,16 +88,21 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
   const [confirming, setConfirming] = useState<MyGuardianAngel | null>(null)
   const [removing, setRemoving] = useState(false)
   const finishedAdd = useRef<string | null>(null)
+  const latestLoad = useRef(0)
   const connected = connection?.status === 'connected'
 
   const load = useCallback(async () => {
     if (!agentic) return
+    // Only the newest load may show its list, so a slow older one never hides a just-added angel.
+    const loadNumber = ++latestLoad.current
     setList({ status: 'loading' })
+    let result: MyAngelsResult
     try {
-      setList(await agentic.getMyAngels())
+      result = await agentic.getMyAngels()
     } catch {
-      setList({ status: 'unavailable' })
+      result = { status: 'unavailable' }
     }
+    if (loadNumber === latestLoad.current) setList(result)
   }, [agentic])
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import type { AddAngelResult } from '../../../shared/agentic'
+import type { AddAngelResult, MyAngelsResult } from '../../../shared/agentic'
 import { AppServicesProvider } from '../../app/services'
 import { MockCircleClient } from '../../services/circle/MockCircleClient'
 import { fakeAgenticClient, SAMPLE_ANGEL } from '../../test/fakeAgenticClient'
@@ -185,6 +185,19 @@ describe('Add to my Guardian Angels', () => {
     expect(agentic.addAngel).toHaveBeenCalledTimes(1)
     expect(agentic.addAngel).toHaveBeenCalledWith('7')
     await waitFor(() => expect(where()).toBe('/agentic/guardian-angel?tab=mine'))
+  })
+
+  it('keeps the just-added angel when the first, older list arrives late', async () => {
+    const agentic = connectedClient()
+    let finishFirst!: (result: MyAngelsResult) => void
+    agentic.getMyAngels
+      .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve }))
+      .mockResolvedValueOnce({ status: 'ready', angels: [SAMPLE_ANGEL] })
+    renderAt('/agentic/guardian-angel?tab=mine&add=7', agentic)
+    expect(await screen.findByRole('article', { name: 'Morning Check-in' })).toBeInTheDocument()
+    await act(async () => finishFirst({ status: 'ready', angels: [] }))
+    expect(screen.getByRole('article', { name: 'Morning Check-in' })).toBeInTheDocument()
+    expect(screen.queryByText('You have no Guardian Angels yet.')).not.toBeInTheDocument()
   })
 
   it('explains a template that is gone', async () => {

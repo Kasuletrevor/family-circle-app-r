@@ -35,6 +35,11 @@ describe('PartnerViewPage connecting Kin-Keepers.ai', () => {
     expect(screen.getByRole('heading', { name: 'Connect Kin-Keepers.ai' })).toBeInTheDocument()
     await waitFor(() => expect(agentic.openView).toHaveBeenCalledWith('guardian-angel', undefined))
     expect(screen.queryByRole('link', { name: /All templates/ })).not.toBeInTheDocument()
+    // Only the app can finish a connection, so the page never moves to the browser.
+    expect(screen.queryByRole('button', { name: /Open in browser/ })).not.toBeInTheDocument()
+    act(() => agentic.emitState({ service: 'guardian-angel', state: 'failed', canGoBack: false }))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Open in browser/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(agentic.cancelConnect).toHaveBeenCalledTimes(1)
     expect(where()).toBe('/agentic/guardian-angel?tab=mine')

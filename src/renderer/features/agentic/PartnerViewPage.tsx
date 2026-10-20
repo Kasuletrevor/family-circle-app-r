@@ -149,9 +149,12 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
         <button type="button" className="agentic-button partner-view__icon" aria-label="Reload" onClick={() => command('reload')}>
           <RefreshCw size={17} aria-hidden="true" />
         </button>
-        <button type="button" className="agentic-button" onClick={() => command('open-external')}>
-          <ExternalLink size={16} aria-hidden="true" /> Open in browser
-        </button>
+        {/* Only Family Circle can finish a connection, so the connect page never moves to the browser. */}
+        {!connecting ? (
+          <button type="button" className="agentic-button" onClick={() => command('open-external')}>
+            <ExternalLink size={16} aria-hidden="true" /> Open in browser
+          </button>
+        ) : null}
       </header>
       <div className="partner-view__slot" ref={slotRef}>
         {!agentic ? <p className="partner-view__message">Agentic Services are not available here.</p> : null}
@@ -161,7 +164,7 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
             <span>Check your internet connection, then try again.</span>
             <div>
               <button type="button" className="agentic-button agentic-button--primary" onClick={() => command('reload')}>Retry</button>
-              <button type="button" className="agentic-button" onClick={() => command('open-external')}>Open in browser</button>
+              {!connecting ? <button type="button" className="agentic-button" onClick={() => command('open-external')}>Open in browser</button> : null}
             </div>
           </div>
         ) : null}

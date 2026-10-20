@@ -67,6 +67,15 @@ describe('KinKeepersConnection', () => {
     expect(changes.at(-1)).toEqual({ status: 'connected', email: 'pat@example.test' })
   })
 
+  it('reads the account from account_email and keeps it through refreshes', async () => {
+    const state = setup([json(200, tokenBody(1, { account_email: 'sam@example.test' })), json(200, tokenBody(2, { account_email: 'not an email' }))])
+    state.connection.begin()
+    await state.connection.complete(CODE)
+    expect(state.connection.status()).toEqual({ status: 'connected', email: 'sam@example.test' })
+    await state.connection.accessToken({ rejected: 'access-1' })
+    expect(state.connection.status()).toEqual({ status: 'connected', email: 'sam@example.test' })
+  })
+
   it('ignores a code when no connection was started', async () => {
     const { connection, calls } = setup([])
     await expect(connection.complete(CODE)).resolves.toBe(false)

@@ -176,11 +176,13 @@ export class KinKeepersConnection {
     if (typeof access !== 'string' || !TOKEN.test(access) || typeof refresh !== 'string' || !TOKEN.test(refresh)) return null
     const lifetime = typeof expiresIn === 'number' && expiresIn > 0 && expiresIn <= 86_400 ? expiresIn : 900
     const user = raw.user != null && typeof raw.user === 'object' ? raw.user as Record<string, unknown> : {}
+    // The backend may send the account as `account_email` (or as `user.email`), or not at all.
+    const email = typeof raw.account_email === 'string' ? raw.account_email : user.email
     return {
       access,
       refresh,
       accessExpiresAt: this.now() + lifetime * 1000,
-      email: typeof user.email === 'string' && EMAIL.test(user.email) ? user.email : null,
+      email: typeof email === 'string' && EMAIL.test(email) ? email : null,
     }
   }
 
