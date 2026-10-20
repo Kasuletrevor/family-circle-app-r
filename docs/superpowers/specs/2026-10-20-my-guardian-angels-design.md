@@ -84,7 +84,7 @@ The website is at `https://kin-keepers.ai`; the API is at
 | Add from template | `POST /api/agno/agents/{id}/clone` | `angels:add` (public source) |
 | Remove | `DELETE /api/agno/agents/{id}` | `angels:remove` (own only) |
 
-- **List fields used:** `id, name, description, category, model, avatar_src,
+- **List fields used:** `id, name, description, model, avatar_src,
   original_agent_id, run_count, last_run_at, trust_boundaries,
   escalation_triggers`.
 - **Clone response:** `{cloned_agent: <full agent>, ...}`.
@@ -234,18 +234,19 @@ interface MyGuardianAngel {
   id: string                   // digits only
   name: string
   description: string
-  category: string | null
   templateId: string | null    // original_agent_id
   templateName: string | null  // from the catalog, when known
   avatar: string | null        // data URL from the catalog
   usesCloudAi: boolean
   runCount: number
   lastRunAt: string | null     // ISO
-  safetyRules: string[]
+  trustBoundaries: string[]    // shown like the template cards
+  escalationTriggers: string[]
 }
 
 type AngelConnection =
-  | { status: 'disconnected' }
+  // problem says why: the connect page failed, or a live connection ended
+  | { status: 'disconnected'; problem?: 'connect-failed' | 'ended' }
   | { status: 'connecting' }
   | { status: 'connected'; email: string | null }
 
