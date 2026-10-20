@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ExternalLink, LayoutGrid, RefreshCw } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, ExternalLink, LayoutGrid, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { PartnerServiceKey, PartnerViewCommand, PartnerViewState, PartnerViewTarget } from '../../../shared/agentic'
 import { useAppServices } from '../../app/services'
+import { MY_ANGELS_TAB } from './angelMessages'
 import { useOverlayOpen } from './useOverlayOpen'
 import './agentic.css'
 
@@ -15,7 +16,10 @@ const SERVICE_NAMES: Record<PartnerServiceKey, string> = {
 /** The newest page open per service, so a late, older open never hides a newer view. */
 const latestOpen = new Map<PartnerServiceKey, number>()
 
-function targetFrom(template: string | null, page: string | null): PartnerViewTarget {
+function targetFrom(template: string | null, page: string | null, angel: string | null): PartnerViewTarget | undefined {
+  // The main process already loaded the connect page; just show the view.
+  if (page === 'connect') return undefined
+  if (angel && (page === 'edit' || page === 'run')) return { kind: 'angel', angelId: angel, page }
   if (template) return { kind: 'template', templateId: template }
   if (page === 'care-builder') return { kind: 'care-builder' }
   return { kind: 'start' }
@@ -27,7 +31,11 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
   const [params] = useSearchParams()
   const template = params.get('template')
   const page = params.get('page')
-  const target = useMemo(() => targetFrom(template, page), [template, page])
+  const angel = params.get('angel')
+  const pendingAdd = params.get('add')
+  const connecting = service === 'guardian-angel' && page === 'connect'
+  const navigate = useNavigate()
+  const target = useMemo(() => targetFrom(template, page, angel), [template, page, angel])
   const slotRef = useRef<HTMLDivElement | null>(null)
   const [opened, setOpened] = useState(false)
   const [state, setState] = useState<PartnerViewState>('loading')
@@ -45,7 +53,24 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
     })
   }, [agentic, service])
 
-  // Load the page asked for in the address: a template, Care Builder or the start page.
+  // Back to My Guardian Angels once connecting succeeds or fails, carrying any template still to add.
+  useEffect(() => {
+    if (!agentic || !connecting) return undefined
+    return agentic.onAngelConnection((connection) => {
+      if (connection.status === 'connected') {
+        navigate(pendingAdd ? `${MY_ANGELS_TAB}&add=${encodeURIComponent(pendingAdd)}` : MY_ANGELS_TAB, { replace: true })
+      } else if (connection.status === 'disconnected') {
+        navigate(MY_ANGELS_TAB, { replace: true })
+      }
+    })
+  }, [agentic, connecting, pendingAdd, navigate])
+
+  const cancelConnect = () => {
+    void agentic?.cancelConnect().catch(() => undefined)
+    navigate(MY_ANGELS_TAB, { replace: true })
+  }
+
+  // Load the page asked for in the address: a template, an own angel, Care Builder or the start page.
   useEffect(() => {
     if (!agentic) return undefined
     let active = true
@@ -99,10 +124,24 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
           <ArrowLeft size={17} aria-hidden="true" />
         </button>
         <div className="partner-view__title">
-          <h1 id="partner-view-heading">{name}</h1>
-          <span>Partner service. Family Circle shares nothing with it.</span>
+          <h1 id="partner-view-heading">{connecting ? 'Connect Kin-Keepers.ai' : name}</h1>
+          <span>
+            {connecting
+              ? 'Sign in if asked, then choose Connect Family Circle. Family Circle shares nothing about your family.'
+              : 'Partner service. Family Circle shares nothing with it.'}
+          </span>
         </div>
-        {service === 'guardian-angel' ? (
+        {connecting ? (
+          <button type="button" className="agentic-button" onClick={cancelConnect}>
+            <X size={16} aria-hidden="true" /> Cancel
+          </button>
+        ) : null}
+        {service === 'guardian-angel' && !connecting && angel ? (
+          <Link className="agentic-button" to={MY_ANGELS_TAB}>
+            <Sparkles size={16} aria-hidden="true" /> My Guardian Angels
+          </Link>
+        ) : null}
+        {service === 'guardian-angel' && !connecting ? (
           <Link className="agentic-button" to="/agentic/guardian-angel">
             <LayoutGrid size={16} aria-hidden="true" /> All templates
           </Link>
