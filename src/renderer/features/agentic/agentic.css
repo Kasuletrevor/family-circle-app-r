@@ -199,9 +199,198 @@
   line-height: 1.5;
 }
 
-.ga-card__use {
-  align-self: flex-start;
+.agentic-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.agentic-button--danger {
+  border-color: rgba(164, 58, 48, 0.35);
+  color: #a43a30;
+}
+
+.agentic-button--danger:hover {
+  background: rgba(164, 58, 48, 0.08);
+}
+
+.agentic-button--danger-solid {
+  border-color: transparent;
+  color: white;
+  background: #b42318;
+}
+
+.agentic-button--danger-solid:hover {
+  background: #912018;
+}
+
+.agentic-link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  color: var(--kk-accent-dark);
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ga-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: auto;
+}
+
+.ga-card__meta {
+  margin: 0;
+  color: var(--kk-text-muted);
+  font-size: 13px;
+}
+
+.ga-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--kk-accent-dark);
+  background: var(--kk-accent-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ga-badge--cloud {
+  color: #7a4a0f;
+  background: rgba(230, 173, 105, 0.22);
+}
+
+.ga-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--kk-border);
+}
+
+.ga-tabs__tab {
+  margin-bottom: -1px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: var(--kk-text-muted);
+  background: none;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ga-tabs__tab[aria-selected='true'] {
+  border-bottom-color: var(--kk-accent);
+  color: var(--kk-accent-dark);
+}
+
+.ga-tabs__tab:focus-visible {
+  outline: none;
+  box-shadow: var(--kk-focus);
+}
+
+#ga-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ga-notice {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--kk-radius-md);
+  color: var(--kk-text);
+  background: var(--kk-accent-soft);
+  font-size: 14px;
+}
+
+.ga-connect {
+  display: flex;
+  max-width: 620px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--kk-border);
+  border-radius: var(--kk-radius-md);
+  background: var(--kk-card);
+}
+
+.ga-connect h2 {
+  margin: 0;
+  color: var(--kk-text);
+  font-size: 18px;
+}
+
+.ga-connect p {
+  margin: 0;
+  color: var(--kk-text-muted);
+  font-size: 14px;
+}
+
+.ga-connect .ga-page__problem {
+  color: var(--kk-text);
+}
+
+.ga-mine {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ga-mine__account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--kk-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ga-dialog-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 24, 47, 0.42);
+}
+
+.ga-dialog {
+  display: flex;
+  width: min(440px, 100%);
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border-radius: var(--kk-radius-md);
+  background: var(--kk-card);
+  box-shadow: var(--kk-shadow-card);
+}
+
+.ga-dialog h2 {
+  margin: 0;
+  color: var(--kk-text);
+  font-size: 18px;
+}
+
+.ga-dialog p {
+  margin: 0;
+  color: var(--kk-text-muted);
+  font-size: 14px;
+}
+
+.ga-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .partner-view {
