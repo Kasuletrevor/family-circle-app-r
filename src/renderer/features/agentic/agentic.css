@@ -248,23 +248,6 @@
   font-size: 13px;
 }
 
-.ga-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: var(--kk-accent-dark);
-  background: var(--kk-accent-soft);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ga-badge--cloud {
-  color: #7a4a0f;
-  background: rgba(230, 173, 105, 0.22);
-}
-
 .ga-tabs {
   display: flex;
   gap: 4px;

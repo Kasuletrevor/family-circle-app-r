@@ -92,18 +92,25 @@ The website is at `https://kin-keepers.ai`; the API is at
 **Website pages opened in the secure view:** `/agents/{id}/edit` (settings) and
 `/agents/{id}/run` (testing).
 
-### Open requests to the backend (the app works without them)
+### Open request to the backend (the app works without it)
 
-1. **The connected account's email.** The contract returns no user details and
-   refuses `/api/auth/me` for app tokens. The app would like either a
-   `user: {email, name}` field in the exchange response or `/api/auth/me`
-   accepted with `angels:read`.
-   - Without it, the app says "Connected to Kin-Keepers.ai" instead of
-     "Connected as person@example.com".
-2. **Which AI service an angel uses.** An `execution_backend: "ollama" | "openai"`
-   field on angel responses would let the app label cloud AI reliably.
-   - Without it, the app copies the backend's own rule: a model starting with
-     `gpt-`, `o1` or `o3` means OpenAI.
+**The connected account's email.** The backend plans to send `account_email`
+in the exchange and refresh responses. The app reads `account_email`, or
+`user.email` if that is sent instead.
+
+- Without it, the app says "Connected to Kin-Keepers.ai" instead of
+  "Connected as person@example.com".
+
+### Where angels run
+
+In Family Circle, angels run on the app's own local runtime: Qwen through
+llama.cpp, set up under Local AI. When the app reports where an angel runs, it
+says `execution_backend: "llama.cpp"` and names the actual local Qwen model.
+
+The marketplace's `model` and `execution_backend` describe the marketplace
+configuration only. They never select or describe the app's local runtime, so
+the app drops both when it sanitizes an angel. This slice does not run angels
+yet.
 
 ## App design
 
@@ -132,8 +139,6 @@ Kin-Keepers.ai") with **Disconnect**, then one card per angel:
 
 - avatar, name, description and "Based on <template name>" when it came from
   a template;
-- a **Uses cloud AI (OpenAI)** badge for OpenAI models; "Runs on Kin-Keepers
-  servers" otherwise;
 - runs and last run ("Never run" when 0);
 - **Safety rules** collapsed, with the same wording as the template cards;
 - **Settings** opens `/agents/{id}/edit` and **Test** opens `/agents/{id}/run`
@@ -237,7 +242,6 @@ interface MyGuardianAngel {
   templateId: string | null    // original_agent_id
   templateName: string | null  // from the catalog, when known
   avatar: string | null        // data URL from the catalog
-  usesCloudAi: boolean
   runCount: number
   lastRunAt: string | null     // ISO
   trustBoundaries: string[]    // shown like the template cards
@@ -319,7 +323,7 @@ uses that account's own connection.
   - 404 and 403 on remove;
   - a 401 refreshes and retries once;
   - timeouts and oversized bodies give `unavailable`;
-  - the OpenAI model rule.
+  - the marketplace model and provider are left out.
 - **Navigation:** only `https://kin-keepers.ai/connect/done` reaches
   `complete()`, and look-alike hosts and paths don't. The navigation is
   cancelled.
@@ -349,8 +353,8 @@ No accounts are created on the live server without asking.
 
 ## Out of scope
 
-- Activating angels on family data, running angels from Family Circle and the
-  privacy decision behind them.
+- Running angels in Family Circle on the local runtime (Qwen through llama.cpp)
+  with family data, and the privacy decision behind it.
 - Persisting the connection across restarts.
 - Signing in through the system browser (RFC 8252).
 - Revoking website tokens on website logout.

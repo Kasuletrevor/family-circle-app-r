@@ -28,7 +28,6 @@ export const SAMPLE_ANGEL: MyGuardianAngel = {
   templateId: '7',
   templateName: 'Elder Companion',
   avatar: null,
-  usesCloudAi: true,
   runCount: 0,
   lastRunAt: null,
   trustBoundaries: ['No medical advice'],

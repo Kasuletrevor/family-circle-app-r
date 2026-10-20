@@ -38,7 +38,7 @@ describe('MyGuardianAngels', () => {
   it('lists angels with the app token in the safe shape', async () => {
     const { angels, call } = setup([json(200, [agent(5)])])
     const result = await angels.list()
-    expect(result).toEqual({ status: 'ready', angels: [expect.objectContaining({ id: '5', templateName: 'Elder Companion', usesCloudAi: true })] })
+    expect(result).toEqual({ status: 'ready', angels: [expect.objectContaining({ id: '5', templateName: 'Elder Companion' })] })
     expect(call(0)[0]).toBe(`${KIN_KEEPERS_API}/api/agno/agents`)
     expect(call(0)[1]).toMatchObject({ method: 'GET', headers: { authorization: 'Bearer token-1' }, credentials: 'omit', redirect: 'error' })
     expect(JSON.stringify(result)).not.toContain('owner@example.test')

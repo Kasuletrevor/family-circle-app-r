@@ -3,7 +3,7 @@ import { registerAgenticIpc } from './agenticIpc'
 
 const ANGEL = {
   id: '5', name: 'Morning Check-in', description: '', templateId: '7', templateName: 'Elder Companion', avatar: null,
-  usesCloudAi: true, runCount: 0, lastRunAt: null, trustBoundaries: [], escalationTriggers: [],
+  runCount: 0, lastRunAt: null, trustBoundaries: [], escalationTriggers: [],
 }
 
 function register() {

@@ -128,7 +128,9 @@ export function PartnerViewPage({ service }: { service: PartnerServiceKey }) {
           <span>
             {connecting
               ? 'Sign in if asked, then choose Connect Family Circle. Family Circle shares nothing about your family.'
-              : 'Partner service. Family Circle shares nothing with it.'}
+              : angel && page === 'run'
+                ? 'Testing here runs on Kin-Keepers.ai, not on this computer. Family Circle shares nothing with it.'
+                : 'Partner service. Family Circle shares nothing with it.'}
           </span>
         </div>
         {connecting ? (

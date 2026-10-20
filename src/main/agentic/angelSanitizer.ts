@@ -2,14 +2,6 @@ import type { GuardianAngelTemplate, MyGuardianAngel } from '../../shared/agenti
 import { catalogId, cleanText, rules } from './catalogSanitizer'
 
 export const MAX_ANGELS = 100
-// The backend's own rule for models that run on OpenAI.
-const OPENAI_MODEL = /^(gpt-|o1|o3)/
-
-function usesCloudAi(entry: Record<string, unknown>): boolean {
-  if (entry.execution_backend === 'openai') return true
-  if (entry.execution_backend === 'ollama') return false
-  return typeof entry.model === 'string' && OPENAI_MODEL.test(entry.model.trim().toLowerCase())
-}
 
 function utcTime(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 40) return null
@@ -19,7 +11,10 @@ function utcTime(value: unknown): string | null {
   return Number.isFinite(time) ? new Date(time).toISOString() : null
 }
 
-/** One angel from the API in the safe shape, with the avatar and name of the template it came from. */
+/**
+ * One angel from the API in the safe shape, with the avatar and name of the template it came from.
+ * The marketplace's model and provider are left out: in Family Circle, angels run on the local runtime.
+ */
 export function sanitizeAngel(raw: unknown, templates: ReadonlyMap<string, GuardianAngelTemplate>): MyGuardianAngel | null {
   if (raw == null || typeof raw !== 'object') return null
   const entry = raw as Record<string, unknown>
@@ -36,7 +31,6 @@ export function sanitizeAngel(raw: unknown, templates: ReadonlyMap<string, Guard
     templateId,
     templateName: template?.name ?? null,
     avatar: template?.avatar ?? null,
-    usesCloudAi: usesCloudAi(entry),
     runCount: typeof runs === 'number' && Number.isSafeInteger(runs) && runs > 0 ? runs : 0,
     lastRunAt: utcTime(entry.last_run_at),
     trustBoundaries: rules(entry.trust_boundaries),

@@ -70,6 +70,7 @@ describe('PartnerViewPage connecting Kin-Keepers.ai', () => {
     const agentic = renderView('/agentic/guardian-angel/view?angel=5&page=run')
     await waitFor(() => expect(agentic.openView).toHaveBeenCalledWith('guardian-angel', { kind: 'angel', angelId: '5', page: 'run' }))
     expect(screen.getByRole('heading', { name: 'Guardian Angel' })).toBeInTheDocument()
+    expect(screen.getByText(/Testing here runs on Kin-Keepers.ai, not on this computer/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /My Guardian Angels/ })).toHaveAttribute('href', '/agentic/guardian-angel?tab=mine')
   })
 })

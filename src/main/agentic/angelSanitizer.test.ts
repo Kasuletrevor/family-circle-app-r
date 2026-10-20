@@ -17,18 +17,14 @@ describe('sanitizeAngel', () => {
   it('keeps the safe shape and takes the avatar and name from the template', () => {
     expect(sanitizeAngel(agent(5, { original_agent_id: 7, run_count: 3, last_run_at: '2026-10-01T10:00:00' }), templates)).toEqual({
       id: '5', name: 'Angel 5', description: 'Helps', templateId: '7', templateName: 'Elder Companion',
-      avatar: 'data:image/png;base64,AAAA', usesCloudAi: false, runCount: 3, lastRunAt: '2026-10-01T10:00:00.000Z',
+      avatar: 'data:image/png;base64,AAAA', runCount: 3, lastRunAt: '2026-10-01T10:00:00.000Z',
       trustBoundaries: ['No medical advice'], escalationTriggers: [],
     })
   })
 
-  it('labels cloud AI from the execution backend first, then the model', () => {
-    const cloud = (extra: Record<string, unknown>) => sanitizeAngel(agent(1, extra), templates)?.usesCloudAi
-    expect(cloud({ model: 'gpt-4o-mini' })).toBe(true)
-    expect(cloud({ model: 'o3-mini' })).toBe(true)
-    expect(cloud({ model: 'llama3.2' })).toBe(false)
-    expect(cloud({ model: 'gpt-4o', execution_backend: 'ollama' })).toBe(false)
-    expect(cloud({ model: 'llama3.2', execution_backend: 'openai' })).toBe(true)
+  it('leaves out the marketplace model and provider', () => {
+    const angel = sanitizeAngel(agent(1, { model: 'gpt-4o-mini', execution_backend: 'openai' }), templates)
+    expect(JSON.stringify(angel)).not.toMatch(/gpt-4o-mini|openai|model|execution_backend/)
   })
 
   it('reads times as UTC and drops bad values', () => {

@@ -96,7 +96,6 @@ export interface MyGuardianAngel {
   templateId: string | null
   templateName: string | null
   avatar: string | null
-  usesCloudAi: boolean
   runCount: number
   /** ISO time in UTC. */
   lastRunAt: string | null
@@ -133,7 +132,6 @@ export function isMyGuardianAngel(value: unknown): value is MyGuardianAngel {
     && (raw.templateId === null || (typeof raw.templateId === 'string' && TEMPLATE_ID.test(raw.templateId)))
     && (raw.templateName === null || (typeof raw.templateName === 'string' && raw.templateName.length <= 120))
     && (raw.avatar === null || (typeof raw.avatar === 'string' && AVATAR_DATA_URL.test(raw.avatar)))
-    && typeof raw.usesCloudAi === 'boolean'
     && typeof raw.runCount === 'number' && Number.isSafeInteger(raw.runCount) && raw.runCount >= 0
     && (raw.lastRunAt === null || (typeof raw.lastRunAt === 'string' && ISO_TIME.test(raw.lastRunAt)))
     && isTextList(raw.trustBoundaries) && isTextList(raw.escalationTriggers)
@@ -148,7 +146,6 @@ export function publicAngel(angel: MyGuardianAngel): MyGuardianAngel {
     templateId: angel.templateId,
     templateName: angel.templateName,
     avatar: angel.avatar,
-    usesCloudAi: angel.usesCloudAi,
     runCount: angel.runCount,
     lastRunAt: angel.lastRunAt,
     trustBoundaries: [...angel.trustBoundaries],

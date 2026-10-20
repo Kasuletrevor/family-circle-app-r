@@ -3,7 +3,7 @@ import { isMyGuardianAngel, publicAngel, safeAngelConnection, type MyGuardianAng
 
 const angel: MyGuardianAngel = {
   id: '5', name: 'Morning Check-in', description: 'Says good morning', templateId: '7', templateName: 'Elder Companion',
-  avatar: null, usesCloudAi: true, runCount: 2, lastRunAt: '2026-10-01T10:00:00.000Z',
+  avatar: null, runCount: 2, lastRunAt: '2026-10-01T10:00:00.000Z',
   trustBoundaries: ['No medical advice'], escalationTriggers: [],
 }
 
@@ -13,7 +13,7 @@ describe('My Guardian Angels shapes', () => {
     expect(isMyGuardianAngel({ ...angel, templateId: null, templateName: null, lastRunAt: null })).toBe(true)
     for (const bad of [
       { id: '../5' }, { name: '' }, { avatar: 'https://evil.test/a.png' }, { runCount: -1 }, { runCount: 1.5 },
-      { lastRunAt: 'yesterday' }, { templateId: 'x' }, { usesCloudAi: 'yes' }, { trustBoundaries: 'none' },
+      { lastRunAt: 'yesterday' }, { templateId: 'x' }, { trustBoundaries: 'none' },
     ]) {
       expect(isMyGuardianAngel({ ...angel, ...bad })).toBe(false)
     }

@@ -32,7 +32,7 @@ function connectedClient() {
   agentic.getAngelConnection.mockResolvedValue({ status: 'connected', email: 'pat@example.test' })
   agentic.getMyAngels.mockResolvedValue({
     status: 'ready',
-    angels: [SAMPLE_ANGEL, { ...SAMPLE_ANGEL, id: '6', name: 'Evening Chat', templateId: null, templateName: null, usesCloudAi: false, runCount: 3 }],
+    angels: [SAMPLE_ANGEL, { ...SAMPLE_ANGEL, id: '6', name: 'Evening Chat', templateId: null, templateName: null, runCount: 3 }],
   })
   return agentic
 }
@@ -73,16 +73,15 @@ describe('My Guardian Angels', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
-  it('lists connected angels with their AI service and runs', async () => {
+  it('lists connected angels with their template and runs', async () => {
     renderAt('/agentic/guardian-angel?tab=mine', connectedClient())
     const morning = await screen.findByRole('article', { name: 'Morning Check-in' })
     expect(screen.getByText('Connected as pat@example.test')).toBeInTheDocument()
     expect(within(morning).getByText('Based on Elder Companion')).toBeInTheDocument()
-    expect(within(morning).getByText('Uses cloud AI (OpenAI)')).toBeInTheDocument()
+    expect(within(morning).queryByText(/cloud AI|OpenAI|Kin-Keepers servers/)).not.toBeInTheDocument()
     expect(within(morning).getByText('Never run')).toBeInTheDocument()
     expect(within(morning).getByText('No medical advice')).toBeInTheDocument()
     const evening = screen.getByRole('article', { name: 'Evening Chat' })
-    expect(within(evening).getByText('Runs on Kin-Keepers servers')).toBeInTheDocument()
     expect(within(evening).getByText('Ran 3 times')).toBeInTheDocument()
   })
 

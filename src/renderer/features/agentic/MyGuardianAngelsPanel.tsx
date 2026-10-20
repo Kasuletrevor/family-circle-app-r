@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Cloud, LogIn, Play, RefreshCw, Server, Settings, Trash2 } from 'lucide-react'
+import { LogIn, Play, RefreshCw, Settings, Trash2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { AngelConnection, MyAngelsResult, MyGuardianAngel } from '../../../shared/agentic'
 import { useAppServices } from '../../app/services'
@@ -32,11 +32,6 @@ function AngelCard({ angel, onOpen, onRemove }: {
         </div>
       </div>
       {angel.description ? <p className="ga-card__description">{angel.description}</p> : null}
-      <p className="ga-card__meta">
-        {angel.usesCloudAi
-          ? <span className="ga-badge ga-badge--cloud"><Cloud size={14} aria-hidden="true" /> Uses cloud AI (OpenAI)</span>
-          : <span className="ga-badge"><Server size={14} aria-hidden="true" /> Runs on Kin-Keepers servers</span>}
-      </p>
       <p className="ga-card__meta">{runsText(angel)}</p>
       <SafetyRules trustBoundaries={angel.trustBoundaries} escalationTriggers={angel.escalationTriggers} />
       <div className="ga-card__actions">
