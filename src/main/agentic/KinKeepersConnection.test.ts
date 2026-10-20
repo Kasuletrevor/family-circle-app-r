@@ -118,6 +118,43 @@ describe('KinKeepersConnection', () => {
     expect(calls[1]).toMatchObject({ url: `${KIN_KEEPERS_API}/api/auth/logout`, body: { refresh_token: 'refresh-1' } })
   })
 
+  it('does not connect when cancelled during the exchange, and revokes the late tokens', async () => {
+    let deliver!: (response: Response) => void
+    const { connection, calls } = setup([new Promise<Response>((resolve) => { deliver = resolve }), json(200, { message: 'Logged out successfully' })])
+    connection.begin()
+    const completing = connection.complete(CODE)
+    connection.cancel()
+    deliver(json(200, tokenBody(1)))
+    await expect(completing).resolves.toBe(false)
+    expect(connection.status()).toEqual({ status: 'disconnected' })
+    await expect(connection.accessToken()).resolves.toBeNull()
+    await vi.waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls[1]).toMatchObject({ url: `${KIN_KEEPERS_API}/api/auth/logout`, body: { refresh_token: 'refresh-1' } })
+  })
+
+  it("never lets an old session's refresh clear the new session's refresh", async () => {
+    let finishOld!: (response: Response) => void
+    const { connection, calls, advance } = await connected([
+      new Promise<Response>((resolve) => { finishOld = resolve }),
+      json(200, { message: 'Logged out successfully' }),
+      json(200, tokenBody(3)),
+      new Promise<Response>(() => undefined),
+      json(200, tokenBody(4)),
+    ])
+    advance(900_000)
+    const oldRefresh = connection.accessToken()
+    await connection.disconnect()
+    connection.begin()
+    await connection.complete(CODE)
+    advance(900_000)
+    void connection.accessToken()
+    finishOld(json(200, tokenBody(2)))
+    await expect(oldRefresh).resolves.toBeNull()
+    void connection.accessToken()
+    await Promise.resolve()
+    expect(calls.filter((call) => (call.body as { refresh_token?: string } | undefined)?.refresh_token === 'refresh-3')).toHaveLength(1)
+  })
+
   it('reads the code only from the exact connect-done page', () => {
     expect(connectDoneCode(`https://kin-keepers.ai/connect/done?code=${CODE}`)).toBe(CODE)
     for (const url of [

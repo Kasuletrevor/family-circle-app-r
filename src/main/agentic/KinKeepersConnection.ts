@@ -48,6 +48,7 @@ export class KinKeepersConnection {
   private tokens: Tokens | null = null
   private attempt: { verifier: string; expiresAt: number } | null = null
   private refreshing: Promise<string | null> | null = null
+  private exchanging = false
   private problem: 'connect-failed' | 'ended' | undefined
   private account: string | null = null
   /** Bumped whenever the connection is dropped, so late responses from an old session are ignored. */
@@ -86,8 +87,10 @@ export class KinKeepersConnection {
   }
 
   cancel(): void {
-    if (!this.attempt) return
+    if (!this.attempt && !this.exchanging) return
     this.attempt = null
+    // An exchange already under way must not connect after Cancel; its tokens are revoked.
+    if (this.exchanging) this.generation += 1
     this.changed()
   }
 
@@ -98,9 +101,12 @@ export class KinKeepersConnection {
     if (!attempt) return false
     if (attempt.expiresAt <= this.now() || !CODE.test(code)) return this.failConnect()
     const generation = this.generation
-    const tokens = await this.requestTokens('/api/auth/app/token', { code, verifier: attempt.verifier }).catch(() => null)
+    this.exchanging = true
+    const tokens = await this.requestTokens('/api/auth/app/token', { code, verifier: attempt.verifier })
+      .catch(() => null)
+      .finally(() => { this.exchanging = false })
     if (generation !== this.generation) {
-      // Disconnected while the exchange was running: the new session must not outlive it.
+      // Cancelled or disconnected while the exchange was running: the new session must not outlive it.
       if (tokens) void this.logout(tokens)
       return false
     }
@@ -118,7 +124,13 @@ export class KinKeepersConnection {
     const stale = tokens.access === options.rejected || tokens.accessExpiresAt - REFRESH_MARGIN_MS <= this.now()
     if (!stale) return tokens.access
     // One refresh at a time: a refresh token works once, and sending it twice ends the session.
-    this.refreshing ??= this.refresh(tokens).finally(() => { this.refreshing = null })
+    if (!this.refreshing) {
+      const refreshing: Promise<string | null> = this.refresh(tokens).finally(() => {
+        // A refresh from an earlier session must not clear the current session's refresh.
+        if (this.refreshing === refreshing) this.refreshing = null
+      })
+      this.refreshing = refreshing
+    }
     return this.refreshing
   }
 
