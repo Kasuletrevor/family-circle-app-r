@@ -3,6 +3,7 @@
 Date: 2026-10-20
 Status: design approved in conversation; spec awaiting review
 Builds on: `docs/superpowers/specs/2026-10-16-agentic-services-design.md` (v0.16.0)
+Backend contract: `agent-ai-landing/docs/superpowers/specs/2026-10-20-family-circle-connect-design.md`
 
 ## Goal
 
@@ -16,144 +17,93 @@ on family data is still waiting on the privacy decision and an activation API.
 
 ## Two parts, two repositories
 
-1. **Backend (agent-ai-landing, built by the backend owner with Codex):** a
-   "Connect Family Circle" sign-in that issues separate, limited, revocable app
-   credentials, plus one privacy fix. The contract below is the only thing the
-   two sides share.
-2. **App (this repo):** the connection, the My Guardian Angels tab and the
-   "Add to my Guardian Angels" button.
+1. **Backend (agent-ai-landing, owned by Codex):** the Family Circle connection
+   (PKCE S256), separate limited and revocable app credentials, a default-deny
+   boundary for app tokens, and removing creators' emails from the public list.
+   Its spec, linked above, is the source of truth for every request, response
+   and error. This document only records what the app relies on.
+2. **App (this repo, owned by Claude):** the connection client, the My Guardian
+   Angels tab and the "Add to my Guardian Angels" button.
 
-The backend changes only add endpoints and fields, so the website keeps
-working unchanged. Release order: backend first, then the app release.
+Release order: the backend is deployed and checked in production first, then
+the app release that uses it.
 
-## Backend contract
+## What the app relies on from the backend
 
-All addresses are on `https://kin-keepers.ai` (website) and
-`https://agentback.kin-keepers.ai` (API). JSON bodies, UTF-8.
+The website is at `https://kin-keepers.ai`; the API is at
+`https://agentback.kin-keepers.ai`.
 
-### 1. Connect page (website)
+**Starting the connection:**
 
-`GET https://kin-keepers.ai/connect?client=family-circle&code_challenge=<C>&code_challenge_method=S256&state=<S>`
+1. The app makes a fresh verifier: 43 base64url characters from 32 random
+   bytes. They come from `[A-Za-z0-9_-]`, which falls inside the allowed set.
+2. It computes `challenge = BASE64URL(SHA256(ASCII(verifier)))`, without padding.
+3. It opens
+   `https://kin-keepers.ai/connect?app=family-circle&challenge=<challenge>` in
+   the Guardian Angel view.
 
-- `C` is `BASE64URL(SHA256(verifier))` without padding (PKCE S256). `S` is
-  22–64 URL-safe characters.
-- If the person is not signed in, the page sends them through the normal
-  sign-in and returns to `/connect` with all four parameters intact.
-- When signed in it shows the account email, what Family Circle will be able
-  to do ("see, add and remove your Guardian Angels") and two buttons:
-  **Connect Family Circle** and **Cancel**.
-- **Connect** calls the authorize endpoint (below), then does a **full page
-  navigation** (`window.location.assign`, not a client-side router push) to
-  `https://kin-keepers.ai/connect/done?code=<code>&state=<S>`.
-- **Cancel** navigates the same way to
-  `https://kin-keepers.ai/connect/done?error=access_denied&state=<S>`.
-- `/connect/done` just shows "You can return to Family Circle." The app reads
-  the address before the page renders.
-- Missing or invalid parameters show an error and never issue a code.
+**Finishing it:**
 
-### 2. `POST /api/auth/app/authorize`
+1. When the person clicks Connect, the site replaces the location with
+   `https://kin-keepers.ai/connect/done?code=<code>`.
+2. The app catches that exact origin and path, cancels the navigation, and
+   posts `{code, verifier}` to `POST /api/auth/app/token`. The code expires
+   after 60 seconds.
+3. A successful exchange returns
+   `{access_token, refresh_token, token_type, expires_in: 900, refresh_expires_in, scope}`.
+   It contains no user details.
 
-- Requires the normal website `Authorization: Bearer <website access token>`.
-  App tokens are refused here.
-- Body: `{ "client": "family-circle", "code_challenge": C, "code_challenge_method": "S256" }`
-- 200: `{ "code": "<at least 32 random bytes, base64url>", "expires_in": 60 }`
-- The server stores only a hash of the code with the user, the challenge and
-  the expiry. A code works once.
-- 400 `{ "error": "invalid_request" }` for an unknown client, a method other
-  than S256 or a malformed challenge.
+**Refreshing and signing out:**
 
-### 3. `POST /api/auth/app/token`
+- **Refresh:** `POST /api/auth/app/refresh {refresh_token}` returns the same
+  shape with a new refresh token. The session ends 7 days after connecting,
+  whatever the refreshes.
+- **Never send a refresh token twice.** Presenting an already-used refresh
+  token revokes the session. So the app sends **one refresh at a time**, and
+  after a refresh that fails on the network (where the outcome is unknown) it
+  **disconnects** instead of retrying.
+- **Sign-out:** `POST /api/auth/logout` with the body `{refresh_token}`, and
+  `Authorization: Bearer <app access token>` while that is still valid.
 
-Exchanging a code:
+**Errors** come as `{"detail": {"code": ..., "message": ...}}`:
 
-- Body: `{ "grant_type": "authorization_code", "client": "family-circle", "code": "...", "code_verifier": "..." }`
-- The code is consumed atomically. Two exchanges racing for one code mean at
-  most one succeeds.
-- Fails with 400 `{ "error": "invalid_grant" }` when the code is unknown,
-  expired or already used, or when `BASE64URL(SHA256(code_verifier))` does not
-  match.
+- `invalid_grant` and `invalid_token` mean disconnected.
+- `refresh_token_reuse` means disconnected.
+- `insufficient_scope` means unavailable; the app never expects it.
 
-Refreshing:
+**Angel endpoints accepted with an app token:**
 
-- Body: `{ "grant_type": "refresh_token", "client": "family-circle", "refresh_token": "..." }`
-- Every refresh returns a **new** refresh token and invalidates the old one.
-- If a refresh token that was already replaced is used again, the whole app
-  session is revoked and the request fails with `invalid_grant`.
+- The backend always applies owner-only rules to app tokens, including for
+  admin accounts.
+- The success responses are the same as today.
 
-Both grants return 200:
+| App action | Endpoint | Permission |
+| --- | --- | --- |
+| List my angels | `GET /api/agno/agents` | `angels:read` (own only) |
+| Read one | `GET /api/agno/agents/{id}` | `angels:read` (own only) |
+| Add from template | `POST /api/agno/agents/{id}/clone` | `angels:add` (public source) |
+| Remove | `DELETE /api/agno/agents/{id}` | `angels:remove` (own only) |
 
-```json
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "token_type": "bearer",
-  "expires_in": 900,
-  "scope": "angels",
-  "user": { "email": "person@example.com", "name": "Person" }
-}
-```
+- **List fields used:** `id, name, description, category, model, avatar_src,
+  original_agent_id, run_count, last_run_at, trust_boundaries,
+  escalation_triggers`.
+- **Clone response:** `{cloned_agent: <full agent>, ...}`.
 
-- Access tokens last 15 minutes and carry the app session id. Refresh tokens
-  last 7 days and are stored only as hashes.
-- Every request with an app token checks that its session is not revoked.
+**Website pages opened in the secure view:** `/agents/{id}/edit` (settings) and
+`/agents/{id}/run` (testing).
 
-### 4. `POST /api/auth/app/revoke`
+### Open requests to the backend (the app works without them)
 
-- Body: `{ "client": "family-circle", "refresh_token": "..." }`
-- Revokes the app session. Afterwards its access tokens and refresh token stop
-  working.
-- Always returns 200 `{ "revoked": true }`, including for unknown tokens.
-- The website's `/api/auth/logout` is unchanged.
-
-### 5. What an app token may do (scope `angels`)
-
-App tokens are **refused by default**. The existing `get_current_user`
-dependency rejects them with 403 `{ "detail": "app_token_not_allowed" }`. A
-separate dependency accepts them only on these endpoints:
-
-| Endpoint | With an app token |
-| --- | --- |
-| `GET /api/auth/me` | as today |
-| `GET /api/agno/agents` | only the caller's own agents, **even for admin accounts** |
-| `GET /api/agno/agents/{id}` | own agents, or public ones |
-| `POST /api/agno/agents/{id}/clone` | as today (public agents only) |
-| `DELETE /api/agno/agents/{id}` | own agents only; admin powers never apply |
-
-An admin's app token never carries admin powers. Refresh keeps the same scope.
-
-### 6. Changes to existing responses
-
-- **Privacy:** `GET /api/agno/agents/public` and `GET /api/agno/agents/public/{id}`
-  no longer include `created_by` (or return a display name instead of the
-  email). The app does not read it from the public list.
-- **Execution backend:** list and detail responses gain
-  `"execution_backend": "ollama" | "openai"`, from the backend's existing
-  `_infer_execution_backend_from_model`. The app labels angels that use cloud
-  AI with it.
-
-### 7. Backend regression tests (pytest)
-
-The backend's tests cover:
-
-- **Codes:** expiry; replay; a wrong verifier; two concurrent redemptions with
-  one winner; an unknown client.
-- **Refresh:** rotation; reuse detection revoking the session.
-- **Revocation:** access and refresh tokens stop working after revoke.
-- **Scope:** an app token is refused on every other route, both by a
-  route-table test and by spot checks.
-- **Admins and other users:** an admin's app token lists and deletes only its
-  own agents, and a user can't reach another user's private agents.
-- **Privacy:** the public list has no `created_by` email.
-
-### Existing endpoints the app uses unchanged
-
-- `POST /api/agno/agents/{id}/clone` returns `cloned_agent` (full agent) with
-  `original_agent_id`.
-- List fields used: `id, name, description, category, model,
-  execution_backend, avatar_src, original_agent_id, is_cloned, run_count,
-  last_run_at, trust_boundaries, escalation_triggers, created_by`.
-- Website pages opened in the secure view: `/agents/{id}/edit` (settings) and
-  `/agents/{id}/run` (testing).
+1. **The connected account's email.** The contract returns no user details and
+   refuses `/api/auth/me` for app tokens. The app would like either a
+   `user: {email, name}` field in the exchange response or `/api/auth/me`
+   accepted with `angels:read`.
+   - Without it, the app says "Connected to Kin-Keepers.ai" instead of
+     "Connected as person@example.com".
+2. **Which AI service an angel uses.** An `execution_backend: "ollama" | "openai"`
+   field on angel responses would let the app label cloud AI reliably.
+   - Without it, the app copies the backend's own rule: a model starting with
+     `gpt-`, `o1` or `o3` means OpenAI.
 
 ## App design
 
@@ -166,21 +116,24 @@ The Guardian Angel page gets two tabs: **Templates** (today's catalog) and
 Kin-Keepers.ai account to see and manage your Guardian Angels. Family Circle
 shares nothing about your family.") and a **Connect Kin-Keepers.ai** button.
 
-**Connecting:** the secure Guardian Angel view opens at the connect page. If
-the person is already signed in to kin-keepers.ai in that view, it is one click
-on **Connect Family Circle**. When the view reaches `/connect/done`, Family
-Circle returns to the My Guardian Angels tab.
+**Connecting:**
 
-- Cancel shows "Not connected" and leaves things as they were.
+- The secure Guardian Angel view opens at the connect page. If the person is
+  already signed in to kin-keepers.ai in that view, it is one click on
+  **Connect Family Circle**.
+- While connecting, the view's bar shows **Cancel**, which drops the attempt
+  and returns to the tab.
+- When the view reaches `/connect/done`, Family Circle returns to the My
+  Guardian Angels tab.
 - Any failure shows "Couldn't connect. Try again." with a Retry button.
 
-**Connected:** "Connected as person@example.com" with **Disconnect**, then one
-card per angel:
+**Connected:** "Connected as person@example.com" (or "Connected to
+Kin-Keepers.ai") with **Disconnect**, then one card per angel:
 
 - avatar, name, description and "Based on <template name>" when it came from
   a template;
-- a **Uses cloud AI (OpenAI)** badge when `execution_backend` is `openai`;
-  "Runs on Kin-Keepers servers" otherwise;
+- a **Uses cloud AI (OpenAI)** badge for OpenAI models; "Runs on Kin-Keepers
+  servers" otherwise;
 - runs and last run ("Never run" when 0);
 - **Safety rules** collapsed, with the same wording as the template cards;
 - **Settings** opens `/agents/{id}/edit` and **Test** opens `/agents/{id}/run`
@@ -212,37 +165,41 @@ Templates tab.
 **`KinKeepersConnection`** (`src/main/agentic/KinKeepersConnection.ts`), one
 per signed-in Family Circle account:
 
-- **Starting a connection:** `begin()` makes a 32-byte random `verifier` and a
-  16-byte random `state`, then returns the connect URL built from them. Only
-  one attempt is pending at a time, and a new `begin()` replaces the old one.
-  The attempt expires after 10 minutes.
-- **Finishing it:** `complete(url)` is called with a `/connect/done` address.
-  It checks `state` against the pending attempt, then exchanges the code at
-  `/api/auth/app/token`. It keeps the tokens and user email **in memory only**
-  and clears the pending attempt whatever the outcome. A wrong or missing
-  `state` is ignored.
-- **Access tokens:** `accessToken()` returns a token that is still valid.
-  Within 60 seconds of expiry it refreshes first, and concurrent callers share
-  one refresh. If the refresh fails with `invalid_grant`, it forgets
-  everything and reports `disconnected`.
+- **Starting a connection:** `begin()` makes a verifier as above and returns
+  the connect URL. Only one attempt is pending at a time; a new `begin()`
+  replaces it, and `cancel()` drops it. An attempt expires after 10 minutes.
+- **Finishing it:** `complete(code)` exchanges the code with the pending
+  attempt's verifier. It keeps the tokens **in memory only**. It drops the
+  pending attempt whatever the outcome, and a code that arrives with no
+  pending attempt is ignored.
+  - PKCE binds the code to this attempt's verifier, so a code from anywhere
+    else fails the exchange.
+- **Access tokens:** `accessToken()` returns a valid token. Within 60 seconds
+  of expiry it refreshes first.
+  - **Refreshes are serialized:** concurrent callers share the one in-flight
+    refresh, and no second refresh starts while one is pending.
+  - **When a refresh fails:** an error code, a network failure or a timeout
+    means the connection forgets everything and reports `disconnected`. It
+    never resends a refresh token.
 - **Disconnecting:** `disconnect()` forgets the tokens straight away, then
-  calls `/api/auth/app/revoke` as a best effort with a 5-second timeout.
+  posts to `/api/auth/logout` as a best effort with a 5-second timeout.
+- **Account email:** read from the exchange response or `/api/auth/me` if the
+  backend adds either (see the open requests), otherwise `null`.
 - **No secrets cross IPC.** The verifier, code and tokens never reach the
-  renderer or any log.
+  renderer, a URL other than the contract's, or any log.
 - **Not persisted in this slice:** after restarting the app, Connect is one
   click, because the web view's own sign-in persists in its partition. Storing
   the refresh token with Electron `safeStorage` is a later step.
 
 **Catching `/connect/done`:**
 
-- The Guardian Angel view's host reports navigations to
-  `https://kin-keepers.ai/connect/done`. It watches `will-navigate`,
-  `will-redirect` and `did-navigate-in-page`, the last one in case the site
-  ever uses a client-side push.
-- The address goes to `complete()` and the view returns to the template
-  start page.
-- Only the exact origin and path count. Anything else follows the existing
-  navigation rules.
+- The Guardian Angel view's host checks `will-navigate`, `will-redirect` and
+  `did-navigate-in-page` for exactly `https://kin-keepers.ai/connect/done`.
+  The last one is there in case the site ever uses a client-side push.
+- On a match it cancels the navigation where possible, passes the `code`
+  parameter to `complete()`, and returns the view to the template start page.
+  The code is never shown in the view's address or history.
+- Look-alike hosts and paths follow the existing navigation rules.
 
 **`MyGuardianAngels`** (`src/main/agentic/MyGuardianAngels.ts`) talks to the
 API with an app token:
@@ -250,26 +207,23 @@ API with an app token:
 - **Limits:** the same `download` limits as the catalog (10 s timeout over the
   whole body, a 2 MiB cap, `redirect: 'error'`, `credentials: 'omit'`).
 - **Listing:**
-  - Calls `GET /api/agno/agents` and keeps only angels whose `created_by`
-    equals the connected email, as defense in depth.
-  - Sanitizes each one into the safe `MyGuardianAngel` shape and caps the list
-    at 100.
+  - Calls `GET /api/agno/agents`, sanitizes each angel into the safe
+    `MyGuardianAngel` shape, and caps the list at 100.
+  - Ownership is enforced by the server for app tokens.
   - Avatars come from the catalog's already-downloaded template avatars (by
     `original_agent_id`), otherwise the default avatar. No new image downloads.
 - **Adding:** the template ID must be digits only. Calls
-  `POST /api/agno/agents/{id}/clone` and returns the sanitized
-  `cloned_agent`.
-- **Removing:**
-  - The ID must be digits only.
-  - First calls `GET /api/agno/agents/{id}` and checks that `created_by`
-    equals the connected email, then calls `DELETE`. The server enforces this
-    too; the app's check keeps it from deleting something unexpected.
-  - A 404 at either step counts as already removed.
-- **Expired access:** on a 401 it refreshes once and retries once. A second
-  401 means disconnected.
+  `POST /api/agno/agents/{id}/clone` and returns the sanitized `cloned_agent`.
+  A 404 means `not-found`.
+- **Removing:** the ID must be digits only. Calls `DELETE /api/agno/agents/{id}`.
+  - A 404 counts as already removed.
+  - A 403 means `not-yours`.
+- **Expired access:** on a 401 `invalid_token`, the app gets a fresh token
+  (through the serialized refresh) and retries once. A second 401 means
+  disconnected.
 - **Sanitizing:**
   - Text is trimmed and capped (name 120, description 600 characters).
-  - Safety rules use the existing humanizer from `catalogSanitizer.ts`.
+  - Safety rules use `humanizeRule` from `catalogSanitizer.ts`.
   - Dates must parse.
   - Unknown fields are dropped.
 
@@ -284,13 +238,16 @@ interface MyGuardianAngel {
   templateId: string | null    // original_agent_id
   templateName: string | null  // from the catalog, when known
   avatar: string | null        // data URL from the catalog
-  usesCloudAi: boolean         // execution_backend === 'openai'
+  usesCloudAi: boolean
   runCount: number
   lastRunAt: string | null     // ISO
   safetyRules: string[]
 }
 
-type AngelConnection = { status: 'disconnected' } | { status: 'connected'; email: string }
+type AngelConnection =
+  | { status: 'disconnected' }
+  | { status: 'connecting' }
+  | { status: 'connected'; email: string | null }
 
 type MyAngelsResult =
   | { status: 'ready'; angels: MyGuardianAngel[] }
@@ -307,14 +264,16 @@ type RemoveAngelResult = { status: 'removed' | 'disconnected' | 'not-yours' | 'u
 **IPC channels**, following the existing `agentic:` handlers:
 
 - `agentic:angel-connection`: returns the `AngelConnection`.
-- `agentic:connect`: calls `begin()` and opens the Guardian Angel view at the
-  connect URL. The renderer then shows that view (target kind `connect`).
+- `agentic:connect`: calls `begin()` and loads the connect URL into the
+  Guardian Angel view. The renderer shows that view with target kind
+  `connect`; the URL itself is built in main.
+- `agentic:cancel-connect`
 - `agentic:disconnect`
 - `agentic:my-angels`
 - `agentic:add-angel` with the template ID
 - `agentic:remove-angel` with the angel ID
-- event `agentic:angel-connection-changed`, sent after connect, disconnect or
-  expiry.
+- event `agentic:angel-connection-changed`, sent after connect, cancel,
+  disconnect or expiry.
 
 The preload sanitizes every argument and result as it does for the catalog.
 `DesktopAgenticClient` stays the only renderer module that uses the bridge.
@@ -327,11 +286,12 @@ uses that account's own connection.
 
 - **`GuardianAngelPage`:** a tab switcher (Templates / My Guardian Angels) kept
   in the URL as `?tab=mine`. It also gets the add button on template cards.
-- **`MyGuardianAngelsPanel`:** shows the connect state and the angel cards,
+- **`MyGuardianAngelsPanel`:** shows the connection state and the angel cards,
   and holds the remove confirmation. It uses the existing dialog pattern, so
   `useOverlayOpen` hides any partner view while the dialog is open.
-- **`PartnerViewPage`:** target kind `connect` (it shows the view only; the
-  URL is built in main). It also accepts `angel=<id>&page=edit|run`.
+- **`PartnerViewPage`:**
+  - target kind `connect`, with a Cancel button in its bar;
+  - also accepts `angel=<id>&page=edit|run`.
 - **Styles:** `agentic.css` gains the tab and card styles and keeps to the
   green Command mode tokens.
 - **Tests:** `fakeAgenticClient` gains the new methods.
@@ -341,28 +301,31 @@ uses that account's own connection.
 **Unit (vitest):**
 
 - **`KinKeepersConnection`:**
-  - the challenge matches the verifier (S256);
-  - `state` mismatch and missing code are ignored;
-  - the pending attempt is cleared after success, failure or cancel;
-  - refresh before expiry, and concurrent callers share one refresh;
-  - `invalid_grant` disconnects;
-  - `disconnect()` forgets the tokens before the revoke call finishes and
-    swallows revoke failures;
+  - the verifier length and alphabet, and the challenge matches S256 (with a
+    known vector);
+  - a code with no pending attempt is ignored;
+  - the attempt is dropped after success, failure, cancel or expiry;
+  - refresh runs before expiry, and concurrent callers cause exactly one
+    refresh request;
+  - a network failure during refresh disconnects without a second request;
+  - `invalid_grant`, `invalid_token` and `refresh_token_reuse` disconnect;
+  - `disconnect()` forgets the tokens before logout finishes and swallows
+    logout failures;
   - secrets never appear in thrown errors.
 - **`MyGuardianAngels`:**
-  - other users' agents are filtered out;
   - sanitizing and caps;
   - a non-digit ID is refused before any request;
-  - removal checks ownership first, and a mismatch means no DELETE;
-  - 404 means already removed;
+  - 404 and 403 on remove;
   - a 401 refreshes and retries once;
-  - timeouts and oversized bodies give `unavailable`.
-- **Navigation:** only `https://kin-keepers.ai/connect/done` triggers
-  `complete()`; look-alike hosts and paths don't.
+  - timeouts and oversized bodies give `unavailable`;
+  - the OpenAI model rule.
+- **Navigation:** only `https://kin-keepers.ai/connect/done` reaches
+  `complete()`, and look-alike hosts and paths don't. The navigation is
+  cancelled.
 - **IPC and preload:** the channel list; argument sanitizing; no token-shaped
   string in any result.
 - **Renderer:**
-  - the not-connected, connected, empty and error states;
+  - the not-connected, connecting, connected, empty and error states;
   - add while not connected starts connect;
   - double-click adds once;
   - the remove confirmation;
@@ -378,7 +341,7 @@ account the backend owner provides:
 - add from a template;
 - open Settings and Test;
 - remove;
-- disconnect, and check that the revoked token no longer works;
+- disconnect, and check that the revoked session no longer works;
 - Family Circle sign-out disconnects.
 
 No accounts are created on the live server without asking.
@@ -388,7 +351,5 @@ No accounts are created on the live server without asking.
 - Activating angels on family data, running angels from Family Circle and the
   privacy decision behind them.
 - Persisting the connection across restarts.
-- Signing in through the system browser (RFC 8252). The server side above
-  would not need to change for it; the app would only need a loopback
-  redirect.
+- Signing in through the system browser (RFC 8252).
 - Revoking website tokens on website logout.
