@@ -145,7 +145,7 @@ describe('PartnerViews', () => {
   it('opens the settings page of an own angel', async () => {
     const { manager, views } = setup()
     await manager.open('guardian-angel', { kind: 'angel', angelId: '12', page: 'edit' })
-    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/agents/12/edit')
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/care-builder/12/edit')
   })
 
   it('returns to the start page after a navigation Family Circle handled', async () => {

@@ -34,7 +34,10 @@ export function targetUrl(service: PartnerServiceKey, target: PartnerViewTarget)
   if (target.kind === 'care-builder') return 'https://kin-keepers.ai/care-builder'
   if (target.kind === 'angel') {
     if (!TEMPLATE_ID.test(target.angelId) || (target.page !== 'edit' && target.page !== 'run')) throw new Error('Invalid angel page')
-    return `https://kin-keepers.ai/agents/${target.angelId}/${target.page}`
+    // The website's settings page lives in Care Builder and its test page under the template pages.
+    return target.page === 'edit'
+      ? `https://kin-keepers.ai/care-builder/${target.angelId}/edit`
+      : `https://kin-keepers.ai/templates/${target.angelId}/run`
   }
   if (!TEMPLATE_ID.test(target.templateId)) throw new Error('Invalid template')
   return `https://kin-keepers.ai/templates/${target.templateId}`

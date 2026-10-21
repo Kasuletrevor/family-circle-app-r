@@ -89,8 +89,8 @@ The website is at `https://kin-keepers.ai`; the API is at
   escalation_triggers`.
 - **Clone response:** `{cloned_agent: <full agent>, ...}`.
 
-**Website pages opened in the secure view:** `/agents/{id}/edit` (settings) and
-`/agents/{id}/run` (testing).
+**Website pages opened in the secure view:** `/care-builder/{id}/edit` (settings) and
+`/templates/{id}/run` (testing).
 
 ### Open request to the backend (the app works without it)
 
@@ -141,7 +141,7 @@ Kin-Keepers.ai") with **Disconnect**, then one card per angel:
   a template;
 - runs and last run ("Never run" when 0);
 - **Safety rules** collapsed, with the same wording as the template cards;
-- **Settings** opens `/agents/{id}/edit` and **Test** opens `/agents/{id}/run`
+- **Settings** opens `/care-builder/{id}/edit` and **Test** opens `/templates/{id}/run`
   in the secure view;
 - **Remove** asks first: "Remove <name> from your Guardian Angels? This
   deletes it on Kin-Keepers.ai and can't be undone."
