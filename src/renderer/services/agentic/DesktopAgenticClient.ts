@@ -1,4 +1,5 @@
 import type {
+  AngelConnection,
   PartnerServiceKey,
   PartnerViewBounds,
   PartnerViewCommand,
@@ -17,6 +18,14 @@ const defaultOperations: AgenticDesktopOperations = {
   hideView: (input) => window.familyCircle.agentic.hideView(input),
   viewCommand: (input) => window.familyCircle.agentic.viewCommand(input),
   onViewState: (listener) => window.familyCircle.agentic.onViewState(listener),
+  getAngelConnection: () => window.familyCircle.agentic.getAngelConnection(),
+  connectAngels: () => window.familyCircle.agentic.connectAngels(),
+  cancelConnectAngels: () => window.familyCircle.agentic.cancelConnectAngels(),
+  disconnectAngels: () => window.familyCircle.agentic.disconnectAngels(),
+  getMyAngels: () => window.familyCircle.agentic.getMyAngels(),
+  addAngel: (input) => window.familyCircle.agentic.addAngel(input),
+  removeAngel: (input) => window.familyCircle.agentic.removeAngel(input),
+  onAngelConnection: (listener) => window.familyCircle.agentic.onAngelConnection(listener),
 }
 
 export class DesktopAgenticClient implements AgenticClient {
@@ -48,5 +57,37 @@ export class DesktopAgenticClient implements AgenticClient {
 
   onViewState(listener: (status: PartnerViewStatus) => void) {
     return this.operations.onViewState(listener)
+  }
+
+  getAngelConnection() {
+    return this.operations.getAngelConnection()
+  }
+
+  async connect() {
+    await this.operations.connectAngels()
+  }
+
+  async cancelConnect() {
+    await this.operations.cancelConnectAngels()
+  }
+
+  async disconnect() {
+    await this.operations.disconnectAngels()
+  }
+
+  getMyAngels() {
+    return this.operations.getMyAngels()
+  }
+
+  addAngel(templateId: string) {
+    return this.operations.addAngel({ templateId })
+  }
+
+  removeAngel(angelId: string) {
+    return this.operations.removeAngel({ angelId })
+  }
+
+  onAngelConnection(listener: (connection: AngelConnection) => void) {
+    return this.operations.onAngelConnection(listener)
   }
 }

@@ -1,10 +1,14 @@
 import type {
+  AddAngelResult,
+  AngelConnection,
   GuardianAngelCatalogResult,
+  MyAngelsResult,
   PartnerServiceKey,
   PartnerViewBounds,
   PartnerViewCommand,
   PartnerViewStatus,
   PartnerViewTarget,
+  RemoveAngelResult,
 } from './agentic'
 import type { StoryFieldKey, StoryLanguage } from './story'
 import type { StoryPublicState, StoryVersionSummary } from './storyPublic'
@@ -490,5 +494,13 @@ export interface DesktopApi {
     hideView(input: { service: PartnerServiceKey }): Promise<{ success: true }>
     viewCommand(input: { service: PartnerServiceKey; command: PartnerViewCommand }): Promise<{ success: true }>
     onViewState(listener: (status: PartnerViewStatus) => void): () => void
+    getAngelConnection(): Promise<AngelConnection>
+    connectAngels(): Promise<{ success: true }>
+    cancelConnectAngels(): Promise<{ success: true }>
+    disconnectAngels(): Promise<{ success: true }>
+    getMyAngels(): Promise<MyAngelsResult>
+    addAngel(input: { templateId: string }): Promise<AddAngelResult>
+    removeAngel(input: { angelId: string }): Promise<RemoveAngelResult>
+    onAngelConnection(listener: (connection: AngelConnection) => void): () => void
   }
 }

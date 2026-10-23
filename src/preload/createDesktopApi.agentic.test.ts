@@ -50,3 +50,57 @@ describe('desktop agentic API', () => {
     expect(listener).toHaveBeenCalledWith({ service: 'ubercare', state: 'failed', canGoBack: false })
   })
 })
+
+const angel = {
+  id: '5', name: 'Morning Check-in', description: '', templateId: '7', templateName: 'Elder Companion', avatar: null,
+  runCount: 0, lastRunAt: null, trustBoundaries: [], escalationTriggers: [],
+}
+
+describe('desktop My Guardian Angels API', () => {
+  it('uses fixed channels and sends only ids', async () => {
+    const invoke = vi.fn(async () => ({ success: true }))
+    const api = createDesktopApi(invoke)
+    await api.agentic.connectAngels()
+    expect(invoke).toHaveBeenLastCalledWith('agentic:connect')
+    await api.agentic.cancelConnectAngels()
+    expect(invoke).toHaveBeenLastCalledWith('agentic:cancel-connect')
+    await api.agentic.disconnectAngels()
+    expect(invoke).toHaveBeenLastCalledWith('agentic:disconnect')
+    await api.agentic.addAngel({ templateId: '7', url: 'https://evil.test' } as never)
+    expect(invoke).toHaveBeenLastCalledWith('agentic:add-angel', { templateId: '7' })
+    await api.agentic.removeAngel({ angelId: '5', force: true } as never)
+    expect(invoke).toHaveBeenLastCalledWith('agentic:remove-angel', { angelId: '5' })
+    await api.agentic.openView({ service: 'guardian-angel', target: { kind: 'angel', angelId: '5', page: 'run', url: 'x' } as never })
+    expect(invoke).toHaveBeenLastCalledWith('agentic:open-view', { service: 'guardian-angel', target: { kind: 'angel', angelId: '5', page: 'run' } })
+  })
+
+  it('passes only valid angels in the public shape', async () => {
+    const api = createDesktopApi(vi.fn(async (channel: string) => (
+      channel === 'agentic:my-angels'
+        ? { status: 'ready', angels: [{ ...angel, created_by: 'owner@example.test' }, { ...angel, id: '../5' }] }
+        : { status: 'added', angel: { ...angel, avatar: 'https://evil.test/a.png' } }
+    )))
+    await expect(api.agentic.getMyAngels()).resolves.toEqual({ status: 'ready', angels: [angel] })
+    await expect(api.agentic.addAngel({ templateId: '7' })).resolves.toEqual({ status: 'unavailable' })
+  })
+
+  it('maps unknown results to safe defaults', async () => {
+    const api = createDesktopApi(vi.fn(async () => ({ status: 'weird', token: 'secret' })))
+    await expect(api.agentic.getMyAngels()).resolves.toEqual({ status: 'unavailable' })
+    await expect(api.agentic.removeAngel({ angelId: '5' })).resolves.toEqual({ status: 'unavailable' })
+    await expect(api.agentic.getAngelConnection()).resolves.toEqual({ status: 'disconnected' })
+    const known = createDesktopApi(vi.fn(async () => ({ status: 'not-yours' })))
+    await expect(known.agentic.removeAngel({ angelId: '5' })).resolves.toEqual({ status: 'not-yours' })
+  })
+
+  it('passes connection events through a safe shape', () => {
+    let deliver!: (payload: unknown) => void
+    const subscribe = vi.fn((_channel: string, listener: (payload: unknown) => void) => { deliver = listener; return () => undefined })
+    const api = createDesktopApi(vi.fn(), subscribe as never)
+    const listener = vi.fn()
+    api.agentic.onAngelConnection(listener)
+    expect(subscribe).toHaveBeenCalledWith('agentic:angel-connection-changed', expect.any(Function))
+    deliver({ status: 'connected', email: 'pat@example.test', access_token: 'secret' })
+    expect(listener).toHaveBeenCalledWith({ status: 'connected', email: 'pat@example.test' })
+  })
+})

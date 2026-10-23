@@ -23,7 +23,7 @@ function openHttpsExternally(url: string) {
 /** Embeds sandboxed partner pages in the main window, with no bridge to Family Circle. */
 export function createElectronPartnerViewHost(window: BrowserWindow): PartnerViewsHost {
   return {
-    createView(service: PartnerServiceKey, partition, onStatus) {
+    createView(service: PartnerServiceKey, partition, onStatus, intercept) {
       lockDownSession(partition)
       const view = new WebContentsView({
         webPreferences: {
@@ -39,6 +39,10 @@ export function createElectronPartnerViewHost(window: BrowserWindow): PartnerVie
       let failed = false
 
       const guard = (event: { preventDefault(): void }, url: string) => {
+        if (intercept(url)) {
+          event.preventDefault()
+          return
+        }
         const decision = decideNavigation(service, url)
         if (decision === 'allow') return
         event.preventDefault()
@@ -47,6 +51,7 @@ export function createElectronPartnerViewHost(window: BrowserWindow): PartnerVie
       contents.on('will-navigate', (event) => guard(event, event.url))
       contents.on('will-redirect', (event) => guard(event, event.url))
       contents.setWindowOpenHandler(({ url }) => {
+        if (intercept(url)) return { action: 'deny' }
         const decision = decideNavigation(service, url)
         if (decision === 'allow') void contents.loadURL(url).catch(() => undefined)
         else if (decision === 'external') openHttpsExternally(url)
@@ -62,7 +67,18 @@ export function createElectronPartnerViewHost(window: BrowserWindow): PartnerVie
         onStatus('failed', canGoBack())
       })
       contents.on('did-stop-loading', () => { if (!failed) onStatus('ready', canGoBack()) })
-      contents.on('did-navigate-in-page', () => onStatus('ready', canGoBack()))
+      contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+        // A client-side route change cannot be stopped, but its address is still handled. It is
+        // already in the history, so once the view is back on its start page the history is
+        // cleared and Back can never return to it.
+        if (isMainFrame && intercept(url)) {
+          contents.once('did-stop-loading', () => {
+            if (!contents.isDestroyed()) contents.navigationHistory.clear()
+          })
+          return
+        }
+        onStatus('ready', canGoBack())
+      })
       contents.on('render-process-gone', () => onStatus('failed', false))
 
       view.setBounds({ x: 0, y: 0, width: 0, height: 0 })

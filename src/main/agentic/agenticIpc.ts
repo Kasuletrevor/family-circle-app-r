@@ -1,6 +1,8 @@
 import {
   isPartnerServiceKey,
+  publicAngel,
   publicTemplate,
+  safeAngelConnection,
   TEMPLATE_ID,
   type GuardianAngelCatalogResult,
   type PartnerServiceKey,
@@ -8,11 +10,19 @@ import {
   type PartnerViewTarget,
 } from '../../shared/agentic'
 import type { IpcHandleRegistrar } from '../auth/authIpc'
+import type { AngelsController } from './angelsController'
 import type { PartnerViews } from './PartnerViews'
 
 export interface AgenticIpcDeps {
   catalog: { get(options?: { refresh?: boolean }): Promise<GuardianAngelCatalogResult> }
   views: Pick<PartnerViews, 'open' | 'setBounds' | 'hide' | 'command'>
+  angels: Omit<AngelsController, 'interceptNavigation'>
+}
+
+function catalogIdOf(payload: unknown, field: 'templateId' | 'angelId'): string {
+  const value = recordOf(payload)[field]
+  if (typeof value !== 'string' || !TEMPLATE_ID.test(value)) throw new Error('Invalid Guardian Angel')
+  return value
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -31,6 +41,9 @@ function targetOf(value: unknown): PartnerViewTarget | undefined {
   if (raw.kind === 'start' || raw.kind === 'care-builder') return { kind: raw.kind }
   if (raw.kind === 'template' && typeof raw.templateId === 'string' && TEMPLATE_ID.test(raw.templateId)) {
     return { kind: 'template', templateId: raw.templateId }
+  }
+  if (raw.kind === 'angel' && typeof raw.angelId === 'string' && TEMPLATE_ID.test(raw.angelId) && (raw.page === 'edit' || raw.page === 'run')) {
+    return { kind: 'angel', angelId: raw.angelId, page: raw.page }
   }
   throw new Error('Invalid partner page')
 }
@@ -61,5 +74,30 @@ export function registerAgenticIpc(ipc: IpcHandleRegistrar, deps: AgenticIpcDeps
     if (!COMMANDS.has(command)) throw new Error('Unknown command')
     deps.views.command(serviceOf(payload), command as PartnerViewCommand)
     return { success: true }
+  })
+  ipc.handle('agentic:angel-connection', async () => safeAngelConnection(await deps.angels.connection()))
+  ipc.handle('agentic:connect', async () => {
+    await deps.angels.connect()
+    return { success: true }
+  })
+  ipc.handle('agentic:cancel-connect', () => {
+    deps.angels.cancelConnect()
+    return { success: true }
+  })
+  ipc.handle('agentic:disconnect', async () => {
+    await deps.angels.disconnect()
+    return { success: true }
+  })
+  ipc.handle('agentic:my-angels', async () => {
+    const result = await deps.angels.list()
+    return result.status === 'ready' ? { status: 'ready', angels: result.angels.map(publicAngel) } : { status: result.status }
+  })
+  ipc.handle('agentic:add-angel', async (_event, payload) => {
+    const result = await deps.angels.add(catalogIdOf(payload, 'templateId'))
+    return result.status === 'added' ? { status: 'added', angel: publicAngel(result.angel) } : { status: result.status }
+  })
+  ipc.handle('agentic:remove-angel', async (_event, payload) => {
+    const result = await deps.angels.remove(catalogIdOf(payload, 'angelId'))
+    return { status: result.status }
   })
 }

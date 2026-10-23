@@ -10,9 +10,15 @@ function setup(account: string | null = 'acct1') {
     partition: string
     handle: FakeHandle
     status: (state: PartnerViewState, canGoBack: boolean) => void
+    intercept: (url: string) => boolean
   }> = []
   const host = {
-    createView: vi.fn((service: PartnerServiceKey, partition: string, onStatus: (state: PartnerViewState, canGoBack: boolean) => void) => {
+    createView: vi.fn((
+      service: PartnerServiceKey,
+      partition: string,
+      onStatus: (state: PartnerViewState, canGoBack: boolean) => void,
+      intercept: (url: string) => boolean,
+    ) => {
       const handle: FakeHandle = {
         url: '',
         visible: false,
@@ -23,7 +29,7 @@ function setup(account: string | null = 'acct1') {
         currentUrl: () => handle.url,
         destroy: vi.fn(),
       }
-      views.push({ service, partition, handle, status: onStatus })
+      views.push({ service, partition, handle, status: onStatus, intercept })
       return handle
     }),
     openExternal: vi.fn(),
@@ -31,8 +37,9 @@ function setup(account: string | null = 'acct1') {
   }
   let key = account
   const emit = vi.fn()
-  const manager = new PartnerViews({ host, accountKey: async () => key, emit })
-  return { manager, host, views, emit, signInAs: (next: string | null) => { key = next } }
+  const interceptNavigation = vi.fn((_service: PartnerServiceKey, url: string) => url.startsWith('https://kin-keepers.ai/connect/done'))
+  const manager = new PartnerViews({ host, accountKey: async () => key, emit, interceptNavigation })
+  return { manager, host, views, emit, interceptNavigation, signInAs: (next: string | null) => { key = next } }
 }
 
 describe('PartnerViews', () => {
@@ -123,5 +130,33 @@ describe('PartnerViews', () => {
     expect(views[0]!.handle.visible).toBe(false)
     manager.destroyAll()
     expect(views[0]!.handle.destroy).toHaveBeenCalled()
+  })
+
+  it('opens a page built in the main process, on the service hosts only', async () => {
+    const { manager, views, host } = setup()
+    await manager.openPage('guardian-angel', 'https://kin-keepers.ai/connect?app=family-circle&challenge=abc')
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/connect?app=family-circle&challenge=abc')
+    expect(views[0]!.handle.visible).toBe(true)
+    await expect(manager.openPage('guardian-angel', 'https://evil.test/connect')).rejects.toThrow()
+    await expect(manager.openPage('ubercare', 'https://kin-keepers.ai/connect')).rejects.toThrow()
+    expect(host.createView).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the settings page of an own angel', async () => {
+    const { manager, views } = setup()
+    await manager.open('guardian-angel', { kind: 'angel', angelId: '12', page: 'edit' })
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/care-builder/12/edit')
+  })
+
+  it('returns to the start page after a navigation Family Circle handled', async () => {
+    const { manager, views, interceptNavigation } = setup()
+    await manager.openPage('guardian-angel', 'https://kin-keepers.ai/connect?app=family-circle&challenge=abc')
+    expect(views[0]!.intercept('https://kin-keepers.ai/templates/7')).toBe(false)
+    await Promise.resolve()
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/connect?app=family-circle&challenge=abc')
+    expect(views[0]!.intercept('https://kin-keepers.ai/connect/done?code=abc')).toBe(true)
+    expect(interceptNavigation).toHaveBeenLastCalledWith('guardian-angel', 'https://kin-keepers.ai/connect/done?code=abc')
+    await Promise.resolve()
+    expect(views[0]!.handle.url).toBe('https://kin-keepers.ai/')
   })
 })
