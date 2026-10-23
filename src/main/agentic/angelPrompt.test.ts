@@ -1,0 +1,57 @@
+import { describe, expect, it } from 'vitest'
+import type { AngelChatMessage } from '../../shared/agenticChat'
+import type { AngelRecipe } from './angelRecipe'
+import { buildAngelPrompt } from './angelPrompt'
+
+const recipe = (tools: string[]): AngelRecipe => ({
+  angelId: '5', name: 'Morning Check-in', instructions: 'Be warm and patient.', tools,
+  trustBoundaries: ['No medical advice'], escalationKeys: [],
+})
+const turn = (id: number, role: 'person' | 'angel', text: string): AngelChatMessage => ({
+  id, role, text, sources: [], escalation: null, createdAt: '2026-10-23T10:00:00.000Z',
+})
+
+describe('buildAngelPrompt', () => {
+  it("puts Family Circle's rules before the angel's instructions", () => {
+    const [system] = buildAngelPrompt({ recipe: recipe([]), firstName: null, stories: [], history: [], message: 'Hi' })
+    expect(system!.role).toBe('system')
+    expect(system!.content.indexOf('never invent family details')).toBeLessThan(system!.content.indexOf('Be warm and patient.'))
+    expect(system!.content).toContain('No medical advice')
+    expect(system!.content).not.toContain('You may write drafts')
+  })
+
+  it('adds the first name, stories and history only when the angel has those tools', () => {
+    const input = {
+      firstName: 'Pat',
+      stories: [{ label: 'My Story › Childhood', text: 'We lived by the lake.' }],
+      history: [turn(1, 'person', 'Good morning'), turn(2, 'angel', 'Good morning, Pat')],
+      message: 'Tell me a memory',
+    }
+    const without = buildAngelPrompt({ ...input, recipe: recipe([]) })
+    expect(JSON.stringify(without)).not.toMatch(/Pat|lake|Good morning/)
+    const withTools = buildAngelPrompt({ ...input, recipe: recipe(['get_elder_profile', 'get_family_content', 'get_recent_interactions']) })
+    expect(withTools[0]!.content).toContain('You are talking with Pat.')
+    expect(withTools.map((item) => item.role)).toEqual(['system', 'user', 'assistant', 'user'])
+    expect(withTools.at(-1)!.content).toContain('We lived by the lake.')
+    expect(withTools.at(-1)!.content).toContain('Tell me a memory')
+  })
+
+  it('allows drafts when the angel has a messaging tool', () => {
+    const [system] = buildAngelPrompt({ recipe: recipe(['draft_email']), firstName: null, stories: [], history: [], message: 'Hi' })
+    expect(system!.content).toContain('You may write drafts')
+  })
+
+  it('keeps everything within budget', () => {
+    const long = 'x'.repeat(5000)
+    const prompt = buildAngelPrompt({
+      recipe: { ...recipe(['get_family_content', 'get_recent_interactions']), instructions: long.slice(0, 4000) },
+      firstName: 'Pat',
+      stories: [1, 2, 3, 4].map((index) => ({ label: `S${index}`, text: long })),
+      history: Array.from({ length: 10 }, (_, index) => turn(index, index % 2 ? 'angel' : 'person', long)),
+      message: long,
+    })
+    const total = prompt.reduce((sum, item) => sum + item.content.length, 0)
+    expect(total).toBeLessThan(12_800)
+    expect(prompt.at(-1)!.content.match(/\[Memory \d:/g)).toHaveLength(3)
+  })
+})
