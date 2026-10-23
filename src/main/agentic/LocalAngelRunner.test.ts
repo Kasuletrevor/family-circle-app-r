@@ -170,3 +170,23 @@ describe('LocalAngelRunner offline and clearing', () => {
     expect(history.list(1, '5')).toEqual([])
   })
 })
+
+describe('LocalAngelRunner repeated replies', () => {
+  it('asks once more without history when the reply repeats an earlier one', async () => {
+    const chat = vi.fn()
+      .mockResolvedValueOnce('Good morning, Pat.')
+      .mockResolvedValueOnce('Good  morning, pat!')
+      .mockResolvedValueOnce('Your father took you fishing at dawn.')
+    const { runner } = setup({
+      angels: { list: async () => ({ status: 'ready', angels: [angel] }), recipe: async () => ({ status: 'ready', recipe: { ...recipe, tools: [...recipe.tools, 'get_recent_interactions'] } }) },
+      qwen: { chat },
+    })
+    await runner.open('5')
+    await runner.send('5', 'Good morning')
+    const result = await runner.send('5', 'What did my father do on Sundays?')
+    expect(result).toMatchObject({ status: 'replied', reply: { text: 'Your father took you fishing at dawn.' } })
+    expect(chat).toHaveBeenCalledTimes(3)
+    expect(JSON.stringify(chat.mock.calls[1]![0])).toContain('Good morning, Pat.')
+    expect(JSON.stringify(chat.mock.calls[2]![0])).not.toContain('Good morning, Pat.')
+  })
+})

@@ -17,7 +17,12 @@ import type { RecipeResult } from './MyGuardianAngels'
 const REPLY_TOKENS = 256
 const HISTORY_FOR_PROMPT = 6
 
-type StoryMatch = { sections: StorySection[]; cite(answer: string): AngelChatSource[] }
+/** A reply's words only, so "Good  morning, pat!" and "Good morning, Pat." count as the same. */
+function sameWords(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+}
+
+type StoryMatch ={ sections: StorySection[]; cite(answer: string): AngelChatSource[] }
 
 export interface LocalAngelRunnerDeps {
   session: { restore(): Promise<{ id: number; name: string | null } | null> }
@@ -109,16 +114,20 @@ export class LocalAngelRunner {
         // Without search the angel still answers, just without memories.
         found = await this.deps.stories.findStorySections(user.id, text).catch(() => found)
       }
-      const prompt = buildAngelPrompt({
+      const history = this.deps.history.recent(user.id, angelId, HISTORY_FOR_PROMPT)
+      const promptWith = (turns: typeof history) => buildAngelPrompt({
         recipe,
         firstName: user.name?.trim().split(/\s+/)[0] || null,
         stories: found.sections,
-        history: this.deps.history.recent(user.id, angelId, HISTORY_FOR_PROMPT),
+        history: turns,
         message: text,
       })
+      const earlierReplies = new Set(history.filter((item) => item.role === 'angel').map((item) => sameWords(item.text)))
       let answer: string
       try {
-        answer = await this.deps.qwen.chat(prompt, REPLY_TOKENS)
+        answer = await this.deps.qwen.chat(promptWith(history), REPLY_TOKENS)
+        // The small model sometimes copies its last reply word for word; once more without history.
+        if (earlierReplies.has(sameWords(answer))) answer = await this.deps.qwen.chat(promptWith([]), REPLY_TOKENS)
       } catch {
         return { status: 'failed' }
       }
