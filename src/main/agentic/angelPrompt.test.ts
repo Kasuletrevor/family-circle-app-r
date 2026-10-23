@@ -55,3 +55,35 @@ describe('buildAngelPrompt', () => {
     expect(prompt.at(-1)!.content.match(/\[Memory \d:/g)).toHaveLength(3)
   })
 })
+
+describe('buildAngelPrompt for the small local model', () => {
+  const withSections = {
+    ...recipe(['get_elder_profile']),
+    instructions: [
+      'You are a warm companion.',
+      '## Tone',
+      '- Be patient',
+      '## Tool Usage',
+      '- Use at most one read tool',
+      '## Sending Email (Safety)',
+      '- Use draft_email first',
+      '## Escalation Triggers (Alert caregivers immediately)',
+      '- Any mention of self-harm',
+    ].join('\n'),
+  }
+
+  it('drops the instruction sections Family Circle handles itself', () => {
+    const [system] = buildAngelPrompt({ recipe: withSections, firstName: 'Pat', stories: [], history: [], message: 'Hi' })
+    expect(system!.content).toContain('You are a warm companion.')
+    expect(system!.content).toContain('- Be patient')
+    expect(system!.content).not.toMatch(/read tool|draft_email|Alert caregivers/)
+  })
+
+  it('asks for an answer first, grounded in the memories, and a written message when asked', () => {
+    const [system] = buildAngelPrompt({ recipe: withSections, firstName: 'Pat', stories: [], history: [], message: 'Hi' })
+    expect(system!.content).toContain('talking with Pat')
+    expect(system!.content).toContain('Answer what the person said or asked first.')
+    expect(system!.content).toContain('use their details in your answer')
+    expect(system!.content).toContain('write the short message itself')
+  })
+})

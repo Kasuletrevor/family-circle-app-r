@@ -500,3 +500,14 @@ describe('findStorySections', () => {
     await expect(down.findStorySections(7, 'Hi')).rejects.toMatchObject({ code: 'private-ai-unavailable' })
   })
 })
+
+describe('findStorySections citations', () => {
+  it('cites nothing when the reply did not use any memory', async () => {
+    const service = new PrivateArchiveQueryService(deps({
+      storyChunks: { listQueryChunks: vi.fn(async () => [storyChunk(2, 'childhood', 'Life Story', 'Where I grew up', 'We lived by Lake Victoria in Entebbe.', [1, 0])]) },
+    }))
+    const found = await service.findStorySections(7, 'Tell me about home')
+    expect(found.sections).toHaveLength(1)
+    expect(found.cite('How are you feeling today?')).toEqual([])
+  })
+})

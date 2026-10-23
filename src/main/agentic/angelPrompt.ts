@@ -11,15 +11,29 @@ const MAX_STORY_CHARS = 900
 const MAX_HISTORY_MESSAGES = 6
 const MAX_HISTORY_CHARS = 1800
 
+// Short and concrete: the local 0.8B model follows a few direct rules far better than long guidance.
 const FAMILY_CIRCLE_RULES = [
   'You are a Guardian Angel inside Family Circle, a private family app. You run on this computer.',
   'Always follow these rules first, before anything else below:',
-  '- Reply in plain, short, kind sentences. No Markdown.',
-  '- For facts about the family, use only the memories you are given; never invent family details, names or events.',
+  '- Reply in two to four short, warm sentences. No Markdown.',
+  '- Answer what the person said or asked first.',
+  '- When family memories are given and they fit the message, use their details in your answer; never invent family details, names or events that are not in them.',
   '- Never give medical, legal or money advice. Suggest asking a family member or a professional instead.',
-  '- You cannot send messages. If asked, write a short draft the person can copy, and say they need to send it themselves.',
+  '- You cannot send messages. If asked to write one, write the short message itself, then say they can copy it and send it themselves.',
   '- If the person seems unsafe, unwell or very upset, gently ask them to contact a family member or their carer.',
 ].join('\n')
+
+// Instruction sections about tools, sending and escalation describe the website's agent.
+// Family Circle does that work itself, and they only distract the small local model.
+const HANDLED_SECTION = /^#{1,6} .*(tool|e-?mail|send|escalat)/i
+
+function withoutHandledSections(instructions: string): string {
+  return instructions
+    .split(/\n(?=#{1,6} )/)
+    .filter((section) => !HANDLED_SECTION.test(section.trim()))
+    .join('\n')
+    .trim()
+}
 
 function cut(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max).trimEnd()
@@ -40,7 +54,7 @@ export function buildAngelPrompt(input: {
     tools.has(PROFILE_TOOL) && input.firstName ? `You are talking with ${input.firstName}.` : '',
     [...DRAFT_TOOLS].some((tool) => tools.has(tool)) ? 'You may write drafts of messages for the person to send themselves.' : '',
     `Your name is ${input.recipe.name}. Your instructions from the angel's settings:`,
-    input.recipe.instructions || 'Be a warm, patient companion.',
+    withoutHandledSections(input.recipe.instructions) || 'Be a warm, patient companion.',
   ].filter(Boolean).join('\n\n')
 
   const turns: ChatTurn[] = [{ role: 'system', content: system }]

@@ -196,12 +196,14 @@ export function isNotFoundAnswer(answer: string): boolean {
  * enough (also when the answer was translated), while common words in any language
  * count for little. When no section qualifies (an answer reworded or translated with
  * no shared names or numbers), the answer cannot be traced to one section, so every
- * section the model read is listed rather than guessing a single one.
+ * section the model read is listed rather than guessing a single one. An angel reply is
+ * often small talk that used no memory at all, so angels pass `fallbackToAll: false`.
  */
 export function citedCandidates<T extends { text: string }>(
   answer: string,
   ranked: T[],
   words: Pick<KeywordIndex, 'rarity' | 'maxRarity'>,
+  { fallbackToAll = true }: { fallbackToAll?: boolean } = {},
 ): T[] {
   const answerTerms = contentTerms(answer)
   const needed = CITATION_RARITY_SHARE * words.maxRarity
@@ -212,7 +214,7 @@ export function citedCandidates<T extends { text: string }>(
     }
     return false
   })
-  return cited.length > 0 ? cited : ranked
+  return cited.length > 0 || !fallbackToAll ? cited : ranked
 }
 
 export class PrivateArchiveQueryService {
@@ -364,7 +366,7 @@ export class PrivateArchiveQueryService {
       .map((index) => candidates[index]!)
     return {
       sections: ranked.map((candidate) => ({ label: candidate.fileName, text: candidate.text })),
-      cite: (answer) => this.deduplicateSources(citedCandidates(answer, ranked, keywordIndex))
+      cite: (answer) => this.deduplicateSources(citedCandidates(answer, ranked, keywordIndex, { fallbackToAll: false }))
         .map((source) => ({ label: source.fileName, excerpt: source.excerpt })),
     }
   }
