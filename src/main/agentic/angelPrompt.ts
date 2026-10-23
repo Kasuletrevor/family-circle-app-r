@@ -35,6 +35,22 @@ function withoutHandledSections(instructions: string): string {
     .trim()
 }
 
+/** The local runtime's 4,096-token window, less the 256-token reply and a margin for the chat template. */
+export const ANGEL_PROMPT_TOKENS = 4096 - 256 - 200
+const TOKENS_PER_MESSAGE = 8
+// Chinese, Japanese and Korean text: about one token per character on Qwen.
+const WIDE_CHARACTER = /[ᄀ-ᇿ⺀-鿿가-힯豈-﫿＀-￯]/gu
+
+/** A cautious token estimate: a token per CJK character, and one per three other characters. */
+export function estimateTokens(text: string): number {
+  const wide = text.match(WIDE_CHARACTER)?.length ?? 0
+  return wide + Math.ceil((text.length - wide) / 3)
+}
+
+function promptTokens(turns: ChatTurn[]): number {
+  return turns.reduce((sum, turn) => sum + estimateTokens(turn.content) + TOKENS_PER_MESSAGE, 0)
+}
+
 function cut(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max).trimEnd()
 }
@@ -48,38 +64,51 @@ export function buildAngelPrompt(input: {
   message: string
 }): ChatTurn[] {
   const tools = new Set(input.recipe.tools)
-  const system = [
+  const head = [
     FAMILY_CIRCLE_RULES,
     input.recipe.trustBoundaries.length ? `Safety rules for this angel: ${input.recipe.trustBoundaries.join('; ')}.` : '',
     tools.has(PROFILE_TOOL) && input.firstName ? `You are talking with ${input.firstName}.` : '',
     [...DRAFT_TOOLS].some((tool) => tools.has(tool)) ? 'You may write drafts of messages for the person to send themselves.' : '',
     `Your name is ${input.recipe.name}. Your instructions from the angel's settings:`,
-    withoutHandledSections(input.recipe.instructions) || 'Be a warm, patient companion.',
   ].filter(Boolean).join('\n\n')
+  let instructions = withoutHandledSections(input.recipe.instructions) || 'Be a warm, patient companion.'
 
-  const turns: ChatTurn[] = [{ role: 'system', content: system }]
-
+  const history: ChatTurn[] = []
   if (tools.has(HISTORY_TOOL)) {
     // Newest messages first, until the history budget runs out.
     let used = 0
-    const kept: ChatTurn[] = []
     for (const item of input.history.slice(-MAX_HISTORY_MESSAGES).reverse()) {
       const room = MAX_HISTORY_CHARS - used
       if (room <= 0) break
       const content = cut(item.text, room)
       used += content.length
-      kept.unshift({ role: item.role === 'person' ? 'user' : 'assistant', content })
+      history.unshift({ role: item.role === 'person' ? 'user' : 'assistant', content })
     }
-    turns.push(...kept)
   }
 
   const memories = tools.has(STORY_TOOL)
     ? input.stories.slice(0, MAX_STORIES).map((story, index) => `[Memory ${index + 1}: ${story.label}]\n${cut(story.text, MAX_STORY_CHARS)}`)
     : []
   const message = cut(input.message.trim(), MAX_ANGEL_MESSAGE)
-  turns.push({
-    role: 'user',
-    content: memories.length ? `Family memories you may use:\n${memories.join('\n\n')}\n\nMessage:\n${message}` : message,
-  })
+
+  const assemble = (): ChatTurn[] => [
+    { role: 'system', content: `${head}\n\n${instructions}` },
+    ...history,
+    { role: 'user', content: memories.length ? `Family memories you may use:\n${memories.join('\n\n')}\n\nMessage:\n${message}` : message },
+  ]
+  // Character limits alone do not hold for Chinese or Japanese, so the whole request is fitted in
+  // tokens: the oldest history goes first, then the last memory, and only then the instructions.
+  let turns = assemble()
+  while (promptTokens(turns) > ANGEL_PROMPT_TOKENS) {
+    if (history.length) history.shift()
+    else if (memories.length) memories.pop()
+    else {
+      const over = promptTokens(turns) - ANGEL_PROMPT_TOKENS
+      const shorter = cut(instructions, Math.max(0, instructions.length - Math.max(over, 50)))
+      if (shorter === instructions) break
+      instructions = shorter
+    }
+    turns = assemble()
+  }
   return turns
 }

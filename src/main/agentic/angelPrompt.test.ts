@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AngelChatMessage } from '../../shared/agenticChat'
 import type { AngelRecipe } from './angelRecipe'
-import { buildAngelPrompt } from './angelPrompt'
+import { ANGEL_PROMPT_TOKENS, buildAngelPrompt, estimateTokens } from './angelPrompt'
 
 const recipe = (tools: string[]): AngelRecipe => ({
   angelId: '5', name: 'Morning Check-in', instructions: 'Be warm and patient.', tools,
@@ -85,5 +85,42 @@ describe('buildAngelPrompt for the small local model', () => {
     expect(system!.content).toContain('Answer what the person said or asked first.')
     expect(system!.content).toContain('use their details in your answer')
     expect(system!.content).toContain('write the short message itself')
+  })
+})
+
+describe('buildAngelPrompt token budget', () => {
+  const tools = ['get_family_content', 'get_recent_interactions']
+  const han = (count: number) => '我'.repeat(count)
+
+  it('estimates CJK text as a token per character and other text more cheaply', () => {
+    expect(estimateTokens(han(300))).toBe(300)
+    expect(estimateTokens('a'.repeat(300))).toBe(100)
+  })
+
+  it('keeps a long Chinese conversation inside the context window, dropping the oldest history first', () => {
+    const prompt = buildAngelPrompt({
+      recipe: { ...recipe(tools), instructions: han(4000) },
+      firstName: null,
+      stories: [1, 2, 3].map((index) => ({ label: `S${index}`, text: han(900) })),
+      history: Array.from({ length: 6 }, (_, index) => turn(index, index % 2 ? 'angel' : 'person', `${index}${han(300)}`)),
+      message: han(1000),
+    })
+    const total = prompt.reduce((sum, item) => sum + estimateTokens(item.content) + 8, 0)
+    expect(total).toBeLessThanOrEqual(ANGEL_PROMPT_TOKENS)
+    expect(prompt.at(-1)!.content).toContain(han(1000))
+    const kept = prompt.slice(1, -1).map((item) => item.content[0])
+    expect(kept).not.toContain('0')
+  })
+
+  it('leaves an English conversation untouched', () => {
+    const input = {
+      recipe: recipe(tools), firstName: null,
+      stories: [{ label: 'S1', text: 'We lived by the lake.' }],
+      history: [turn(1, 'person', 'Hello'), turn(2, 'angel', 'Hi there')],
+      message: 'Tell me a memory',
+    }
+    const prompt = buildAngelPrompt(input)
+    expect(prompt.map((item) => item.role)).toEqual(['system', 'user', 'assistant', 'user'])
+    expect(prompt.at(-1)!.content).toContain('We lived by the lake.')
   })
 })
