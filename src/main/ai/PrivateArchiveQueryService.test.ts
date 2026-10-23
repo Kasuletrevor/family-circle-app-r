@@ -511,3 +511,20 @@ describe('findStorySections citations', () => {
     expect(found.cite('How are you feeling today?')).toEqual([])
   })
 })
+
+describe('findStorySections with one memory', () => {
+  const only = [storyChunk(2, 'childhood', 'Life Story', 'Where I grew up', 'I grew up in Entebbe by Lake Victoria. My father took us fishing at dawn and my mother sold mandazi.', [1, 0])]
+
+  it('cites the memory when the reply uses two of its words the person did not say', async () => {
+    const service = new PrivateArchiveQueryService(deps({ storyChunks: { listQueryChunks: vi.fn(async () => only) } }))
+    const found = await service.findStorySections(7, 'Tell me about where I grew up')
+    expect(found.cite('I am thinking of the fishing and mandazi stories from your childhood.')).toHaveLength(1)
+  })
+
+  it('does not count words echoed from the message, or a single shared word', async () => {
+    const service = new PrivateArchiveQueryService(deps({ storyChunks: { listQueryChunks: vi.fn(async () => only) } }))
+    const found = await service.findStorySections(7, 'Tell me about where I grew up')
+    expect(found.cite('You want to know where you grew up. How are you feeling?')).toEqual([])
+    expect(found.cite('Fishing sounds lovely. How are you today?')).toEqual([])
+  })
+})

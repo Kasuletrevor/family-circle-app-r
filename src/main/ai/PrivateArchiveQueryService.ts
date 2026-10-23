@@ -366,8 +366,16 @@ export class PrivateArchiveQueryService {
       .map((index) => candidates[index]!)
     return {
       sections: ranked.map((candidate) => ({ label: candidate.fileName, text: candidate.text })),
-      cite: (answer) => this.deduplicateSources(citedCandidates(answer, ranked, keywordIndex, { fallbackToAll: false }))
-        .map((source) => ({ label: source.fileName, excerpt: source.excerpt })),
+      cite: (answer) => {
+        const byRarity = new Set(citedCandidates(answer, ranked, keywordIndex, { fallbackToAll: false }))
+        // Rarity says nothing when one section holds a word (its weight is 0), so a section also
+        // counts when the reply shares two of its words that the person did not say themselves.
+        const asked = contentTerms(query)
+        const answerTerms = contentTerms(answer)
+        const used = ranked.filter((candidate) => byRarity.has(candidate) || [...contentTerms(candidate.text)]
+          .filter((term) => answerTerms.has(term) && !asked.has(term)).length >= 2)
+        return this.deduplicateSources(used).map((source) => ({ label: source.fileName, excerpt: source.excerpt }))
+      },
     }
   }
 
