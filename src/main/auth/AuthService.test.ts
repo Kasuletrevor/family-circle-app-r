@@ -151,6 +151,7 @@ describe('AuthService', () => {
     await expect(service.getState()).resolves.toMatchObject({ user: { name: 'Trevor Kasule' } })
   })
 
+  // Several real password hashes: about 4 s alone and more while the whole suite runs.
   it('updates an authenticated profile and changes password only after verifying the current password', async () => {
     const { service, users } = createHarness()
     const state = await service.register({
@@ -188,7 +189,7 @@ describe('AuthService', () => {
       status: 'authenticated',
       user: { name: 'Trevor Kasule' },
     })
-  })
+  }, 20_000)
 
   it('invalidates outstanding recovery codes when the password changes', async () => {
     const { service, users, recovery } = createHarness()
