@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LogIn, Play, RefreshCw, Settings, Trash2 } from 'lucide-react'
+import { LogIn, MessageCircle, Play, RefreshCw, Settings, Trash2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { AngelConnection, MyAngelsResult, MyGuardianAngel } from '../../../shared/agentic'
+import type { SavedAngel } from '../../../shared/agenticChat'
 import { useAppServices } from '../../app/services'
-import { addResultMessage, CONNECTION_ENDED, GUARDIAN_ANGEL_VIEW, UNREACHABLE } from './angelMessages'
+import { addResultMessage, ANGEL_CHAT, CONNECTION_ENDED, GUARDIAN_ANGEL_VIEW, UNREACHABLE } from './angelMessages'
 import { CardAvatar, SafetyRules } from './cardParts'
 
 type ListState = { status: 'loading' } | MyAngelsResult
@@ -16,9 +17,11 @@ function runsText(angel: MyGuardianAngel): string {
   return `${runs}, last on ${last}`
 }
 
-function AngelCard({ angel, onOpen, onRemove }: {
+function AngelCard({ angel, onOpen, onTalk, onRemove }: {
   angel: MyGuardianAngel
   onOpen(page: 'edit' | 'run'): void
+  /** Only for angels Family Circle can run on this computer. */
+  onTalk?: () => void
   onRemove(): void
 }) {
   const headingId = `ga-angel-${angel.id}`
@@ -35,6 +38,11 @@ function AngelCard({ angel, onOpen, onRemove }: {
       <p className="ga-card__meta">{runsText(angel)}</p>
       <SafetyRules trustBoundaries={angel.trustBoundaries} escalationTriggers={angel.escalationTriggers} />
       <div className="ga-card__actions">
+        {onTalk ? (
+          <button type="button" className="agentic-button agentic-button--primary" onClick={onTalk}>
+            <MessageCircle size={16} aria-hidden="true" /> Talk
+          </button>
+        ) : null}
         <button type="button" className="agentic-button" onClick={() => onOpen('edit')}>
           <Settings size={16} aria-hidden="true" /> Settings
         </button>
@@ -46,6 +54,24 @@ function AngelCard({ angel, onOpen, onRemove }: {
         </button>
       </div>
     </article>
+  )
+}
+
+/** Angels with a copy saved on this computer, so their conversations open without Kin-Keepers.ai. */
+function SavedAngels({ angels, onTalk }: { angels: SavedAngel[]; onTalk(angelId: string): void }) {
+  if (angels.length === 0) return null
+  return (
+    <section className="ga-saved" aria-labelledby="ga-saved-title">
+      <h2 id="ga-saved-title">On this computer</h2>
+      <p className="ga-page__note">These angels are saved here, so you can talk with them without a connection.</p>
+      <div className="ga-saved__list">
+        {angels.map((angel) => (
+          <button key={angel.id} type="button" className="agentic-button" aria-label={`Talk with ${angel.name}`} onClick={() => onTalk(angel.id)}>
+            <MessageCircle size={16} aria-hidden="true" /> {angel.name}
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -86,7 +112,19 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
   const latestLoad = useRef(0)
   const connectingRef = useRef(false)
   const [connecting, setConnecting] = useState(false)
+  const [saved, setSaved] = useState<SavedAngel[]>([])
   const connected = connection?.status === 'connected'
+  const talk = (angelId: string) => navigate(`${ANGEL_CHAT}?angel=${encodeURIComponent(angelId)}`)
+
+  // Read again when the connection changes: opening an angel online saves its copy here.
+  useEffect(() => {
+    if (!agentic) return undefined
+    let active = true
+    void agentic.getSavedAngels()
+      .then((value) => { if (active) setSaved(value) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [agentic, connection])
 
   const load = useCallback(async () => {
     if (!agentic) return
@@ -193,6 +231,7 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
           <LogIn size={16} aria-hidden="true" />
           {connection.status === 'disconnected' && connection.problem === 'connect-failed' ? 'Try again' : 'Connect Kin-Keepers.ai'}
         </button>
+        <SavedAngels angels={saved} onTalk={talk} />
       </div>
     )
   }
@@ -213,6 +252,7 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
           </button>
         </div>
       ) : null}
+      {list.status === 'unavailable' ? <SavedAngels angels={saved} onTalk={talk} /> : null}
       {list.status === 'ready' && list.angels.length === 0 ? (
         <div className="ga-page__note">
           <p>You have no Guardian Angels yet.</p>
@@ -226,6 +266,7 @@ export function MyGuardianAngelsPanel({ onBrowse }: { onBrowse(): void }) {
               key={angel.id}
               angel={angel}
               onOpen={(page) => navigate(`${GUARDIAN_ANGEL_VIEW}?angel=${encodeURIComponent(angel.id)}&page=${page}`)}
+              onTalk={angel.runsHere ? () => talk(angel.id) : undefined}
               onRemove={() => setConfirming(angel)}
             />
           ))}

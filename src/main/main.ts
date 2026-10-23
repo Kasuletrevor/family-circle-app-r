@@ -6,7 +6,9 @@ import { createAngelsController, type AngelsController } from './agentic/angelsC
 import { registerAgenticIpc } from './agentic/agenticIpc'
 import { createElectronPartnerViewHost } from './agentic/electronPartnerViewHost'
 import { GuardianAngelCatalog } from './agentic/GuardianAngelCatalog'
+import { AngelHistoryRepository } from './agentic/AngelHistoryRepository'
 import { KinKeepersConnection } from './agentic/KinKeepersConnection'
+import { LocalAngelRunner } from './agentic/LocalAngelRunner'
 import { MyGuardianAngels } from './agentic/MyGuardianAngels'
 import { PartnerViews } from './agentic/PartnerViews'
 import { AiRuntimeManager } from './ai/AiRuntimeManager'
@@ -83,6 +85,10 @@ interface AppServices extends StoryServices {
   vaultIndexService: VaultIndexService
   sessions: SessionStore
   mutationLock: AsyncMutationLock
+  privateArchiveQueryService: PrivateArchiveQueryService
+  qwen: QwenClient
+  angelHistory: AngelHistoryRepository
+  interactiveAiGate: InteractiveAiGate
 }
 
 function registerDesktopIpc(services: AppServices) {
@@ -133,25 +139,42 @@ function registerDesktopIpc(services: AppServices) {
     fetch: (input, init) => fetch(input, init),
     cachePath: join(app.getPath('userData'), 'agentic', 'catalog.json'),
   })
-  angels = createAngelsController({
+  const myAngels = new MyGuardianAngels({
+    fetch: (input, init) => fetch(input, init),
     connection: angelConnection,
-    angels: new MyGuardianAngels({
-      fetch: (input, init) => fetch(input, init),
-      connection: angelConnection,
-      async templates() {
-        const result = await catalog.get()
-        return result.status === 'ready' ? result.templates : []
-      },
-    }),
+    async templates() {
+      const result = await catalog.get()
+      return result.status === 'ready' ? result.templates : []
+    },
+  })
+  const controller = createAngelsController({
+    connection: angelConnection,
+    angels: myAngels,
     async openPage(service, url) {
       if (!partnerViews) throw new Error('The Family Circle window is not ready')
       await partnerViews.openPage(service, url)
     },
     accountKey: () => agenticAccountKey(services.sessions),
   })
+  angels = controller
+  // Angel conversations run on Family Circle's own llama.cpp runtime and stay on this computer.
+  const angelChat = new LocalAngelRunner({
+    session: services.sessions,
+    // Through the controller, so each request checks the signed-in account first.
+    angels: { list: () => controller.list(), recipe: (angelId) => myAngels.recipe(angelId) },
+    history: services.angelHistory,
+    stories: services.privateArchiveQueryService,
+    runtime: {
+      ensureGenerationRuntime: async () => (await aiRuntimeManager?.ensureGenerationRuntime()) ?? false,
+      installedModel: async () => (await aiRuntimeManager?.installedModel()) ?? null,
+    },
+    qwen: services.qwen,
+    interactiveGate: services.interactiveAiGate,
+  })
   registerAgenticIpc(ipcMain, {
     catalog,
-    angels,
+    chat: angelChat,
+    angels: controller,
     views: {
       open: async (service, target) => {
         if (!partnerViews) throw new Error('The Family Circle window is not ready')
@@ -303,6 +326,8 @@ async function createAppServices(): Promise<AppServices> {
   const storyQueryHistory = new StoryHistoryRepository(database)
   const storyQueryRepository = new StoryRepository(database, storyQueryHistory)
   const storyQueryChunks = new StoryChunkRepository(database)
+  // One local Qwen client, shared by private search and angel conversations.
+  const qwen = new QwenClient()
   const privateArchiveQueryService = new PrivateArchiveQueryService({
     session: sessions,
     documents: vaultRepository,
@@ -310,7 +335,7 @@ async function createAppServices(): Promise<AppServices> {
     storyChunks: storyQueryChunks,
     runtime: aiRuntimeManager,
     nomic: nomicClient,
-    qwen: new QwenClient(),
+    qwen,
     direct: new StoryDirectAnswerService(storyQueryRepository),
     interactiveGate: interactiveAiGate,
   })
@@ -343,6 +368,10 @@ async function createAppServices(): Promise<AppServices> {
     vaultIndexService,
     sessions,
     mutationLock,
+    privateArchiveQueryService,
+    qwen,
+    angelHistory: new AngelHistoryRepository(database),
+    interactiveAiGate,
     ...storyServices,
   }
 

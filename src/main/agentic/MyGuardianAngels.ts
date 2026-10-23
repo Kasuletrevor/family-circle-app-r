@@ -5,6 +5,7 @@ import {
   type MyAngelsResult,
   type RemoveAngelResult,
 } from '../../shared/agentic'
+import { sanitizeRecipe, type AngelRecipe } from './angelRecipe'
 import { sanitizeAngel, sanitizeAngels } from './angelSanitizer'
 import { KIN_KEEPERS_API, type KinKeepersConnection } from './KinKeepersConnection'
 import { limitedRequest, type LimitedResponse } from './limitedRequest'
@@ -19,7 +20,9 @@ export interface MyGuardianAngelsDeps {
   timeoutMs?: number
 }
 
-type Outcome = { kind: 'response'; response: LimitedResponse } | { kind: 'disconnected' } | { kind: 'unavailable' }
+export type RecipeResult = { status: 'ready'; recipe: AngelRecipe } | { status: 'disconnected' | 'unavailable' | 'not-yours' }
+
+type Outcome ={ kind: 'response'; response: LimitedResponse } | { kind: 'disconnected' } | { kind: 'unavailable' }
 
 function parse(bytes: Buffer): unknown {
   try {
@@ -63,6 +66,18 @@ export class MyGuardianAngels {
     if (status === 404 || (status >= 200 && status < 300)) return { status: 'removed' }
     if (status === 403) return { status: 'not-yours' }
     return { status: 'unavailable' }
+  }
+
+  /** The angel's instructions, tools and safety rules, for running it on this computer. */
+  async recipe(angelId: string): Promise<RecipeResult> {
+    if (!TEMPLATE_ID.test(angelId)) return { status: 'not-yours' }
+    const outcome = await this.request('GET', `/api/agno/agents/${angelId}/export`)
+    if (outcome.kind !== 'response') return { status: outcome.kind }
+    const { status, bytes } = outcome.response
+    if (status === 403 || status === 404) return { status: 'not-yours' }
+    if (status !== 200) return { status: 'unavailable' }
+    const recipe = sanitizeRecipe(angelId, parse(bytes))
+    return recipe ? { status: 'ready', recipe } : { status: 'unavailable' }
   }
 
   /** Sends a request with the app token; a rejected token is refreshed once and the request retried. */

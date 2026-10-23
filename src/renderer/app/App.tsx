@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import type { AuthState, AuthUser } from '../../shared/desktopApi'
 import type { AuthClient } from '../services/auth/AuthClient'
 import { DesktopAuthClient } from '../services/auth/DesktopAuthClient'
+import { AngelChatPage } from '../features/agentic/AngelChatPage'
 import { GuardianAngelPage } from '../features/agentic/GuardianAngelPage'
 import { PartnerViewPage } from '../features/agentic/PartnerViewPage'
 import { CircleManagement } from '../features/circles/CircleManagement'
@@ -51,6 +52,7 @@ export function AuthenticatedApp({
             <Route path="/ai" element={<AskVault />} />
             <Route path="/settings" element={<SettingsPage user={user} auth={settingsAuth} onAuthStateChange={updateAuthState} />} />
             <Route path="/agentic/guardian-angel" element={<GuardianAngelPage />} />
+            <Route path="/agentic/guardian-angel/chat" element={<AngelChatPage />} />
             <Route path="/agentic/guardian-angel/view" element={<PartnerViewPage key="guardian-angel" service="guardian-angel" />} />
             <Route path="/agentic/ubercare" element={<PartnerViewPage key="ubercare" service="ubercare" />} />
             <Route path="/agentic/marketplace" element={<PartnerViewPage key="marketplace" service="marketplace" />} />

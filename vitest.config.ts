@@ -6,6 +6,8 @@ const shared = {
   setupFiles: [resolve(__dirname, 'src/renderer/test/setup.ts')],
   globals: true,
   restoreMocks: true,
+  // Both environments run at once, so a cold first render or real password hashing can pass 5 s under load.
+  testTimeout: 15_000,
 }
 
 export default defineConfig({

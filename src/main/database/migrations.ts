@@ -239,6 +239,33 @@ function ensureStoryImportState(db: DatabaseSync): void {
   `)
 }
 
+function ensureAngelTables(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS angel_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      local_user_id INTEGER NOT NULL,
+      angel_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('person', 'angel')),
+      text TEXT NOT NULL,
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      escalation TEXT,
+      execution_backend TEXT,
+      model TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_angel_messages_angel ON angel_messages(local_user_id, angel_id, id);
+    CREATE TABLE IF NOT EXISTS angel_recipes (
+      local_user_id INTEGER NOT NULL,
+      angel_id TEXT NOT NULL,
+      recipe_json TEXT NOT NULL,
+      fetched_at INTEGER NOT NULL,
+      PRIMARY KEY (local_user_id, angel_id),
+      FOREIGN KEY (local_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `)
+}
+
 export function runMigrations(db: DatabaseSync): void {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -255,6 +282,7 @@ export function runMigrations(db: DatabaseSync): void {
     ensureStoryMediaItems(db)
     ensureStoryChunks(db)
     ensureStoryImportState(db)
+    ensureAngelTables(db)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')

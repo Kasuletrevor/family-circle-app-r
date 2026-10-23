@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process'
 import { request as httpRequest } from 'node:http'
 import { availableParallelism } from 'node:os'
+import { basename } from 'node:path'
 import type { InstalledAiPaths } from './privateAiModels'
 
 const LOOPBACK_HOST = '127.0.0.1'
@@ -116,6 +117,12 @@ export class AiRuntimeManager {
 
   async ensureFastGenerationRuntime(): Promise<boolean> {
     return this.ensureGenerationRuntime()
+  }
+
+  /** The installed answer model's file name without ".gguf", e.g. "Qwen_Qwen3.5-0.8B-Q4_K_M". */
+  async installedModel(): Promise<string | null> {
+    const installed = await this.dependencies.assets.getInstalledPaths()
+    return installed ? basename(installed.generationModel).replace(/\.gguf$/i, '') : null
   }
 
   stopAll(): void {

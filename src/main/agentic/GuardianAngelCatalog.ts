@@ -24,7 +24,8 @@ export interface GuardianAngelCatalogDeps {
   avatarBudgetMs?: number
 }
 
-interface SavedCatalog { version: 1; fetchedAt: number; templates: GuardianAngelTemplate[] }
+// Version 2 added template slugs, so a version 1 cache is downloaded again.
+interface SavedCatalog { version: 2; fetchedAt: number; templates: GuardianAngelTemplate[] }
 
 /** The public Guardian Angel templates, with the last good copy kept for offline use. */
 export class GuardianAngelCatalog {
@@ -51,7 +52,7 @@ export class GuardianAngelCatalog {
   private async refresh(): Promise<GuardianAngelCatalogResult> {
     try {
       const templates = await this.fetchTemplates()
-      const saved: SavedCatalog = { version: 1, fetchedAt: this.now(), templates }
+      const saved: SavedCatalog = { version: 2, fetchedAt: this.now(), templates }
       this.memory = saved
       this.lastFetchFailed = false
       await this.save(saved).catch(() => undefined)
@@ -124,9 +125,9 @@ export class GuardianAngelCatalog {
   private async load(): Promise<SavedCatalog | null> {
     try {
       const raw = JSON.parse(await readFile(this.deps.cachePath, 'utf8')) as Partial<SavedCatalog>
-      if (raw.version !== 1 || typeof raw.fetchedAt !== 'number' || !Array.isArray(raw.templates)) return null
+      if (raw.version !== 2 || typeof raw.fetchedAt !== 'number' || !Array.isArray(raw.templates)) return null
       if (raw.templates.length === 0 || !raw.templates.every(isGuardianAngelTemplate)) return null
-      this.memory = { version: 1, fetchedAt: raw.fetchedAt, templates: raw.templates }
+      this.memory = { version: 2, fetchedAt: raw.fetchedAt, templates: raw.templates }
       return this.memory
     } catch {
       return null

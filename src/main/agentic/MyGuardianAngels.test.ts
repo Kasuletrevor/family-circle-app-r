@@ -97,3 +97,25 @@ describe('MyGuardianAngels', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 })
+
+describe('MyGuardianAngels.recipe', () => {
+  it('exports the angel with the app token', async () => {
+    const { angels, call } = setup([json(200, { agent: { name: 'Angel 5' }, config: { instructions: 'Hi', tools: [] }, safety: {} })])
+    await expect(angels.recipe('5')).resolves.toMatchObject({ status: 'ready', recipe: { angelId: '5', name: 'Angel 5', instructions: 'Hi' } })
+    expect(call(0)[0]).toBe(`${KIN_KEEPERS_API}/api/agno/agents/5/export`)
+    expect(call(0)[1].headers).toMatchObject({ authorization: 'Bearer token-1' })
+  })
+
+  it('maps 403 and 404 to not-yours and a bad id to not-yours without a request', async () => {
+    const { angels, fetchImpl } = setup([json(403), json(404)])
+    await expect(angels.recipe('5')).resolves.toEqual({ status: 'not-yours' })
+    await expect(angels.recipe('5')).resolves.toEqual({ status: 'not-yours' })
+    await expect(angels.recipe('../x')).resolves.toEqual({ status: 'not-yours' })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('is unavailable for a broken package and disconnected without a token', async () => {
+    await expect(setup([json(200, { agent: {} })]).angels.recipe('5')).resolves.toEqual({ status: 'unavailable' })
+    await expect(setup([], null).angels.recipe('5')).resolves.toEqual({ status: 'disconnected' })
+  })
+})

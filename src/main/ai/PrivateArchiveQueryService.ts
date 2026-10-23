@@ -1,3 +1,4 @@
+import type { AngelChatSource, StorySection } from '../../shared/agenticChat'
 import type { AuthUser } from '../../shared/desktopApi'
 import type { StoryQueryChunk } from '../story/StoryChunkRepository'
 import type { PrivateDirectAnswer } from '../story/StoryDirectAnswerService'
@@ -195,12 +196,14 @@ export function isNotFoundAnswer(answer: string): boolean {
  * enough (also when the answer was translated), while common words in any language
  * count for little. When no section qualifies (an answer reworded or translated with
  * no shared names or numbers), the answer cannot be traced to one section, so every
- * section the model read is listed rather than guessing a single one.
+ * section the model read is listed rather than guessing a single one. An angel reply is
+ * often small talk that used no memory at all, so angels pass `fallbackToAll: false`.
  */
 export function citedCandidates<T extends { text: string }>(
   answer: string,
   ranked: T[],
   words: Pick<KeywordIndex, 'rarity' | 'maxRarity'>,
+  { fallbackToAll = true }: { fallbackToAll?: boolean } = {},
 ): T[] {
   const answerTerms = contentTerms(answer)
   const needed = CITATION_RARITY_SHARE * words.maxRarity
@@ -211,7 +214,7 @@ export function citedCandidates<T extends { text: string }>(
     }
     return false
   })
-  return cited.length > 0 ? cited : ranked
+  return cited.length > 0 || !fallbackToAll ? cited : ranked
 }
 
 export class PrivateArchiveQueryService {
@@ -327,6 +330,52 @@ export class PrivateArchiveQueryService {
         ranked.map(({ candidate }) => candidate),
         keywordIndex,
       )),
+    }
+  }
+
+  /**
+   * Confirmed My Story sections that match an angel message, ranked like private search.
+   * Only My Story is read; the Vault is not part of angel conversations yet.
+   */
+  async findStorySections(localUserId: number, query: string): Promise<{ sections: StorySection[]; cite(answer: string): AngelChatSource[] }> {
+    const candidates = await this.loadCandidates(localUserId, { type: 'story' }, undefined)
+    if (candidates.length === 0 || !query.trim()) return { sections: [], cite: () => [] }
+    if (!await this.dependencies.runtime.ensureEmbeddingRuntime()) {
+      throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI search is unavailable')
+    }
+    let embedding: Float32Array
+    try {
+      embedding = await this.dependencies.nomic.embedQuery(query)
+    } catch {
+      throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI search is unavailable')
+    }
+    const vectorRanking = candidates
+      .flatMap((candidate, index) => {
+        try {
+          const score = cosineSimilarity(embedding, candidate.embedding)
+          return Number.isFinite(score) ? [{ index, score }] : []
+        } catch {
+          return []
+        }
+      })
+      .sort((a, b) => b.score - a.score)
+      .map(({ index }) => index)
+    const keywordIndex = this.keywordIndexFor(candidates)
+    const ranked = fuseRankings([vectorRanking, keywordIndex.rank([query])], candidates.length)
+      .slice(0, MAX_RETRIEVAL_CHUNKS)
+      .map((index) => candidates[index]!)
+    return {
+      sections: ranked.map((candidate) => ({ label: candidate.fileName, text: candidate.text })),
+      cite: (answer) => {
+        const byRarity = new Set(citedCandidates(answer, ranked, keywordIndex, { fallbackToAll: false }))
+        // Rarity says nothing when one section holds a word (its weight is 0), so a section also
+        // counts when the reply shares two of its words that the person did not say themselves.
+        const asked = contentTerms(query)
+        const answerTerms = contentTerms(answer)
+        const used = ranked.filter((candidate) => byRarity.has(candidate) || [...contentTerms(candidate.text)]
+          .filter((term) => answerTerms.has(term) && !asked.has(term)).length >= 2)
+        return this.deduplicateSources(used).map((source) => ({ label: source.fileName, excerpt: source.excerpt }))
+      },
     }
   }
 

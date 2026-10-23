@@ -469,3 +469,62 @@ describe('isNotFoundAnswer', () => {
     }
   })
 })
+
+describe('findStorySections', () => {
+  const stories = [
+    storyChunk(2, 'childhood', 'Life Story', 'Where I grew up', 'We lived by Lake Victoria in Entebbe.', [1, 0]),
+    storyChunk(3, 'values', 'Life Story', 'What I value', 'Honesty and hard work at Gayaza High School.', [0, 1]),
+  ]
+
+  it('ranks confirmed My Story sections, never reads the Vault, and cites the ones a reply used', async () => {
+    const vault = vi.fn(async () => [])
+    const service = new PrivateArchiveQueryService(deps({
+      storyChunks: { listQueryChunks: vi.fn(async () => stories) },
+      vaultChunks: { listQueryChunks: vault },
+    }))
+    const found = await service.findStorySections(7, 'Tell me about the lake')
+    expect(found.sections[0]).toEqual({ label: 'My Story › Life Story › Where I grew up', text: 'We lived by Lake Victoria in Entebbe.' })
+    expect(found.cite('You lived by Lake Victoria in Entebbe.')).toEqual([
+      { label: 'My Story › Life Story › Where I grew up', excerpt: 'We lived by Lake Victoria in Entebbe.' },
+    ])
+    expect(vault).not.toHaveBeenCalled()
+  })
+
+  it('returns nothing when no story is indexed and fails when search is down', async () => {
+    const empty = new PrivateArchiveQueryService(deps({ storyChunks: { listQueryChunks: vi.fn(async () => []) } }))
+    await expect(empty.findStorySections(7, 'Hi')).resolves.toMatchObject({ sections: [] })
+    const down = new PrivateArchiveQueryService(deps({
+      storyChunks: { listQueryChunks: vi.fn(async () => stories) },
+      runtime: { ensureEmbeddingRuntime: vi.fn(async () => false), ensureGenerationRuntime: vi.fn(async () => true) },
+    }))
+    await expect(down.findStorySections(7, 'Hi')).rejects.toMatchObject({ code: 'private-ai-unavailable' })
+  })
+})
+
+describe('findStorySections citations', () => {
+  it('cites nothing when the reply did not use any memory', async () => {
+    const service = new PrivateArchiveQueryService(deps({
+      storyChunks: { listQueryChunks: vi.fn(async () => [storyChunk(2, 'childhood', 'Life Story', 'Where I grew up', 'We lived by Lake Victoria in Entebbe.', [1, 0])]) },
+    }))
+    const found = await service.findStorySections(7, 'Tell me about home')
+    expect(found.sections).toHaveLength(1)
+    expect(found.cite('How are you feeling today?')).toEqual([])
+  })
+})
+
+describe('findStorySections with one memory', () => {
+  const only = [storyChunk(2, 'childhood', 'Life Story', 'Where I grew up', 'I grew up in Entebbe by Lake Victoria. My father took us fishing at dawn and my mother sold mandazi.', [1, 0])]
+
+  it('cites the memory when the reply uses two of its words the person did not say', async () => {
+    const service = new PrivateArchiveQueryService(deps({ storyChunks: { listQueryChunks: vi.fn(async () => only) } }))
+    const found = await service.findStorySections(7, 'Tell me about where I grew up')
+    expect(found.cite('I am thinking of the fishing and mandazi stories from your childhood.')).toHaveLength(1)
+  })
+
+  it('does not count words echoed from the message, or a single shared word', async () => {
+    const service = new PrivateArchiveQueryService(deps({ storyChunks: { listQueryChunks: vi.fn(async () => only) } }))
+    const found = await service.findStorySections(7, 'Tell me about where I grew up')
+    expect(found.cite('You want to know where you grew up. How are you feeling?')).toEqual([])
+    expect(found.cite('Fishing sounds lovely. How are you today?')).toEqual([])
+  })
+})

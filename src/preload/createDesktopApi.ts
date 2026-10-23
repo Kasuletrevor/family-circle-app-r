@@ -56,6 +56,7 @@ import {
   type PartnerViewTarget,
   type RemoveAngelResult,
 } from '../shared/agentic'
+import { safeAngelChatOpen, safeAngelChatSend, safeSavedAngels } from '../shared/agenticChat'
 import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus, type StoryLanguage } from '../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
 
@@ -140,6 +141,10 @@ type DesktopChannel =
   | 'agentic:my-angels'
   | 'agentic:add-angel'
   | 'agentic:remove-angel'
+  | 'agentic:angel-chat-open'
+  | 'agentic:angel-chat-send'
+  | 'agentic:angel-chat-clear'
+  | 'agentic:saved-angels'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress' | 'agentic:view-state'
@@ -827,6 +832,19 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       },
       onAngelConnection(listener) {
         return subscribe('agentic:angel-connection-changed', (payload) => listener(safeAngelConnection(payload)))
+      },
+      async openAngelChat(input) {
+        return safeAngelChatOpen(await invoke('agentic:angel-chat-open', { angelId: String(input.angelId) }))
+      },
+      async sendAngelMessage(input) {
+        return safeAngelChatSend(await invoke('agentic:angel-chat-send', { angelId: String(input.angelId), text: String(input.text) }))
+      },
+      async clearAngelChat(input) {
+        await invoke('agentic:angel-chat-clear', { angelId: String(input.angelId) })
+        return { success: true as const }
+      },
+      async getSavedAngels() {
+        return safeSavedAngels(await invoke('agentic:saved-angels'))
       },
     },
   }

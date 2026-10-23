@@ -34,7 +34,18 @@ export interface GuardianAngelTemplate {
   escalationTriggers: string[]
   /** A PNG, JPEG or WebP data URL, or null to show initials. */
   avatar: string | null
+  /** The template's stable name on Kin-Keepers.ai, e.g. "elder-companion". */
+  slug?: string
 }
+
+/** Templates whose angels Family Circle can run on this computer, by template slug. */
+export const LOCAL_ANGEL_TEMPLATE_SLUGS: ReadonlySet<string> = new Set([
+  'elder-companion',
+  'family-content-storyteller',
+  'gentle-storytelling-template',
+  'post-visit-follow-up',
+  'elder-tech-confidence-coach',
+])
 
 export type GuardianAngelCatalogResult =
   | { status: 'ready'; templates: GuardianAngelTemplate[]; fetchedAt: number; stale: boolean }
@@ -55,6 +66,7 @@ export interface PartnerViewBounds { x: number; y: number; width: number; height
 export type PartnerViewCommand = 'back' | 'reload' | 'open-external'
 
 export const TEMPLATE_ID = /^[1-9][0-9]{0,9}$/
+export const TEMPLATE_SLUG = /^[a-z0-9-]{1,80}$/
 export const AVATAR_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/
 const CATEGORY_KEYS = new Set<string>(GUARDIAN_ANGEL_CATEGORIES.map((category) => category.key))
 
@@ -72,6 +84,7 @@ export function isGuardianAngelTemplate(value: unknown): value is GuardianAngelT
     && typeof raw.category === 'string' && CATEGORY_KEYS.has(raw.category)
     && isTextList(raw.trustBoundaries) && isTextList(raw.escalationTriggers)
     && (raw.avatar === null || (typeof raw.avatar === 'string' && AVATAR_DATA_URL.test(raw.avatar)))
+    && (raw.slug === undefined || (typeof raw.slug === 'string' && TEMPLATE_SLUG.test(raw.slug)))
 }
 
 /** Keeps only the public fields of a template, so nothing extra crosses a boundary. */
@@ -101,6 +114,8 @@ export interface MyGuardianAngel {
   lastRunAt: string | null
   trustBoundaries: string[]
   escalationTriggers: string[]
+  /** True when Family Circle can run this angel on this computer. */
+  runsHere: boolean
 }
 
 export type AngelConnection =
@@ -135,6 +150,7 @@ export function isMyGuardianAngel(value: unknown): value is MyGuardianAngel {
     && typeof raw.runCount === 'number' && Number.isSafeInteger(raw.runCount) && raw.runCount >= 0
     && (raw.lastRunAt === null || (typeof raw.lastRunAt === 'string' && ISO_TIME.test(raw.lastRunAt)))
     && isTextList(raw.trustBoundaries) && isTextList(raw.escalationTriggers)
+    && typeof raw.runsHere === 'boolean'
 }
 
 /** Keeps only the safe fields of an angel, so nothing extra crosses a boundary. */
@@ -150,6 +166,7 @@ export function publicAngel(angel: MyGuardianAngel): MyGuardianAngel {
     lastRunAt: angel.lastRunAt,
     trustBoundaries: [...angel.trustBoundaries],
     escalationTriggers: [...angel.escalationTriggers],
+    runsHere: angel.runsHere,
   }
 }
 

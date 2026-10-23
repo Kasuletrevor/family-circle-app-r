@@ -10,6 +10,7 @@ import type {
   PartnerViewTarget,
   RemoveAngelResult,
 } from '../../../shared/agentic'
+import type { AngelChatOpenResult, AngelChatSendResult, SavedAngel } from '../../../shared/agenticChat'
 
 /** Agentic Services: the Guardian Angel catalog, the person's own angels and isolated partner web views. */
 export interface AgenticClient {
@@ -29,4 +30,10 @@ export interface AgenticClient {
   addAngel(templateId: string): Promise<AddAngelResult>
   removeAngel(angelId: string): Promise<RemoveAngelResult>
   onAngelConnection(listener: (connection: AngelConnection) => void): () => void
+  /** A conversation with one of the person's angels, run on this computer. */
+  openAngelChat(angelId: string): Promise<AngelChatOpenResult>
+  sendAngelMessage(angelId: string, text: string): Promise<AngelChatSendResult>
+  clearAngelChat(angelId: string): Promise<void>
+  /** Angels with a copy saved on this computer, which open without a connection. */
+  getSavedAngels(): Promise<SavedAngel[]>
 }

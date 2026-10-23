@@ -1,4 +1,5 @@
 import { request as httpRequest } from 'node:http'
+import type { ChatTurn } from '../../shared/agenticChat'
 
 const GENERATION_PORT = 8080
 const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, reply with exactly NOT_FOUND and nothing else. Otherwise reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
@@ -122,6 +123,12 @@ export class QwenClient {
     const cleaned = cleanTranslation(translated)
     if (!cleaned || cleaned.length > 1_000) throw new QwenClientError()
     return cleaned
+  }
+
+  /** An angel conversation turn: Family Circle builds the whole prompt, the model only writes. */
+  async chat(messages: ChatTurn[], maxTokens: number): Promise<string> {
+    const answer = await this.complete({ messages, max_tokens: maxTokens, temperature: 0.4, top_p: 0.9, stream: false })
+    return plainAnswer(answer)
   }
 
   private async generate(question: string, context: string, maxTokens: number, languageLabel?: string): Promise<string> {

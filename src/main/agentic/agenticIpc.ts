@@ -9,14 +9,17 @@ import {
   type PartnerViewCommand,
   type PartnerViewTarget,
 } from '../../shared/agentic'
+import { MAX_ANGEL_MESSAGE } from '../../shared/agenticChat'
 import type { IpcHandleRegistrar } from '../auth/authIpc'
 import type { AngelsController } from './angelsController'
+import type { LocalAngelRunner } from './LocalAngelRunner'
 import type { PartnerViews } from './PartnerViews'
 
 export interface AgenticIpcDeps {
   catalog: { get(options?: { refresh?: boolean }): Promise<GuardianAngelCatalogResult> }
   views: Pick<PartnerViews, 'open' | 'setBounds' | 'hide' | 'command'>
   angels: Omit<AngelsController, 'interceptNavigation'>
+  chat: Pick<LocalAngelRunner, 'open' | 'send' | 'clear' | 'forget' | 'saved'>
 }
 
 function catalogIdOf(payload: unknown, field: 'templateId' | 'angelId'): string {
@@ -97,7 +100,21 @@ export function registerAgenticIpc(ipc: IpcHandleRegistrar, deps: AgenticIpcDeps
     return result.status === 'added' ? { status: 'added', angel: publicAngel(result.angel) } : { status: result.status }
   })
   ipc.handle('agentic:remove-angel', async (_event, payload) => {
-    const result = await deps.angels.remove(catalogIdOf(payload, 'angelId'))
+    const angelId = catalogIdOf(payload, 'angelId')
+    const result = await deps.angels.remove(angelId)
+    // Removing an angel also removes its conversation and recipe from this computer.
+    if (result.status === 'removed') await deps.chat.forget(angelId).catch(() => undefined)
     return { status: result.status }
+  })
+  ipc.handle('agentic:angel-chat-open', async (_event, payload) => deps.chat.open(catalogIdOf(payload, 'angelId')))
+  ipc.handle('agentic:angel-chat-send', async (_event, payload) => {
+    const text = recordOf(payload).text
+    if (typeof text !== 'string' || text.length > MAX_ANGEL_MESSAGE) throw new Error('Invalid message')
+    return deps.chat.send(catalogIdOf(payload, 'angelId'), text)
+  })
+  ipc.handle('agentic:saved-angels', async () => deps.chat.saved())
+  ipc.handle('agentic:angel-chat-clear', async (_event, payload) => {
+    await deps.chat.clear(catalogIdOf(payload, 'angelId'))
+    return { success: true }
   })
 }
