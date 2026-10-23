@@ -4,7 +4,7 @@ import { isMyGuardianAngel, publicAngel, safeAngelConnection, type MyGuardianAng
 const angel: MyGuardianAngel = {
   id: '5', name: 'Morning Check-in', description: 'Says good morning', templateId: '7', templateName: 'Elder Companion',
   avatar: null, runCount: 2, lastRunAt: '2026-10-01T10:00:00.000Z',
-  trustBoundaries: ['No medical advice'], escalationTriggers: [],
+  trustBoundaries: ['No medical advice'], escalationTriggers: [], runsHere: false,
 }
 
 describe('My Guardian Angels shapes', () => {
@@ -31,5 +31,13 @@ describe('My Guardian Angels shapes', () => {
     expect(safeAngelConnection({ status: 'disconnected', problem: 'ended' })).toEqual({ status: 'disconnected', problem: 'ended' })
     expect(safeAngelConnection({ status: 'disconnected', problem: 'other' })).toEqual({ status: 'disconnected' })
     expect(safeAngelConnection('connected')).toEqual({ status: 'disconnected' })
+  })
+})
+
+describe('runsHere', () => {
+  it('requires runsHere to be a boolean and keeps it in the public shape', () => {
+    expect(isMyGuardianAngel({ ...angel, runsHere: true })).toBe(true)
+    expect(isMyGuardianAngel({ ...angel, runsHere: 'yes' })).toBe(false)
+    expect(publicAngel({ ...angel, runsHere: true }).runsHere).toBe(true)
   })
 })

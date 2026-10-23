@@ -1,4 +1,4 @@
-import { GUARDIAN_ANGEL_CATEGORIES, type GuardianAngelCategory, type GuardianAngelTemplate } from '../../shared/agentic'
+import { GUARDIAN_ANGEL_CATEGORIES, TEMPLATE_SLUG, type GuardianAngelCategory, type GuardianAngelTemplate } from '../../shared/agentic'
 
 export interface SanitizedTemplate {
   template: Omit<GuardianAngelTemplate, 'avatar'>
@@ -53,6 +53,7 @@ export function sanitizeCatalog(raw: unknown): SanitizedTemplate[] {
     const category = typeof entry.category === 'string' && KNOWN_CATEGORIES.has(entry.category)
       ? entry.category as GuardianAngelCategory
       : 'other'
+    const slug = typeof entry.slug === 'string' && TEMPLATE_SLUG.test(entry.slug) ? entry.slug : undefined
     result.push({
       template: {
         id,
@@ -61,6 +62,7 @@ export function sanitizeCatalog(raw: unknown): SanitizedTemplate[] {
         category,
         trustBoundaries: rules(entry.trust_boundaries),
         escalationTriggers: rules(entry.escalation_triggers),
+        ...(slug ? { slug } : {}),
       },
       avatarPath: typeof entry.avatar_src === 'string' && AVATAR_PATH.test(entry.avatar_src) ? entry.avatar_src : null,
     })

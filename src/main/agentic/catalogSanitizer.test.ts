@@ -27,10 +27,11 @@ describe('sanitizeCatalog', () => {
         category: 'elder_companion',
         trustBoundaries: ['No medical advice', 'No financial decisions'],
         escalationTriggers: ['Self harm mentions'],
+        slug: 'elder-companion',
       },
       avatarPath: '/avatars/1999625.png',
     })
-    expect(JSON.stringify(entry)).not.toMatch(/example\.test|gpt-4o|send_email|slug/)
+    expect(JSON.stringify(entry)).not.toMatch(/example\.test|gpt-4o|send_email/)
   })
 
   it('drops non-curated, invalid and duplicate entries without failing', () => {
@@ -85,5 +86,14 @@ describe('humanizeRule', () => {
     expect(humanizeRule('no_memory_correction_unless_safety')).toBe('No memory correction unless safety')
     expect(humanizeRule('  Already a sentence. ')).toBe('Already a sentence.')
     expect(humanizeRule('___')).toBe('')
+  })
+})
+
+describe('template slug', () => {
+  it('keeps a safe template slug', () => {
+    const [kept] = sanitizeCatalog([{ id: 7, name: 'Elder Companion', is_curated: true, slug: 'elder-companion' }])
+    expect(kept!.template.slug).toBe('elder-companion')
+    const [bad] = sanitizeCatalog([{ id: 8, name: 'X', is_curated: true, slug: '../Admin' }])
+    expect(bad!.template.slug).toBeUndefined()
   })
 })

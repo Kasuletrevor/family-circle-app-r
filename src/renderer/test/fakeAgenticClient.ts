@@ -32,6 +32,7 @@ export const SAMPLE_ANGEL: MyGuardianAngel = {
   lastRunAt: null,
   trustBoundaries: ['No medical advice'],
   escalationTriggers: [],
+  runsHere: true,
 }
 
 export function fakeAgenticClient(overrides: Partial<AgenticClient> = {}) {

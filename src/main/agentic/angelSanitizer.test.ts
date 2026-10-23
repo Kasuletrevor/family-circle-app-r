@@ -18,7 +18,7 @@ describe('sanitizeAngel', () => {
     expect(sanitizeAngel(agent(5, { original_agent_id: 7, run_count: 3, last_run_at: '2026-10-01T10:00:00' }), templates)).toEqual({
       id: '5', name: 'Angel 5', description: 'Helps', templateId: '7', templateName: 'Elder Companion',
       avatar: 'data:image/png;base64,AAAA', runCount: 3, lastRunAt: '2026-10-01T10:00:00.000Z',
-      trustBoundaries: ['No medical advice'], escalationTriggers: [],
+      trustBoundaries: ['No medical advice'], escalationTriggers: [], runsHere: false,
     })
   })
 
@@ -51,5 +51,18 @@ describe('sanitizeAngels', () => {
 
   it('returns null for a response that is not a list', () => {
     expect(sanitizeAngels({ agents: [] }, templates)).toBeNull()
+  })
+})
+
+describe('runsHere', () => {
+  it('marks angels from a runnable template as running here', () => {
+    const runnable = new Map<string, GuardianAngelTemplate>([
+      ['7', { ...template, slug: 'elder-companion' }],
+      ['51', { ...template, id: '51', name: 'Memory Screening', slug: 'memory-screening-guide-template' }],
+    ])
+    expect(sanitizeAngel(agent(5, { original_agent_id: 7 }), runnable)!.runsHere).toBe(true)
+    expect(sanitizeAngel(agent(6, { original_agent_id: 51 }), runnable)!.runsHere).toBe(false)
+    expect(sanitizeAngel(agent(7), runnable)!.runsHere).toBe(false)
+    expect(sanitizeAngel(agent(8, { original_agent_id: 7 }), templates)!.runsHere).toBe(false)
   })
 })

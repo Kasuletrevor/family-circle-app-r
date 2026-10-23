@@ -1,4 +1,4 @@
-import type { GuardianAngelTemplate, MyGuardianAngel } from '../../shared/agentic'
+import { LOCAL_ANGEL_TEMPLATE_SLUGS, type GuardianAngelTemplate, type MyGuardianAngel } from '../../shared/agentic'
 import { catalogId, cleanText, rules } from './catalogSanitizer'
 
 export const MAX_ANGELS = 100
@@ -35,6 +35,7 @@ export function sanitizeAngel(raw: unknown, templates: ReadonlyMap<string, Guard
     lastRunAt: utcTime(entry.last_run_at),
     trustBoundaries: rules(entry.trust_boundaries),
     escalationTriggers: rules(entry.escalation_triggers),
+    runsHere: Boolean(template?.slug && LOCAL_ANGEL_TEMPLATE_SLUGS.has(template.slug)),
   }
 }
 
