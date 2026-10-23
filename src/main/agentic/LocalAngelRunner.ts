@@ -5,6 +5,7 @@ import {
   type AngelChatSendResult,
   type AngelChatSource,
   type ChatTurn,
+  type SavedAngel,
   type StorySection,
 } from '../../shared/agenticChat'
 import type { AngelHistoryRepository } from './AngelHistoryRepository'
@@ -21,7 +22,7 @@ type StoryMatch = { sections: StorySection[]; cite(answer: string): AngelChatSou
 export interface LocalAngelRunnerDeps {
   session: { restore(): Promise<{ id: number; name: string | null } | null> }
   angels: { list(): Promise<MyAngelsResult>; recipe(angelId: string): Promise<RecipeResult> }
-  history: Pick<AngelHistoryRepository, 'add' | 'list' | 'recent' | 'clear' | 'saveRecipe' | 'recipe' | 'forget'>
+  history: Pick<AngelHistoryRepository, 'add' | 'list' | 'recent' | 'clear' | 'saveRecipe' | 'recipe' | 'recipes' | 'forget'>
   stories: { findStorySections(localUserId: number, query: string): Promise<StoryMatch> }
   runtime: { ensureGenerationRuntime(): Promise<boolean>; installedModel(): Promise<string | null> }
   qwen: { chat(messages: ChatTurn[], maxTokens: number): Promise<string> }
@@ -32,8 +33,21 @@ export interface LocalAngelRunnerDeps {
 /** Runs the person's own angels on Family Circle's llama.cpp runtime. Conversations never leave this computer. */
 export class LocalAngelRunner {
   private readonly recipes = new Map<string, AngelRecipe>()
+  // Goes up when a conversation is cleared or forgotten, so a reply still being written is not saved after it.
+  private readonly clears = new Map<string, number>()
 
   constructor(private readonly deps: LocalAngelRunnerDeps) {}
+
+  /** Angels with a copy saved on this computer, which open without a Kin-Keepers.ai connection. */
+  async saved(): Promise<SavedAngel[]> {
+    const user = await this.deps.session.restore()
+    if (!user) return []
+    return this.deps.history.recipes(user.id)
+      .map(({ angelId }) => this.cached(user.id, angelId))
+      .filter((recipe): recipe is AngelRecipe => recipe !== null)
+      .map((recipe) => ({ id: recipe.angelId, name: recipe.name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
 
   async open(angelId: string): Promise<AngelChatOpenResult> {
     const user = await this.deps.session.restore()
@@ -83,6 +97,8 @@ export class LocalAngelRunner {
       return { status: 'replied', person, reply }
     }
 
+    const key = this.key(user.id, angelId)
+    const clearsBefore = this.clears.get(key) ?? 0
     const end = this.deps.interactiveGate?.begin()
     try {
       const model = await this.deps.runtime.installedModel()
@@ -106,6 +122,7 @@ export class LocalAngelRunner {
       } catch {
         return { status: 'failed' }
       }
+      if ((this.clears.get(key) ?? 0) !== clearsBefore) return { status: 'failed' }
       const person = this.deps.history.add(user.id, angelId, { role: 'person', text })
       const reply = this.deps.history.add(user.id, angelId, {
         role: 'angel', text: answer, sources: found.cite(answer), executionBackend: 'llama.cpp', model,
@@ -118,7 +135,9 @@ export class LocalAngelRunner {
 
   async clear(angelId: string): Promise<void> {
     const user = await this.deps.session.restore()
-    if (user && TEMPLATE_ID.test(angelId)) this.deps.history.clear(user.id, angelId)
+    if (!user || !TEMPLATE_ID.test(angelId)) return
+    this.bumpClears(user.id, angelId)
+    this.deps.history.clear(user.id, angelId)
   }
 
   /** Removes the conversation and the saved recipe, for an angel that was removed. */
@@ -126,7 +145,13 @@ export class LocalAngelRunner {
     const user = await this.deps.session.restore()
     if (!user || !TEMPLATE_ID.test(angelId)) return
     this.recipes.delete(this.key(user.id, angelId))
+    this.bumpClears(user.id, angelId)
     this.deps.history.forget(user.id, angelId)
+  }
+
+  private bumpClears(localUserId: number, angelId: string): void {
+    const key = this.key(localUserId, angelId)
+    this.clears.set(key, (this.clears.get(key) ?? 0) + 1)
   }
 
   private cached(localUserId: number, angelId: string): AngelRecipe | null {

@@ -10,7 +10,7 @@ import type {
   PartnerViewTarget,
   RemoveAngelResult,
 } from './agentic'
-import type { AngelChatOpenResult, AngelChatSendResult } from './agenticChat'
+import type { AngelChatOpenResult, AngelChatSendResult, SavedAngel } from './agenticChat'
 import type { StoryFieldKey, StoryLanguage } from './story'
 import type { StoryPublicState, StoryVersionSummary } from './storyPublic'
 
@@ -507,5 +507,7 @@ export interface DesktopApi {
     openAngelChat(input: { angelId: string }): Promise<AngelChatOpenResult>
     sendAngelMessage(input: { angelId: string; text: string }): Promise<AngelChatSendResult>
     clearAngelChat(input: { angelId: string }): Promise<{ success: true }>
+    /** Angels with a copy saved on this computer, for when Kin-Keepers.ai cannot be reached. */
+    getSavedAngels(): Promise<SavedAngel[]>
   }
 }

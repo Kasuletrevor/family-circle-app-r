@@ -105,3 +105,18 @@ describe('AngelChatPage', () => {
     await waitFor(() => expect(screen.queryByText('Hello again')).not.toBeInTheDocument())
   })
 })
+
+describe('AngelChatPage while thinking', () => {
+  it('cannot clear the history while a reply is being written', async () => {
+    const agentic = fakeAgenticClient()
+    agentic.openAngelChat.mockResolvedValue(ready)
+    let reply!: (value: Awaited<ReturnType<typeof agentic.sendAngelMessage>>) => void
+    agentic.sendAngelMessage.mockReturnValue(new Promise((resolve) => { reply = resolve }))
+    renderPage(agentic)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Hi' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByRole('button', { name: "Clear this angel's history" })).toBeDisabled()
+    reply({ status: 'failed' })
+    await waitFor(() => expect(screen.getByRole('button', { name: "Clear this angel's history" })).toBeEnabled())
+  })
+})

@@ -237,3 +237,29 @@ describe('Talk with an angel', () => {
     expect(where()).toBe('/agentic/guardian-angel/chat?angel=5')
   })
 })
+
+describe('Angels saved on this computer', () => {
+  it('offers Talk for saved angels while disconnected', async () => {
+    const agentic = fakeAgenticClient()
+    agentic.getSavedAngels.mockResolvedValue([{ id: '5', name: 'Morning Check-in' }])
+    renderAt('/agentic/guardian-angel?tab=mine', agentic)
+    expect(await screen.findByRole('heading', { name: 'Connect your Kin-Keepers.ai account' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Talk with Morning Check-in' }))
+    expect(where()).toBe('/agentic/guardian-angel/chat?angel=5')
+  })
+
+  it('offers saved angels when the online list cannot load', async () => {
+    const agentic = fakeAgenticClient()
+    agentic.getAngelConnection.mockResolvedValue({ status: 'connected', email: 'pat@example.test' })
+    agentic.getMyAngels.mockResolvedValue({ status: 'unavailable' })
+    agentic.getSavedAngels.mockResolvedValue([{ id: '5', name: 'Morning Check-in' }])
+    renderAt('/agentic/guardian-angel?tab=mine', agentic)
+    expect(await screen.findByRole('button', { name: 'Talk with Morning Check-in' })).toBeInTheDocument()
+  })
+
+  it('shows nothing extra when no angel is saved', async () => {
+    renderAt('/agentic/guardian-angel?tab=mine')
+    expect(await screen.findByRole('heading', { name: 'Connect your Kin-Keepers.ai account' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'On this computer' })).not.toBeInTheDocument()
+  })
+})

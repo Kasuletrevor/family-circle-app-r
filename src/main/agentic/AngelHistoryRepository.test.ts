@@ -66,3 +66,14 @@ describe('AngelHistoryRepository', () => {
     expect(history.recipe(1, '5')).toBeNull()
   })
 })
+
+describe('AngelHistoryRepository.recipes', () => {
+  it('lists the saved recipes of one person only', () => {
+    const { history } = setup()
+    history.saveRecipe(1, '5', '{"a":5}')
+    history.saveRecipe(1, '6', '{"a":6}')
+    history.saveRecipe(2, '7', '{"a":7}')
+    expect(history.recipes(1)).toEqual([{ angelId: '5', recipeJson: '{"a":5}' }, { angelId: '6', recipeJson: '{"a":6}' }])
+    expect(history.recipes(3)).toEqual([])
+  })
+})

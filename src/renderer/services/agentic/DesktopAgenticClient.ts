@@ -29,6 +29,7 @@ const defaultOperations: AgenticDesktopOperations = {
   openAngelChat: (input) => window.familyCircle.agentic.openAngelChat(input),
   sendAngelMessage: (input) => window.familyCircle.agentic.sendAngelMessage(input),
   clearAngelChat: (input) => window.familyCircle.agentic.clearAngelChat(input),
+  getSavedAngels: () => window.familyCircle.agentic.getSavedAngels(),
 }
 
 export class DesktopAgenticClient implements AgenticClient {
@@ -104,5 +105,9 @@ export class DesktopAgenticClient implements AgenticClient {
 
   async clearAngelChat(angelId: string) {
     await this.operations.clearAngelChat({ angelId })
+  }
+
+  getSavedAngels() {
+    return this.operations.getSavedAngels()
   }
 }

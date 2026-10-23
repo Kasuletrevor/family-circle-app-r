@@ -30,6 +30,9 @@ export type AngelChatSendResult =
 
 export const MAX_ANGEL_MESSAGE = 1000
 
+/** An angel with a copy saved on this computer. */
+export interface SavedAngel { id: string; name: string }
+
 /** A My Story section given to the angel's prompt. */
 export interface StorySection { label: string; text: string }
 /** One message of a local llama.cpp chat request. */
@@ -75,6 +78,16 @@ export function safeAngelChatOpen(value: unknown): AngelChatOpenResult {
   return raw.status === 'private-ai-needed' || raw.status === 'connect-needed' || raw.status === 'not-here'
     ? { status: raw.status }
     : { status: 'unavailable' }
+}
+
+export function safeSavedAngels(value: unknown): SavedAngel[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 100).flatMap((item) => {
+    const raw = record(item)
+    return typeof raw.id === 'string' && TEMPLATE_ID.test(raw.id) && text(raw.name, 120) && raw.name
+      ? [{ id: raw.id, name: raw.name }]
+      : []
+  })
 }
 
 export function safeAngelChatSend(value: unknown): AngelChatSendResult {

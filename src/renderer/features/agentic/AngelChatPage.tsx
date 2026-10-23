@@ -151,7 +151,8 @@ export function AngelChatPage() {
       </form>
 
       <div>
-        <button type="button" className="agentic-button agentic-button--danger" onClick={() => setConfirmingClear(true)}>
+        {/* Not while a reply is being written, or the reply would bring the conversation back. */}
+        <button type="button" className="agentic-button agentic-button--danger" disabled={sending} onClick={() => setConfirmingClear(true)}>
           <Trash2 size={16} aria-hidden="true" /> Clear this angel's history
         </button>
       </div>

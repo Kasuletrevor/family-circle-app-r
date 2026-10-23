@@ -24,6 +24,7 @@ function register() {
     send: vi.fn(async () => ({ status: 'failed' as const })),
     clear: vi.fn(async () => undefined),
     forget: vi.fn(async () => undefined),
+    saved: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []),
   }
   registerAgenticIpc({ handle: (channel, listener) => handlers.set(channel, listener) }, { catalog, views, angels: angels as never, chat })
   const call = (channel: string, payload?: unknown) => Promise.resolve().then(() => handlers.get(channel)!({}, payload))
@@ -134,5 +135,13 @@ describe('angel chat IPC', () => {
     angels.remove.mockResolvedValueOnce({ status: 'not-yours' } as never)
     await call('agentic:remove-angel', { angelId: '6' })
     expect(chat.forget).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('saved angels IPC', () => {
+  it('lists the angels saved on this computer', async () => {
+    const { call, chat } = register()
+    chat.saved.mockResolvedValueOnce([{ id: '5', name: 'Morning' }])
+    await expect(call('agentic:saved-angels')).resolves.toEqual([{ id: '5', name: 'Morning' }])
   })
 })

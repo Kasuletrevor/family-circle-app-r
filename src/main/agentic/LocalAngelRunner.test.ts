@@ -140,3 +140,33 @@ describe('LocalAngelRunner', () => {
     expect(end).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('LocalAngelRunner offline and clearing', () => {
+  it('lists the angels saved on this computer, by name, skipping broken copies', async () => {
+    const { runner, history } = setup()
+    await runner.open('5')
+    history.saveRecipe(1, '9', JSON.stringify({ ...recipe, angelId: '9', name: 'Afternoon Stories' }))
+    history.saveRecipe(1, '8', 'not json')
+    await expect(runner.saved()).resolves.toEqual([
+      { id: '9', name: 'Afternoon Stories' },
+      { id: '5', name: 'Morning Check-in' },
+    ])
+  })
+
+  it('lists nothing when no one is signed in', async () => {
+    const { runner } = setup({ session: { restore: async () => null } })
+    await expect(runner.saved()).resolves.toEqual([])
+  })
+
+  it('does not save a reply that finishes after the history was cleared', async () => {
+    let finish!: (text: string) => void
+    const { runner, history } = setup({ qwen: { chat: vi.fn(() => new Promise<string>((resolve) => { finish = resolve })) } })
+    await runner.open('5')
+    const sending = runner.send('5', 'Tell me about home')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    await runner.clear('5')
+    finish('Too late')
+    await expect(sending).resolves.toEqual({ status: 'failed' })
+    expect(history.list(1, '5')).toEqual([])
+  })
+})

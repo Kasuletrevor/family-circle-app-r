@@ -56,7 +56,7 @@ import {
   type PartnerViewTarget,
   type RemoveAngelResult,
 } from '../shared/agentic'
-import { safeAngelChatOpen, safeAngelChatSend } from '../shared/agenticChat'
+import { safeAngelChatOpen, safeAngelChatSend, safeSavedAngels } from '../shared/agenticChat'
 import { normalizeStoryLanguage, requireStoryField, type StoryIndexStatus, type StoryLanguage } from '../shared/story'
 import type { StoryPublicAnswer, StoryPublicState, StoryVersionSummary } from '../shared/storyPublic'
 
@@ -144,6 +144,7 @@ type DesktopChannel =
   | 'agentic:angel-chat-open'
   | 'agentic:angel-chat-send'
   | 'agentic:angel-chat-clear'
+  | 'agentic:saved-angels'
 
 type Invoke = (channel: DesktopChannel, payload?: unknown) => Promise<unknown>
 type DesktopEventChannel = 'vault:upload-progress' | 'private-ai:progress' | 'story:voice-setup-progress' | 'agentic:view-state'
@@ -841,6 +842,9 @@ export function createDesktopApi(invoke: Invoke, subscribe: Subscribe = noopSubs
       async clearAngelChat(input) {
         await invoke('agentic:angel-chat-clear', { angelId: String(input.angelId) })
         return { success: true as const }
+      },
+      async getSavedAngels() {
+        return safeSavedAngels(await invoke('agentic:saved-angels'))
       },
     },
   }

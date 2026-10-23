@@ -19,7 +19,7 @@ export interface AgenticIpcDeps {
   catalog: { get(options?: { refresh?: boolean }): Promise<GuardianAngelCatalogResult> }
   views: Pick<PartnerViews, 'open' | 'setBounds' | 'hide' | 'command'>
   angels: Omit<AngelsController, 'interceptNavigation'>
-  chat: Pick<LocalAngelRunner, 'open' | 'send' | 'clear' | 'forget'>
+  chat: Pick<LocalAngelRunner, 'open' | 'send' | 'clear' | 'forget' | 'saved'>
 }
 
 function catalogIdOf(payload: unknown, field: 'templateId' | 'angelId'): string {
@@ -112,6 +112,7 @@ export function registerAgenticIpc(ipc: IpcHandleRegistrar, deps: AgenticIpcDeps
     if (typeof text !== 'string' || text.length > MAX_ANGEL_MESSAGE) throw new Error('Invalid message')
     return deps.chat.send(catalogIdOf(payload, 'angelId'), text)
   })
+  ipc.handle('agentic:saved-angels', async () => deps.chat.saved())
   ipc.handle('agentic:angel-chat-clear', async (_event, payload) => {
     await deps.chat.clear(catalogIdOf(payload, 'angelId'))
     return { success: true }

@@ -121,3 +121,12 @@ describe('desktop angel chat API', () => {
     expect(invoke).toHaveBeenLastCalledWith('agentic:angel-chat-clear', { angelId: '5' })
   })
 })
+
+describe('desktop saved angels API', () => {
+  it('keeps only valid saved angels', async () => {
+    const invoke = vi.fn(async () => [{ id: '5', name: 'Morning', recipe: 'x' }, { id: '../6', name: 'Bad' }, 'junk'])
+    const api = createDesktopApi(invoke as never)
+    await expect(api.agentic.getSavedAngels()).resolves.toEqual([{ id: '5', name: 'Morning' }])
+    expect(invoke).toHaveBeenLastCalledWith('agentic:saved-angels')
+  })
+})

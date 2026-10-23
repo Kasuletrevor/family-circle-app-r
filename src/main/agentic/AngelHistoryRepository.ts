@@ -109,6 +109,13 @@ export class AngelHistoryRepository {
     return row ? String(row.recipe_json) : null
   }
 
+  /** Every recipe saved for this person, so their angels can be opened without a connection. */
+  recipes(localUserId: number): Array<{ angelId: string; recipeJson: string }> {
+    const rows = this.db.prepare('SELECT angel_id, recipe_json FROM angel_recipes WHERE local_user_id = ? ORDER BY angel_id')
+      .all(localUserId) as unknown as Array<{ angel_id: string; recipe_json: string }>
+    return rows.map((row) => ({ angelId: String(row.angel_id), recipeJson: String(row.recipe_json) }))
+  }
+
   /** Removes the angel's conversation and its cached recipe. */
   forget(localUserId: number, angelId: string): void {
     this.clear(localUserId, angelId)

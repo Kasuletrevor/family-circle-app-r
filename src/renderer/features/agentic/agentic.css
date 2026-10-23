@@ -546,3 +546,22 @@
   color: var(--kk-danger);
   font-size: 14px;
 }
+
+.ga-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ga-saved h2 {
+  margin: 0;
+  color: var(--kk-text);
+  font-size: 17px;
+}
+
+.ga-saved__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
