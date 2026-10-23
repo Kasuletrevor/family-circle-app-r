@@ -86,6 +86,7 @@ interface AppServices extends StoryServices {
   sessions: SessionStore
   mutationLock: AsyncMutationLock
   privateArchiveQueryService: PrivateArchiveQueryService
+  qwen: QwenClient
   angelHistory: AngelHistoryRepository
   interactiveAiGate: InteractiveAiGate
 }
@@ -167,7 +168,7 @@ function registerDesktopIpc(services: AppServices) {
       ensureGenerationRuntime: async () => (await aiRuntimeManager?.ensureGenerationRuntime()) ?? false,
       installedModel: async () => (await aiRuntimeManager?.installedModel()) ?? null,
     },
-    qwen: new QwenClient(),
+    qwen: services.qwen,
     interactiveGate: services.interactiveAiGate,
   })
   registerAgenticIpc(ipcMain, {
@@ -325,6 +326,8 @@ async function createAppServices(): Promise<AppServices> {
   const storyQueryHistory = new StoryHistoryRepository(database)
   const storyQueryRepository = new StoryRepository(database, storyQueryHistory)
   const storyQueryChunks = new StoryChunkRepository(database)
+  // One local Qwen client, shared by private search and angel conversations.
+  const qwen = new QwenClient()
   const privateArchiveQueryService = new PrivateArchiveQueryService({
     session: sessions,
     documents: vaultRepository,
@@ -332,7 +335,7 @@ async function createAppServices(): Promise<AppServices> {
     storyChunks: storyQueryChunks,
     runtime: aiRuntimeManager,
     nomic: nomicClient,
-    qwen: new QwenClient(),
+    qwen,
     direct: new StoryDirectAnswerService(storyQueryRepository),
     interactiveGate: interactiveAiGate,
   })
@@ -366,6 +369,7 @@ async function createAppServices(): Promise<AppServices> {
     sessions,
     mutationLock,
     privateArchiveQueryService,
+    qwen,
     angelHistory: new AngelHistoryRepository(database),
     interactiveAiGate,
     ...storyServices,

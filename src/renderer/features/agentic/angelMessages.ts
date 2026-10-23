@@ -2,6 +2,7 @@ import type { AddAngelResult } from '../../../shared/agentic'
 
 export const GUARDIAN_ANGEL_VIEW = '/agentic/guardian-angel/view'
 export const MY_ANGELS_TAB = '/agentic/guardian-angel?tab=mine'
+export const ANGEL_CHAT = '/agentic/guardian-angel/chat'
 export const UNREACHABLE = "Couldn't reach Kin-Keepers.ai. Check your internet connection."
 export const CONNECTION_ENDED = 'Your Kin-Keepers.ai connection has ended. Connect again.'
 

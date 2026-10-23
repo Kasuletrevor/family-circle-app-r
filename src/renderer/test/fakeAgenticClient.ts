@@ -8,6 +8,7 @@ import type {
   PartnerViewStatus,
   RemoveAngelResult,
 } from '../../shared/agentic'
+import type { AngelChatOpenResult, AngelChatSendResult } from '../../shared/agenticChat'
 import type { AgenticClient } from '../services/agentic/AgenticClient'
 
 export const SAMPLE_CATALOG: GuardianAngelCatalogResult = {
@@ -61,6 +62,9 @@ export function fakeAgenticClient(overrides: Partial<AgenticClient> = {}) {
       return () => { connectionListeners.delete(listener) }
     }),
     emitConnection: (connection: AngelConnection) => connectionListeners.forEach((listener) => listener(connection)),
+    openAngelChat: vi.fn(async (_angelId: string): Promise<AngelChatOpenResult> => ({ status: 'not-here' })),
+    sendAngelMessage: vi.fn(async (_angelId: string, _text: string): Promise<AngelChatSendResult> => ({ status: 'failed' })),
+    clearAngelChat: vi.fn(async (_angelId: string) => undefined),
   }
   // Overrides replace methods at run time; the mock types stay for assertions.
   return Object.assign(client, overrides) as typeof client

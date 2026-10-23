@@ -224,3 +224,16 @@ describe('Add to my Guardian Angels', () => {
     expect(await screen.findByText('That template is no longer available.')).toBeInTheDocument()
   })
 })
+
+describe('Talk with an angel', () => {
+  it('offers Talk only for angels that run on this computer', async () => {
+    const agentic = fakeAgenticClient()
+    agentic.getAngelConnection.mockResolvedValue({ status: 'connected', email: 'pat@example.test' })
+    agentic.getMyAngels.mockResolvedValue({ status: 'ready', angels: [SAMPLE_ANGEL, { ...SAMPLE_ANGEL, id: '6', name: 'Shift Notes', runsHere: false }] })
+    renderAt('/agentic/guardian-angel?tab=mine', agentic)
+    const talk = await screen.findAllByRole('button', { name: 'Talk' })
+    expect(talk).toHaveLength(1)
+    fireEvent.click(talk[0]!)
+    expect(where()).toBe('/agentic/guardian-angel/chat?angel=5')
+  })
+})
