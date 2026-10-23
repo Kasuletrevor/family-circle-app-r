@@ -177,3 +177,10 @@ describe('AiRuntimeManager lazy split runtimes', () => {
     expect(sleep.mock.calls.length).toBeGreaterThanOrEqual(119)
   })
 })
+
+describe('installedModel', () => {
+  it('names the installed generation model without its extension, or null', async () => {
+    await expect(makeHarness().manager.installedModel()).resolves.toBe('Qwen_Qwen3.5-0.8B-Q4_K_M')
+    await expect(makeHarness({ installed: null }).manager.installedModel()).resolves.toBeNull()
+  })
+})

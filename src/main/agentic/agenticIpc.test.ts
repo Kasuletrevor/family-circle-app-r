@@ -3,7 +3,7 @@ import { registerAgenticIpc } from './agenticIpc'
 
 const ANGEL = {
   id: '5', name: 'Morning Check-in', description: '', templateId: '7', templateName: 'Elder Companion', avatar: null,
-  runCount: 0, lastRunAt: null, trustBoundaries: [], escalationTriggers: [],
+  runCount: 0, lastRunAt: null, trustBoundaries: [], escalationTriggers: [], runsHere: false,
 }
 
 function register() {
@@ -19,9 +19,15 @@ function register() {
     add: vi.fn(async () => ({ status: 'added', angel: { ...ANGEL, created_by: 'owner@example.test' } })),
     remove: vi.fn(async () => ({ status: 'removed', extra: 1 })),
   }
-  registerAgenticIpc({ handle: (channel, listener) => handlers.set(channel, listener) }, { catalog, views, angels: angels as never })
+  const chat = {
+    open: vi.fn(async () => ({ status: 'not-here' as const })),
+    send: vi.fn(async () => ({ status: 'failed' as const })),
+    clear: vi.fn(async () => undefined),
+    forget: vi.fn(async () => undefined),
+  }
+  registerAgenticIpc({ handle: (channel, listener) => handlers.set(channel, listener) }, { catalog, views, angels: angels as never, chat })
   const call = (channel: string, payload?: unknown) => Promise.resolve().then(() => handlers.get(channel)!({}, payload))
-  return { call, catalog, views, angels }
+  return { call, catalog, views, angels, chat }
 }
 
 describe('agentic IPC', () => {
@@ -103,5 +109,30 @@ describe('agentic IPC', () => {
     await call('agentic:open-view', { service: 'guardian-angel', target: { kind: 'angel', angelId: '5', page: 'run' } })
     expect(views.open).toHaveBeenCalledWith('guardian-angel', { kind: 'angel', angelId: '5', page: 'run' })
     await expect(call('agentic:open-view', { service: 'guardian-angel', target: { kind: 'angel', angelId: '5', page: 'admin' } })).rejects.toThrow()
+  })
+})
+
+describe('angel chat IPC', () => {
+  it('opens, sends and clears angel chats with validated input', async () => {
+    const { call, chat } = register()
+    await expect(call('agentic:angel-chat-open', { angelId: '5' })).resolves.toEqual({ status: 'not-here' })
+    expect(chat.open).toHaveBeenCalledWith('5')
+    await call('agentic:angel-chat-send', { angelId: '5', text: 'Hi' })
+    expect(chat.send).toHaveBeenCalledWith('5', 'Hi')
+    await expect(call('agentic:angel-chat-send', { angelId: '5', text: 'x'.repeat(1001) })).rejects.toThrow()
+    await expect(call('agentic:angel-chat-send', { angelId: '5', text: 5 })).rejects.toThrow()
+    await expect(call('agentic:angel-chat-open', { angelId: '../5' })).rejects.toThrow()
+    await expect(call('agentic:angel-chat-clear', { angelId: '5' })).resolves.toEqual({ success: true })
+    expect(chat.clear).toHaveBeenCalledWith('5')
+    expect(chat.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('forgets the local conversation only when an angel is removed', async () => {
+    const { call, chat, angels } = register()
+    await call('agentic:remove-angel', { angelId: '5' })
+    expect(chat.forget).toHaveBeenCalledWith('5')
+    angels.remove.mockResolvedValueOnce({ status: 'not-yours' } as never)
+    await call('agentic:remove-angel', { angelId: '6' })
+    expect(chat.forget).toHaveBeenCalledTimes(1)
   })
 })

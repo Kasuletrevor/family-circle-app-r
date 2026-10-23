@@ -10,6 +10,7 @@ import type {
   PartnerViewTarget,
   RemoveAngelResult,
 } from './agentic'
+import type { AngelChatOpenResult, AngelChatSendResult } from './agenticChat'
 import type { StoryFieldKey, StoryLanguage } from './story'
 import type { StoryPublicState, StoryVersionSummary } from './storyPublic'
 
@@ -502,5 +503,9 @@ export interface DesktopApi {
     addAngel(input: { templateId: string }): Promise<AddAngelResult>
     removeAngel(input: { angelId: string }): Promise<RemoveAngelResult>
     onAngelConnection(listener: (connection: AngelConnection) => void): () => void
+    /** A conversation with one of the person's angels, run on this computer. */
+    openAngelChat(input: { angelId: string }): Promise<AngelChatOpenResult>
+    sendAngelMessage(input: { angelId: string; text: string }): Promise<AngelChatSendResult>
+    clearAngelChat(input: { angelId: string }): Promise<{ success: true }>
   }
 }

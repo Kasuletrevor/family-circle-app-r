@@ -104,3 +104,20 @@ describe('desktop My Guardian Angels API', () => {
     expect(listener).toHaveBeenCalledWith({ status: 'connected', email: 'pat@example.test' })
   })
 })
+
+describe('desktop angel chat API', () => {
+  it('uses fixed channels, sends only the id and text, and parses results safely', async () => {
+    const invoke = vi.fn(async (channel: string) => channel === 'agentic:angel-chat-open'
+      ? { status: 'ready', angel: { id: '5', name: 'Morning', extra: 1 }, runtime: { backend: 'llama.cpp', model: 'Qwen' }, messages: [], offline: false }
+      : { status: 'replied', person: 'bad' })
+    const api = createDesktopApi(invoke as never)
+    await expect(api.agentic.openAngelChat({ angelId: '5', url: 'x' } as never)).resolves.toEqual({
+      status: 'ready', angel: { id: '5', name: 'Morning' }, runtime: { backend: 'llama.cpp', model: 'Qwen' }, messages: [], offline: false,
+    })
+    expect(invoke).toHaveBeenLastCalledWith('agentic:angel-chat-open', { angelId: '5' })
+    await expect(api.agentic.sendAngelMessage({ angelId: '5', text: 'Hi', extra: 1 } as never)).resolves.toEqual({ status: 'failed' })
+    expect(invoke).toHaveBeenLastCalledWith('agentic:angel-chat-send', { angelId: '5', text: 'Hi' })
+    await expect(api.agentic.clearAngelChat({ angelId: '5' })).resolves.toEqual({ success: true })
+    expect(invoke).toHaveBeenLastCalledWith('agentic:angel-chat-clear', { angelId: '5' })
+  })
+})
