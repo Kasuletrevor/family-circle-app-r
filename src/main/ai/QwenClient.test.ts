@@ -91,3 +91,18 @@ describe('QwenClient', () => {
     expect(englishBody.messages[0]!.content).toBe(SYSTEM)
   })
 })
+
+describe('QwenClient.chat', () => {
+  it('sends an angel chat as given and returns plain text', async () => {
+    const post = vi.fn(async () => ({ choices: [{ message: { content: '**Good** morning' } }] }))
+    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const messages = [{ role: 'system' as const, content: 'Rules' }, { role: 'user' as const, content: 'Hi' }]
+    await expect(client.chat(messages, 256)).resolves.toBe('Good morning')
+    expect(post).toHaveBeenCalledWith('/v1/chat/completions', { messages, max_tokens: 256, temperature: 0.4, top_p: 0.9, stream: false })
+  })
+
+  it('fails with QwenClientError on an empty reply', async () => {
+    const client = new QwenClient({ http: { post: vi.fn(async () => ({ choices: [] })) } as QwenHttpPort })
+    await expect(client.chat([{ role: 'user', content: 'Hi' }], 256)).rejects.toBeInstanceOf(QwenClientError)
+  })
+})

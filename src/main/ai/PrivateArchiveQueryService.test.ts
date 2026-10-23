@@ -469,3 +469,34 @@ describe('isNotFoundAnswer', () => {
     }
   })
 })
+
+describe('findStorySections', () => {
+  const stories = [
+    storyChunk(2, 'childhood', 'Life Story', 'Where I grew up', 'We lived by Lake Victoria in Entebbe.', [1, 0]),
+    storyChunk(3, 'values', 'Life Story', 'What I value', 'Honesty and hard work at Gayaza High School.', [0, 1]),
+  ]
+
+  it('ranks confirmed My Story sections, never reads the Vault, and cites the ones a reply used', async () => {
+    const vault = vi.fn(async () => [])
+    const service = new PrivateArchiveQueryService(deps({
+      storyChunks: { listQueryChunks: vi.fn(async () => stories) },
+      vaultChunks: { listQueryChunks: vault },
+    }))
+    const found = await service.findStorySections(7, 'Tell me about the lake')
+    expect(found.sections[0]).toEqual({ label: 'My Story › Life Story › Where I grew up', text: 'We lived by Lake Victoria in Entebbe.' })
+    expect(found.cite('You lived by Lake Victoria in Entebbe.')).toEqual([
+      { label: 'My Story › Life Story › Where I grew up', excerpt: 'We lived by Lake Victoria in Entebbe.' },
+    ])
+    expect(vault).not.toHaveBeenCalled()
+  })
+
+  it('returns nothing when no story is indexed and fails when search is down', async () => {
+    const empty = new PrivateArchiveQueryService(deps({ storyChunks: { listQueryChunks: vi.fn(async () => []) } }))
+    await expect(empty.findStorySections(7, 'Hi')).resolves.toMatchObject({ sections: [] })
+    const down = new PrivateArchiveQueryService(deps({
+      storyChunks: { listQueryChunks: vi.fn(async () => stories) },
+      runtime: { ensureEmbeddingRuntime: vi.fn(async () => false), ensureGenerationRuntime: vi.fn(async () => true) },
+    }))
+    await expect(down.findStorySections(7, 'Hi')).rejects.toMatchObject({ code: 'private-ai-unavailable' })
+  })
+})
