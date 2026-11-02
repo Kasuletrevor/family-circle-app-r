@@ -174,9 +174,10 @@ function noContextAnswer(scope: PrivateArchiveScope, language?: string): string 
 }
 
 // The model is asked to reply exactly NOT_FOUND when its sources do not answer the
-// question. A 0.8B model does not always comply, so common "not found" wording in the
-// first sentence also counts; later sentences may legitimately note a gap.
-const NOT_FOUND_SENTINEL = /^\s*not_found\b/i
+// question. A small model does not always comply (Granite sometimes writes "Not found"),
+// so common "not found" wording in the first sentence also counts; later sentences may
+// legitimately note a gap.
+const NOT_FOUND_SENTINEL = /^\s*not[_ -]?found\b/i
 const NOT_FOUND_WORDING = [
   /\b(?:could not|couldn't|cannot|can't|unable to) find\b/i,
   /\bno (?:information|mention|details?|record)\b/i,
