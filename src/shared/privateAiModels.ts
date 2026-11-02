@@ -4,7 +4,7 @@
  * privateAiModels.test.ts.
  */
 export const PRIVATE_AI_MODELS = {
-  answers: 'Qwen3.5 0.8B',
+  answers: 'Granite 4.0 1B',
   search: 'Nomic Embed Text v1.5',
   voice: 'Whisper base',
 } as const

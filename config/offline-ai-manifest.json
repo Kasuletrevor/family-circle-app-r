@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "files": [
     {
       "name": "AI engine",
@@ -14,10 +14,10 @@
     {
       "name": "AI answers",
       "type": "model",
-      "url": "https://familycircle.o2gventures.com/private-ai/models/Qwen_Qwen3.5-0.8B-Q4_K_M.gguf",
-      "targetPath": "models/Qwen_Qwen3.5-0.8B-Q4_K_M.gguf",
-      "sha256": "FB044E93939A70469C905781334F5DE1E6C8B608CED6CBC8C9249BD4127D9526",
-      "sizeBytes": 579615840,
+      "url": "https://familycircle.o2gventures.com/private-ai/models/granite-4.0-1b-Q4_K_M.gguf",
+      "targetPath": "models/granite-4.0-1b-Q4_K_M.gguf",
+      "sha256": "22EC0F9CC99A90185312DE3C882C84E7BD6789BDD050389844380A01A831D7F1",
+      "sizeBytes": 1023645440,
       "extract": false,
       "required": true
     },

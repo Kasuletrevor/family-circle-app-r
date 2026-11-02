@@ -443,6 +443,15 @@ describe('PrivateArchiveQueryService languages', () => {
     await expect(notFound.ask({ question: 'Quelle voiture ?', scope: { type: 'vault', vault: { type: 'all' } }, language: 'fr' }))
       .resolves.toMatchObject({ answer: "Je ne l'ai pas trouvé dans vos sources privées.", sources: [] })
   })
+
+  it('treats a spelled-out "Not found" like the sentinel', async () => {
+    // Real Granite 4.0 1B reply when asked to answer in French with no supporting source.
+    const notFound = new PrivateArchiveQueryService(deps({
+      qwen: { generateFast: vi.fn(async () => 'Not found'), generateComplex: vi.fn(), translateForRetrieval: vi.fn(async () => 'What car?') },
+    }))
+    await expect(notFound.ask({ question: 'Quelle voiture ?', scope: { type: 'vault', vault: { type: 'all' } }, language: 'fr' }))
+      .resolves.toMatchObject({ answer: "Je ne l'ai pas trouvé dans vos sources privées.", sources: [] })
+  })
 })
 
 describe('isNotFoundAnswer', () => {

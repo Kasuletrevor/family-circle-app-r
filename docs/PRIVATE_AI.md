@@ -11,10 +11,10 @@ Private AI uses `config/offline-ai-manifest.json`. Manifest version `1.3.0` requ
 | Friendly name | Asset | Expected bytes | Expected SHA-256 |
 | --- | --- | ---: | --- |
 | AI engine | llama.cpp b11243 Windows CPU x64 runtime ZIP | 19,161,151 | `29F91327F4E98FCAC93E3B44E6CC54BEDA26468EB9FFEB804A08CFA67BDA8C5B` |
-| AI answers | Qwen3.5-0.8B Q4_K_M GGUF | 579,615,840 | `FB044E93939A70469C905781334F5DE1E6C8B608CED6CBC8C9249BD4127D9526` |
+| AI answers | Granite 4.0 1B Q4_K_M GGUF | 1,023,645,440 | `22EC0F9CC99A90185312DE3C882C84E7BD6789BDD050389844380A01A831D7F1` |
 | AI search | Nomic Embed Text v1.5 Q4_K_M GGUF | 84,106,624 | `D4E388894E09CF3816E8B0896D81D265B55E7A9FFF9AB03FE8BF4EF5E11295AC` |
 
-The required transfer is **682,883,615 bytes (about 651 MiB / 0.64 GiB)**. Granite 4.0 H-Micro and Granite 4.0 350M are no longer required assets.
+The required transfer is **1,126,913,215 bytes (about 1,075 MiB / 1.05 GiB)**. Manifest `1.4.0` replaced Qwen3.5-0.8B with IBM Granite 4.0 1B (the transformer model, not the hybrid "H" model), which used memories more reliably in a local Elder Companion benchmark. Apps on `1.3.0` download the new model and delete the old Qwen file. Granite 4.0 H-Micro and Granite 4.0 350M are not used.
 
 **Engine/model compatibility.** The Qwen3.5-0.8B GGUF carries a next-token-prediction layer (`block_count = 25`, `nextn_predict_layers = 1`). llama.cpp b8772 (manifest `1.2.0`) treated it as a regular layer and failed with `missing tensor 'blk.24.ssm_conv1d.weight'`, so no answer could be generated. b11243 loads it. Before changing either asset, run `llama-server --model <qwen.gguf>` from the candidate engine and confirm `/health` returns `ok`. The unit tests cannot catch this pairing because they never start the real runtime.
 
@@ -29,7 +29,7 @@ The required transfer is **682,883,615 bytes (about 651 MiB / 0.64 GiB)**. Grani
 │   └── llama-b11243-bin-win-cpu-x64/
 │       └── llama-server.exe
 ├── models/
-│   ├── Qwen_Qwen3.5-0.8B-Q4_K_M.gguf
+│   ├── granite-4.0-1b-Q4_K_M.gguf
 │   └── nomic-embed-text-v1.5.Q4_K_M.gguf
 └── .staging/
     └── 1.3.0/
@@ -80,17 +80,17 @@ Settings and the Vault page share `PrivateAiSetupProgress`:
 `AiRuntimeManager` starts no AI process at construction or normal app startup. It owns two local llama.cpp server lifecycles:
 
 ```text
-Qwen3.5-0.8B generation / translation   developer-only port 8080
+Granite 4.0 1B generation / translation   developer-only port 8080
 Nomic embedding / search                developer-only port 8081
 ```
 
 Both bind to `127.0.0.1` only. Ports and endpoints are internal implementation details and must never appear in the renderer/public desktop contract.
 
-There is no separate fast-generation process. `ensureFastGenerationRuntime()` is only a compatibility alias to the shared Qwen generation runtime while older internal callers are removed.
+There is no separate fast-generation process. `ensureFastGenerationRuntime()` is only a compatibility alias to the shared Granite generation runtime while older internal callers are removed.
 
 ## Indexing lifecycle
 
-Indexing uses **Nomic only**. Qwen is not required for document or Story indexing.
+Indexing uses **Nomic only**. Granite is not required for document or Story indexing.
 
 Vault:
 
@@ -139,7 +139,7 @@ protected local user + question + scope
      OR original + local English translation for supported non-English input
   -> rank eligible Story + Vault candidates together
   -> keep at most top 3 chunks total
-  -> start/reuse shared Qwen generation runtime
+  -> start/reuse shared Granite generation runtime
   -> grounded answer + display-safe source excerpts
 ```
 
@@ -147,13 +147,13 @@ There is **one shared retrieval budget of three chunks**. It is not three Vault 
 
 ### Deterministic Story fast path
 
-High-confidence factual questions for a small fixed set of confirmed Story fields can be answered from the canonical Story row without Nomic or Qwen. The current direct intents include full name, preferred name, roots, languages, occupation, and education.
+High-confidence factual questions for a small fixed set of confirmed Story fields can be answered from the canonical Story row without Nomic or Granite. The current direct intents include full name, preferred name, roots, languages, occupation, and education.
 
 If phrase matching is not high confidence, the request falls back to semantic retrieval rather than guessing.
 
-### One Qwen model, two generation budgets
+### One Granite model, two generation budgets
 
-Both generated-answer routes use **Qwen3.5-0.8B Q4_K_M** on the same local server:
+Both generated-answer routes use **Granite 4.0 1B Q4_K_M** on the same local server:
 
 ```text
 fast      normal grounded answer       max 192 output tokens
@@ -162,15 +162,15 @@ complex   explicit combined synthesis  max 384 output tokens
 
 The route distinction is now a response-budget/policy distinction, **not a model-selection distinction**. There is no H-Micro fallback and no second generator download.
 
-For supported non-English retrieval planning, the same Qwen runtime can produce a short local English retrieval translation before Nomic embeds both useful query forms.
+For supported non-English retrieval planning, the same Granite runtime can produce a short local English retrieval translation before Nomic embeds both useful query forms.
 
-No conversation transcript is automatically injected. Qwen receives only the current request and the selected retrieved private-source context. If no usable context is found, the service returns a scope-appropriate local not-found answer and does not start generation.
+No conversation transcript is automatically injected. Granite receives only the current request and the selected retrieved private-source context. If no usable context is found, the service returns a scope-appropriate local not-found answer and does not start generation.
 
 ### Asking from the app
 
 The AI Assistant ("Ask Private AI") exposes four scopes over the desktop `vault.ask` contract: `story-and-vault` (default, the engine's `combined`), `story`, `all` (all Vault documents) and `documents` (selected Vault documents). Sources are `{ sourceType: 'document', documentId, fileName, excerpt }` or `{ sourceType: 'story', chapter, label, excerpt }`.
 
-When the retrieved context does not answer the question, Qwen is asked to reply `NOT_FOUND`. The service then returns the scope's local not-found answer with **no sources**. A worded refusal in the first sentence also drops the sources, but keeps the text.
+When the retrieved context does not answer the question, Granite is asked to reply `NOT_FOUND`. The service then returns the scope's local not-found answer with **no sources**. A worded refusal in the first sentence also drops the sources, but keeps the text.
 
 ## Large documents: measured behaviour
 
@@ -244,9 +244,9 @@ Generation receives at most the three ranked local chunks needed for the current
 
 ## Developer benchmark
 
-`scripts/benchmark-private-ai.mjs` is an explicit developer tool. It benchmarks the **fast** and **complex** Qwen token budgets against the same loopback generation endpoint. It is not called by app startup, `npm run check`, Desktop shell CI, or the Windows packaging workflow.
+`scripts/benchmark-private-ai.mjs` is an explicit developer tool. It benchmarks the **fast** and **complex** Granite token budgets against the same loopback generation endpoint. It is not called by app startup, `npm run check`, Desktop shell CI, or the Windows packaging workflow.
 
-The Qwen llama.cpp server must already be running locally:
+The Granite llama.cpp server must already be running locally:
 
 ```bash
 node scripts/benchmark-private-ai.mjs --fixtures ./private-ai-benchmark-fixtures.json --model both
@@ -269,7 +269,7 @@ grounded
 
 ## Shutdown
 
-The main process owns every llama.cpp child it starts. Application shutdown stops the managed embedding and shared Qwen generation processes before database close. Family Circle does not attach to or kill unrelated system processes.
+The main process owns every llama.cpp child it starts. Application shutdown stops the managed embedding and shared Granite generation processes before database close. Family Circle does not attach to or kill unrelated system processes.
 
 ## Manual Windows clean-machine acceptance test
 
@@ -281,17 +281,17 @@ The main process owns every llama.cpp child it starts. Application shutdown stop
 6. **Persistent indexing** — confirm Nomic indexes extraction-ready Vault documents and confirmed Story answers without re-upload/re-entry.
 7. **Known-answer Vault RAG** — confirm grounded answer and source excerpt.
 8. **Direct Story fact** — confirm supported direct facts do not start semantic/generation runtimes.
-9. **Fast Qwen answer** — confirm a normal grounded question uses the shared Qwen runtime with the 192-token budget.
-10. **Complex Qwen answer** — confirm an explicit combined comparison uses the same Qwen runtime with the 384-token budget.
+9. **Fast Granite answer** — confirm a normal grounded question uses the shared Granite runtime with the 192-token budget.
+10. **Complex Granite answer** — confirm an explicit combined comparison uses the same Granite runtime with the 384-token budget.
 11. **Offline question** — disconnect from the internet and confirm indexed/direct private questions still work.
 12. **User isolation** — confirm another local account cannot retrieve first-user Vault or Story content.
 13. **Lifecycle cleanup** — exit Family Circle and confirm both managed llama.cpp processes stop.
 
-Also verify failure paths: corrupt a required asset and confirm `repair_required`; retry indexing without re-uploading; ask with another account's selected document ID and confirm safe rejection; stop Qwen and confirm generation fails locally without any cloud fallback.
+Also verify failure paths: corrupt a required asset and confirm `repair_required`; retry indexing without re-uploading; ask with another account's selected document ID and confirm safe rejection; stop Granite and confirm generation fails locally without any cloud fallback.
 
 ## CI contract
 
-CI must never download or start the real ~671 MiB AI stack. Downloader, runtime, model-server, planner, ranking, and health behavior is exercised with injected fakes/ports plus SQLite-backed security tests.
+CI must never download or start the real ~1,075 MiB AI stack. Downloader, runtime, model-server, planner, ranking, and health behavior is exercised with injected fakes/ports plus SQLite-backed security tests.
 
 The merge gate is:
 
@@ -300,4 +300,4 @@ npm run check
 npm audit --audit-level=high
 ```
 
-`npm run check` covers TypeScript, Vitest, architecture-boundary verification, and Electron/renderer production builds. `VaultRagSecurity.test.ts` blocks regressions in cross-user isolation, no cloud/Circle path, no query-time document re-embedding, explicit-only downloads, Nomic-only indexing, lazy runtime construction, and AI-independent upload/extraction. `PrivateArchiveQueryService.test.ts` covers deterministic/direct routing, the shared top-three budget, Story/Vault ranking, multilingual planning, safe source projection, and both Qwen generation budgets.
+`npm run check` covers TypeScript, Vitest, architecture-boundary verification, and Electron/renderer production builds. `VaultRagSecurity.test.ts` blocks regressions in cross-user isolation, no cloud/Circle path, no query-time document re-embedding, explicit-only downloads, Nomic-only indexing, lazy runtime construction, and AI-independent upload/extraction. `PrivateArchiveQueryService.test.ts` covers deterministic/direct routing, the shared top-three budget, Story/Vault ranking, multilingual planning, safe source projection, and both Granite generation budgets.
