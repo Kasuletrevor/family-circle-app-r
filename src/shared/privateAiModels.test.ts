@@ -11,8 +11,8 @@ function manifestUrls(file: string): string {
 describe('PRIVATE_AI_MODELS', () => {
   it('names the models the download manifests actually install', () => {
     const ai = manifestUrls('offline-ai-manifest.json')
-    expect(PRIVATE_AI_MODELS.answers).toBe('Qwen3.5 0.8B')
-    expect(ai).toContain('Qwen_Qwen3.5-0.8B')
+    expect(PRIVATE_AI_MODELS.answers).toBe('Granite 4.0 1B')
+    expect(ai).toContain('granite-4.0-1b-Q4_K_M')
     expect(PRIVATE_AI_MODELS.search).toBe('Nomic Embed Text v1.5')
     expect(ai).toContain('nomic-embed-text-v1.5')
     expect(PRIVATE_AI_MODELS.voice).toBe('Whisper base')

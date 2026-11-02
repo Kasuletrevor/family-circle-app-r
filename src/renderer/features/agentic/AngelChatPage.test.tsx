@@ -12,7 +12,7 @@ const message = (id: number, role: 'person' | 'angel', text: string, extra: Part
 })
 const ready = {
   status: 'ready' as const, angel: { id: '5', name: 'Morning Check-in' },
-  runtime: { backend: 'llama.cpp' as const, model: 'Qwen_Qwen3.5-0.8B-Q4_K_M' }, messages: [message(1, 'angel', 'Hello again')], offline: false,
+  runtime: { backend: 'llama.cpp' as const, model: 'granite-4.0-1b-Q4_K_M' }, messages: [message(1, 'angel', 'Hello again')], offline: false,
 }
 
 function renderPage(agentic = fakeAgenticClient()) {
@@ -36,7 +36,7 @@ describe('AngelChatPage', () => {
     renderPage(agentic)
     expect(await screen.findByRole('heading', { name: 'Morning Check-in' })).toBeInTheDocument()
     expect(agentic.openAngelChat).toHaveBeenCalledWith('5')
-    expect(screen.getByText('Runs on this computer · llama.cpp · Qwen3.5-0.8B')).toBeInTheDocument()
+    expect(screen.getByText('Runs on this computer · llama.cpp · Granite-4.0-1B')).toBeInTheDocument()
     expect(screen.getByText('Hello again')).toBeInTheDocument()
     expect(screen.queryByText(/saved on this computer/)).not.toBeInTheDocument()
   })

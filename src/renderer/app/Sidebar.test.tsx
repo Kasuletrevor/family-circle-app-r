@@ -50,7 +50,7 @@ describe('Sidebar', () => {
 
   it('names the local answer model in the Local AI card', async () => {
     renderSidebar()
-    expect(screen.getByText('Qwen3.5 0.8B · on this computer')).toBeInTheDocument()
+    expect(screen.getByText('Granite 4.0 1B · on this computer')).toBeInTheDocument()
     expect(await screen.findByText(/Ready \(Offline\)/)).toBeInTheDocument()
   })
 })

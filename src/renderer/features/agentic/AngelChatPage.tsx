@@ -14,9 +14,13 @@ const NOT_READY: Record<Exclude<AngelChatOpenResult['status'], 'ready'>, string>
 }
 const FAILED = "The angel couldn't answer just now. Try again."
 
-/** "Qwen_Qwen3.5-0.8B-Q4_K_M" becomes "Qwen3.5-0.8B". */
+/** "granite-4.0-1b-Q4_K_M" becomes "Granite-4.0-1B", and "Qwen_Qwen3.5-0.8B-Q4_K_M" becomes "Qwen3.5-0.8B". */
 function modelLabel(model: string): string {
-  return model.replace(/^Qwen_/, '').replace(/-Q\d.*$/i, '')
+  const name = model
+    .replace(/^Qwen_/, '')
+    .replace(/-Q\d.*$/i, '')
+    .replace(/-(\d+(?:\.\d+)?)([bm])$/, (_, size: string, unit: string) => `-${size}${unit.toUpperCase()}`)
+  return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
 function ChatMessage({ message }: { message: AngelChatMessage }) {
