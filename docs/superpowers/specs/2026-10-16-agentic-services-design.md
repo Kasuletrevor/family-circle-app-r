@@ -8,7 +8,7 @@ Status: approved; plan in `docs/superpowers/plans/2026-10-16-agentic-services.md
 Bring the Kin-Keepers agentic world into Family Circle as a separate, green
 **COMMAND mode**. In this first slice people can browse the Guardian Angel
 templates natively and open the partner services (Guardian Angel templates,
-UberCare, ElderChat, Marketplace) inside the app in isolated, sandboxed web views. People
+UberCare, ElderChat, SLEDSS, Marketplace) inside the app in isolated, sandboxed web views. People
 sign in and activate templates on kin-keepers.ai itself.
 
 **No family data leaves the computer in this slice.** Running templates with
@@ -19,9 +19,10 @@ is a later slice.
 
 ### Mode switch
 
-- A new sidebar group, **Agentic Services**, with four entries:
+- A new sidebar group, **Agentic Services**, with five entries:
   Guardian Angel (`/agentic/guardian-angel`), UberCare (`/agentic/ubercare`),
-  ElderChat (`/agentic/elderchat`, added later) and Marketplace (`/agentic/marketplace`).
+  ElderChat (`/agentic/elderchat`) and SLEDSS (`/agentic/sledss`), both added later,
+  and Marketplace (`/agentic/marketplace`).
 - While any `/agentic/*` route is open the whole frame turns green and the
   existing sidebar mode badge reads **Command mode** (it reads Ask mode elsewhere). Any core page returns to blue Ask mode.
 - Green is applied by overriding the role-based accent tokens
@@ -49,7 +50,7 @@ is a later slice.
 ### Partner view page (shared)
 
 Used for UberCare (`https://remotecarers.net/worker/`), ElderChat
-(`https://o2gventures.com/memorytest/`), Marketplace
+(`https://o2gventures.com/memorytest/`), SLEDSS (`https://sledss.o2gventures.com/`), Marketplace
 (`https://kin-keepers.ai/`) and Guardian Angel template pages.
 
 - Header bar: Back, service name, Reload, **Open in browser**, and the note
@@ -107,6 +108,7 @@ Used for UberCare (`https://remotecarers.net/worker/`), ElderChat
   | `guardian-angel` | `https://kin-keepers.ai/` | `kin-keepers.ai`, `www.kin-keepers.ai` | `persist:agentic-kin-keepers` |
   | `ubercare` | `https://remotecarers.net/worker/` | `remotecarers.net`, `www.remotecarers.net` | `persist:agentic-ubercare` |
   | `elderchat` | `https://o2gventures.com/memorytest/` | `o2gventures.com`, `www.o2gventures.com` | `persist:agentic-elderchat` |
+  | `sledss` | `https://sledss.o2gventures.com/` | `sledss.o2gventures.com` | `persist:agentic-sledss` |
   | `marketplace` | `https://kin-keepers.ai/` | `kin-keepers.ai`, `www.kin-keepers.ai` | `persist:agentic-kin-keepers` (shared, one sign-in) |
 
 - One `WebContentsView` per service, created on first open and attached to the
@@ -149,7 +151,7 @@ Used for UberCare (`https://remotecarers.net/worker/`), ElderChat
   rule checked by `scripts/verify-boundaries.mjs`). An `AgenticClient`
   interface and `MockAgenticClient` back the tests and the preview harness.
 - Routes: `/agentic/guardian-angel` shows `GuardianAngelPage`;
-  `/agentic/ubercare`, `/agentic/elderchat`, `/agentic/marketplace` and
+  `/agentic/ubercare`, `/agentic/elderchat`, `/agentic/sledss`, `/agentic/marketplace` and
   `/agentic/guardian-angel/view` (`?template={id}` or `?page=care-builder`)
   show `PartnerViewPage`.
 - `PartnerViewPage` measures its view slot with `ResizeObserver` (plus window
@@ -191,5 +193,5 @@ Used for UberCare (`https://remotecarers.net/worker/`), ElderChat
 
 - Sending any family data to templates or partners.
 - Activating templates from Family Circle (needs an API from Jose/Marvin).
-- Bio-Metrics and SLEDSS integrations. (ElderChat was later added as a partner
-  view of the ElderCHAT memory test; nothing is shared with it.)
+- Bio-Metrics integration (bringing SLEDSS and memory-test results into the Vault).
+  ElderChat and SLEDSS were later added as partner views; nothing is shared with them.

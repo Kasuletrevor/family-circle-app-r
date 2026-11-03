@@ -44,6 +44,12 @@ describe('PartnerViewPage', () => {
     await waitFor(() => expect(agentic.openView).toHaveBeenCalledWith('elderchat', { kind: 'start' }))
   })
 
+  it('opens SLEDSS with its own name', async () => {
+    const agentic = renderView('/agentic/sledss', 'sledss')
+    expect(screen.getByRole('heading', { name: 'SLEDSS' })).toBeInTheDocument()
+    await waitFor(() => expect(agentic.openView).toHaveBeenCalledWith('sledss', { kind: 'start' }))
+  })
+
   it('opens a template from the address', async () => {
     const agentic = renderView('/agentic/guardian-angel/view?template=7', 'guardian-angel')
     await waitFor(() => expect(agentic.openView).toHaveBeenCalledWith('guardian-angel', { kind: 'template', templateId: '7' }))
