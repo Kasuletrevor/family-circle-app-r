@@ -55,6 +55,7 @@ export function AuthenticatedApp({
             <Route path="/agentic/guardian-angel/chat" element={<AngelChatPage />} />
             <Route path="/agentic/guardian-angel/view" element={<PartnerViewPage key="guardian-angel" service="guardian-angel" />} />
             <Route path="/agentic/ubercare" element={<PartnerViewPage key="ubercare" service="ubercare" />} />
+            <Route path="/agentic/elderchat" element={<PartnerViewPage key="elderchat" service="elderchat" />} />
             <Route path="/agentic/marketplace" element={<PartnerViewPage key="marketplace" service="marketplace" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -10,6 +10,7 @@ import './agentic.css'
 const SERVICE_NAMES: Record<PartnerServiceKey, string> = {
   'guardian-angel': 'Guardian Angel',
   ubercare: 'UberCare',
+  elderchat: 'ElderChat',
   marketplace: 'Marketplace',
 }
 

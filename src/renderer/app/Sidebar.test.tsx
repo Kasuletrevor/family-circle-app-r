@@ -33,6 +33,7 @@ describe('Sidebar', () => {
     const group = screen.getByRole('navigation', { name: 'Agentic Services' })
     expect(within(group).getByRole('link', { name: 'Guardian Angel' })).toHaveAttribute('href', '/agentic/guardian-angel')
     expect(within(group).getByRole('link', { name: 'UberCare' })).toHaveAttribute('href', '/agentic/ubercare')
+    expect(within(group).getByRole('link', { name: 'ElderChat' })).toHaveAttribute('href', '/agentic/elderchat')
     expect(within(group).getByRole('link', { name: 'Marketplace' })).toHaveAttribute('href', '/agentic/marketplace')
   })
 

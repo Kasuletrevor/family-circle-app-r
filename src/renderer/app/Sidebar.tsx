@@ -8,6 +8,7 @@ import {
   Home,
   LockKeyhole,
   MailPlus,
+  MessageCircleHeart,
   Network,
   Settings,
   ShieldCheck,
@@ -41,6 +42,7 @@ export const navigationItems: NavigationItem[] = [
 export const agenticNavigationItems: NavigationItem[] = [
   { label: 'Guardian Angel', to: '/agentic/guardian-angel', icon: ShieldCheck },
   { label: 'UberCare', to: '/agentic/ubercare', icon: HeartHandshake },
+  { label: 'ElderChat', to: '/agentic/elderchat', icon: MessageCircleHeart },
   { label: 'Marketplace', to: '/agentic/marketplace', icon: Store },
 ]
 
