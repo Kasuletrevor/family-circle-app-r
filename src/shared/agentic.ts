@@ -1,5 +1,5 @@
-export type PartnerServiceKey = 'guardian-angel' | 'ubercare' | 'marketplace'
-export const PARTNER_SERVICE_KEYS: readonly PartnerServiceKey[] = ['guardian-angel', 'ubercare', 'marketplace']
+export type PartnerServiceKey = 'guardian-angel' | 'ubercare' | 'elderchat' | 'sledss' | 'marketplace'
+export const PARTNER_SERVICE_KEYS: readonly PartnerServiceKey[] = ['guardian-angel', 'ubercare', 'elderchat', 'sledss', 'marketplace']
 
 export function isPartnerServiceKey(value: unknown): value is PartnerServiceKey {
   return typeof value === 'string' && (PARTNER_SERVICE_KEYS as readonly string[]).includes(value)

@@ -6,10 +6,18 @@ describe('decideNavigation', () => {
     expect(decideNavigation('guardian-angel', 'https://kin-keepers.ai/templates/7')).toBe('allow')
     expect(decideNavigation('marketplace', 'https://www.kin-keepers.ai/')).toBe('allow')
     expect(decideNavigation('ubercare', 'https://remotecarers.net/worker/login')).toBe('allow')
+    expect(decideNavigation('elderchat', 'https://o2gventures.com/memorytest/braintest/')).toBe('allow')
+    expect(decideNavigation('elderchat', 'https://www.o2gventures.com/memorytest/')).toBe('allow')
+    expect(decideNavigation('sledss', 'https://sledss.o2gventures.com/results')).toBe('allow')
   })
 
   it('sends other HTTPS sites to the browser', () => {
     expect(decideNavigation('ubercare', 'https://kin-keepers.ai/')).toBe('external')
+    expect(decideNavigation('elderchat', 'https://familycircle.o2gventures.com/')).toBe('external')
+    expect(decideNavigation('elderchat', 'https://youtu.be/ny6mVI50aKk')).toBe('external')
+    expect(decideNavigation('elderchat', 'https://sledss.o2gventures.com/')).toBe('external')
+    expect(decideNavigation('sledss', 'https://o2gventures.com/memorytest/')).toBe('external')
+    expect(decideNavigation('sledss', 'https://www.who.int/')).toBe('external')
     expect(decideNavigation('guardian-angel', 'https://kin-keepers.ai.evil.test/')).toBe('external')
     expect(decideNavigation('guardian-angel', 'https://evil.test/?kin-keepers.ai')).toBe('external')
   })
@@ -26,12 +34,16 @@ describe('targetUrl', () => {
     expect(targetUrl('guardian-angel', { kind: 'template', templateId: '7' })).toBe('https://kin-keepers.ai/templates/7')
     expect(targetUrl('guardian-angel', { kind: 'care-builder' })).toBe('https://kin-keepers.ai/care-builder')
     expect(targetUrl('ubercare', { kind: 'start' })).toBe('https://remotecarers.net/worker/')
+    expect(targetUrl('elderchat', { kind: 'start' })).toBe('https://o2gventures.com/memorytest/')
+    expect(targetUrl('sledss', { kind: 'start' })).toBe('https://sledss.o2gventures.com/')
   })
 
   it('refuses bad template ids and templates outside Guardian Angel', () => {
     expect(() => targetUrl('guardian-angel', { kind: 'template', templateId: '../admin' })).toThrow()
     expect(() => targetUrl('ubercare', { kind: 'template', templateId: '7' })).toThrow()
     expect(() => targetUrl('ubercare', { kind: 'care-builder' })).toThrow()
+    expect(() => targetUrl('elderchat', { kind: 'template', templateId: '7' })).toThrow()
+    expect(() => targetUrl('sledss', { kind: 'care-builder' })).toThrow()
   })
 
   it('builds the settings and test pages of an own angel', () => {
@@ -58,9 +70,11 @@ describe('clampBounds', () => {
 })
 
 describe('partitionFor', () => {
-  it('shares one Kin-Keepers session per account and keeps UberCare apart', () => {
+  it('shares one Kin-Keepers session per account and keeps UberCare, ElderChat and SLEDSS apart', () => {
     expect(partitionFor('guardian-angel', 'abc')).toBe('persist:agentic-kin-keepers-abc')
     expect(partitionFor('marketplace', 'abc')).toBe('persist:agentic-kin-keepers-abc')
     expect(partitionFor('ubercare', 'abc')).toBe('persist:agentic-ubercare-abc')
+    expect(partitionFor('elderchat', 'abc')).toBe('persist:agentic-elderchat-abc')
+    expect(partitionFor('sledss', 'abc')).toBe('persist:agentic-sledss-abc')
   })
 })

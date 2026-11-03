@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  Activity,
   BookOpen,
   Bot,
   CircleUserRound,
@@ -8,6 +9,7 @@ import {
   Home,
   LockKeyhole,
   MailPlus,
+  MessageCircleHeart,
   Network,
   Settings,
   ShieldCheck,
@@ -41,6 +43,8 @@ export const navigationItems: NavigationItem[] = [
 export const agenticNavigationItems: NavigationItem[] = [
   { label: 'Guardian Angel', to: '/agentic/guardian-angel', icon: ShieldCheck },
   { label: 'UberCare', to: '/agentic/ubercare', icon: HeartHandshake },
+  { label: 'ElderChat', to: '/agentic/elderchat', icon: MessageCircleHeart },
+  { label: 'SLEDSS', to: '/agentic/sledss', icon: Activity },
   { label: 'Marketplace', to: '/agentic/marketplace', icon: Store },
 ]
 

@@ -5,7 +5,7 @@ interface PartnerService {
   startUrl: string
   hosts: readonly string[]
   /** Services in one group share a session, so people sign in once. */
-  group: 'kin-keepers' | 'ubercare'
+  group: 'kin-keepers' | 'ubercare' | 'elderchat' | 'sledss'
 }
 
 const KIN_KEEPERS_HOSTS = ['kin-keepers.ai', 'www.kin-keepers.ai'] as const
@@ -13,6 +13,11 @@ const KIN_KEEPERS_HOSTS = ['kin-keepers.ai', 'www.kin-keepers.ai'] as const
 export const PARTNER_SERVICES: Record<PartnerServiceKey, PartnerService> = {
   'guardian-angel': { name: 'Guardian Angel', startUrl: 'https://kin-keepers.ai/', hosts: KIN_KEEPERS_HOSTS, group: 'kin-keepers' },
   ubercare: { name: 'UberCare', startUrl: 'https://remotecarers.net/worker/', hosts: ['remotecarers.net', 'www.remotecarers.net'], group: 'ubercare' },
+  // The ElderCHAT memory test. Only the main o2gventures.com site: other subdomains, such as
+  // Family Circle, open in the browser, and SLEDSS has its own view.
+  elderchat: { name: 'ElderChat', startUrl: 'https://o2gventures.com/memorytest/', hosts: ['o2gventures.com', 'www.o2gventures.com'], group: 'elderchat' },
+  // The SLEDSS app talks to sledssback.o2gventures.com in the background; only its pages need to stay here.
+  sledss: { name: 'SLEDSS', startUrl: 'https://sledss.o2gventures.com/', hosts: ['sledss.o2gventures.com'], group: 'sledss' },
   marketplace: { name: 'Marketplace', startUrl: 'https://kin-keepers.ai/', hosts: KIN_KEEPERS_HOSTS, group: 'kin-keepers' },
 }
 
