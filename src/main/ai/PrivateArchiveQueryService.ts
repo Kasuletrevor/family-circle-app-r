@@ -228,6 +228,10 @@ function usesNoSection(answer: string, question: string, read: Array<{ text: str
   const asked = contentTerms(question)
   const own = [...contentTerms(answer)].filter((term) => !asked.has(term) && !YES_NO.has(term))
   if (own.length === 0) return false
+  // A number the sections do not contain is usually worked out from one they do: an age
+  // from a birth date, days until an appointment. Such an answer used them.
+  const hasNumber = /\d/
+  if (hasNumber.test(answer) && read.some((section) => hasNumber.test(section.text))) return false
   const sectionTerms = new Set(read.flatMap((section) => [...contentTerms(section.text)]))
   return own.every((term) => !sectionTerms.has(term))
 }

@@ -696,3 +696,25 @@ describe('PrivateArchiveQueryService review fixes', () => {
     }
   })
 })
+
+describe('PrivateArchiveQueryService calculated answers', () => {
+  function ask(sectionText: string, grounded: string, question: string) {
+    const base = deps({
+      vaultChunks: { listQueryChunks: vi.fn(async () => [vaultChunk(1, 'ruth.txt', 0, sectionText, [1, 0])]) },
+    })
+    const qwen = { ...base.qwen, generateFast: vi.fn(async () => grounded), generateGeneral: vi.fn(async () => 'NOT_FOUND') }
+    return { qwen, result: new PrivateArchiveQueryService({ ...base, qwen }).ask({ question, scope: { type: 'combined', vault: { type: 'all' } } }) }
+  }
+
+  it('keeps an age or a count worked out from a date in the sections (Codex review on #75)', async () => {
+    const { qwen, result } = ask('Ruth was born on 1 January 1950.', 'Ruth is 76 years old.', 'How old is Ruth?')
+    await expect(result).resolves.toMatchObject({ answer: 'Ruth is 76 years old.', route: 'fast' })
+    expect(qwen.generateGeneral).not.toHaveBeenCalled()
+  })
+
+  it('still asks the general way when the answer has a number but the sections have none', async () => {
+    const { qwen, result } = ask('Ruth likes tea with her neighbours.', 'Uganda became independent in 1962.', 'When did Uganda become independent?')
+    await result
+    expect(qwen.generateGeneral).toHaveBeenCalledWith('When did Uganda become independent?', undefined)
+  })
+})
