@@ -130,6 +130,7 @@ function safeAnswerSources(value: unknown): VaultAnswer['sources'] {
 function safeAnswer(value: unknown): VaultAnswer {
   const raw = recordOf(value)
   return {
+    ...(raw.general === true ? { general: true as const } : {}),
     answer: String(raw.answer ?? ''),
     sources: safeAnswerSources(raw.sources),
   }

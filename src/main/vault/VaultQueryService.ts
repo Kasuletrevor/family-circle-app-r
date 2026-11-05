@@ -26,6 +26,7 @@ export class VaultQueryServiceError extends Error {
 
 function safeVaultAnswer(result: PrivateArchiveAnswer): VaultAnswer {
   return {
+    ...(result.route === 'general' ? { general: true as const } : {}),
     answer: result.answer,
     sources: result.sources.map((source) => source.sourceType === 'document'
       ? { sourceType: 'document', documentId: source.documentId, fileName: source.fileName, excerpt: source.excerpt }

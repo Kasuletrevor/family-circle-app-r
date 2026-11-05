@@ -375,6 +375,13 @@
   font-size: 13px;
 }
 
+.ask-vault__general-note {
+  margin: 9px 0 0;
+  color: var(--kk-text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
 .ask-vault__composer .my-story__voice-setup {
   margin-top: 10px;
 }

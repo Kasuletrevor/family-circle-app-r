@@ -77,6 +77,12 @@ describe('VaultQueryService archive compatibility facade', () => {
     expect(JSON.stringify(result)).not.toContain('route')
   })
 
+  it('marks an answer from general knowledge, and only that one', async () => {
+    const service = new VaultQueryService({ ask: vi.fn(async () => ({ answer: 'It is 16:09.', route: 'general' as const, sources: [] })) })
+    await expect(service.ask({ question: 'What time is it?', scope: { type: 'all' } }))
+      .resolves.toEqual({ answer: 'It is 16:09.', sources: [], general: true })
+  })
+
   it('maps shared archive errors back to the existing safe Vault error contract', async () => {
     const service = new VaultQueryService({
       ask: vi.fn(async () => {

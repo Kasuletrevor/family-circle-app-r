@@ -170,7 +170,11 @@ No conversation transcript is automatically injected. Granite receives only the 
 
 The AI Assistant ("Ask Private AI") exposes four scopes over the desktop `vault.ask` contract: `story-and-vault` (default, the engine's `combined`), `story`, `all` (all Vault documents) and `documents` (selected Vault documents). Sources are `{ sourceType: 'document', documentId, fileName, excerpt }` or `{ sourceType: 'story', chapter, label, excerpt }`.
 
-When the retrieved context does not answer the question, Granite is asked to reply `NOT_FOUND`. The service then returns the scope's local not-found answer with **no sources**. A worded refusal in the first sentence also drops the sources, but keeps the text.
+Both answer prompts give Granite the current local date, time and time zone (for example "Thursday, 5 November 2026 at 16:09 GMT+3 (Africa/Kampala)") and ask for one to three complete sentences.
+
+When the retrieved context does not answer the question, Granite is asked to reply `NOT_FOUND`. The question is then asked once more, **without** the private context, under a general-knowledge prompt. That prompt answers general questions (the date or time, geography, history, science, arithmetic) and replies `NOT_FOUND` or "I do not know" for anything about the person, their family, home, health or documents. A general answer has **no sources**, and Ask AI labels it "General knowledge from the AI on this computer, not from your private sources. It can be wrong." (`general: true` on the answer). Otherwise the scope's local not-found answer is returned with no sources, or Granite's own worded refusal if it gave one. If the general step fails, the not-found answer is returned rather than an error.
+
+An English answer that shares no distinctive word with any retrieved section, in a scope of two or more sources, did not come from them. With family sections in front of it Granite answered "Kigali" for the capital of Uganda, or made up where the spare key is kept. Such an answer is asked again the general way, which corrects the first and refuses the second. Answers in other languages, and scopes with a single source, cannot be traced this way and keep every section they read as sources.
 
 ## Large documents: measured behaviour
 

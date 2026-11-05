@@ -144,6 +144,11 @@ export class KeywordIndex {
     return inverseFrequency(this.sourceCount, containing)
   }
 
+  /** Whether rarity can tell sources apart at all: with a single source every word weighs 0. */
+  get comparesSources(): boolean {
+    return this.sourceCount >= 2
+  }
+
   /** The rarity of a word found in exactly one source, the most a single word can weigh. */
   get maxRarity(): number {
     return inverseFrequency(this.sourceCount, 1)

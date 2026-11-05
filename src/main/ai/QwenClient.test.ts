@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { QwenClient, QwenClientError, type QwenHttpPort } from './QwenClient'
 
-const SYSTEM = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, reply with exactly NOT_FOUND and nothing else. Otherwise reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
+const NOW = 'Thursday, 5 November 2026 at 16:09 GMT+3 (Africa/Kampala)'
+const SYSTEM = `You are a private family-knowledge assistant running on this computer. It is now ${NOW}. Answer the question using the private source context, and use the current date and time when the question needs them, for example to work out an age or how long until a date. Reply in one to three complete sentences of plain text without Markdown, and do not refer to "the context" or "the sources". If the private source context does not answer the question, reply with exactly NOT_FOUND and nothing else.`
+const clock = { now: () => new Date('2026-11-05T13:09:00Z'), timeZone: 'Africa/Kampala' }
 
 describe('QwenClient', () => {
   it('uses the 192-token ceiling for normal grounded answers', async () => {
     const post = vi.fn(async () => ({ choices: [{ message: { content: 'A grounded answer.' } }] }))
-    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
 
     await expect(client.generateFast('What did I say?', '[My Story] I said hello.')).resolves.toBe('A grounded answer.')
 
@@ -28,7 +30,7 @@ describe('QwenClient', () => {
 
   it('uses the 384-token ceiling for complex grounded answers', async () => {
     const post = vi.fn(async () => ({ choices: [{ message: { content: 'A complex grounded answer.' } }] }))
-    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
 
     await expect(client.generateComplex('Compare these.', 'Source 1\nA\n\nSource 2\nB')).resolves.toBe('A complex grounded answer.')
 
@@ -41,7 +43,7 @@ describe('QwenClient', () => {
 
   it('uses a short deterministic translation request for multilingual retrieval', async () => {
     const post = vi.fn(async () => ({ choices: [{ message: { content: 'Where was I born?' } }] }))
-    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
 
     await expect(client.translateForRetrieval('¿Dónde nací?')).resolves.toBe('Where was I born?')
 
@@ -68,7 +70,7 @@ describe('QwenClient', () => {
       '*   The executor of the will is **Grace Nakato**.',
     ].join('\n')
     const post = vi.fn(async () => ({ choices: [{ message: { content: markdown } }] }))
-    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
 
     await expect(client.generateFast('Where is the land title?', 'context')).resolves.toBe([
       'Based on the provided private source context:',
@@ -79,7 +81,7 @@ describe('QwenClient', () => {
 
   it('asks for the answer in the selected language, keeping the NOT_FOUND contract', async () => {
     const post = vi.fn(async () => ({ choices: [{ message: { content: 'Elle est née à Masaka.' } }] }))
-    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
 
     await expect(client.generateFast('Où est-elle née ?', 'context', 'French')).resolves.toBe('Elle est née à Masaka.')
     const body = post.mock.calls[0]![1] as { messages: Array<{ role: string; content: string }> }
@@ -92,10 +94,37 @@ describe('QwenClient', () => {
   })
 })
 
+describe('QwenClient.generateGeneral', () => {
+  it('answers from general knowledge with the current date and time, without private context', async () => {
+    const post = vi.fn(async () => ({ choices: [{ message: { content: 'It is **16:09**.' } }] }))
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
+
+    await expect(client.generateGeneral('What time is it?')).resolves.toBe('It is 16:09.')
+
+    const body = post.mock.calls[0]![1] as { max_tokens: number; temperature: number; messages: Array<{ role: string; content: string }> }
+    expect(body).toMatchObject({ max_tokens: 192, temperature: 0 })
+    expect(body.messages).toHaveLength(2)
+    expect(body.messages[0]!.content).toContain(`It is now ${NOW}.`)
+    expect(body.messages[0]!.content).toContain('geography')
+    // It must not make up family facts: those are answered only from private sources.
+    expect(body.messages[0]!.content).toContain('You know nothing about this person, their family, their home, their health or their documents.')
+    expect(body.messages[0]!.content).toContain('reply with exactly NOT_FOUND')
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'What time is it?' })
+  })
+
+  it('answers in the selected language', async () => {
+    const post = vi.fn(async () => ({ choices: [{ message: { content: 'Il est 16 h 09.' } }] }))
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
+    await client.generateGeneral('Quelle heure est-il ?', 'French')
+    const body = post.mock.calls[0]![1] as { messages: Array<{ role: string; content: string }> }
+    expect(body.messages[0]!.content).toContain('Write the complete answer in French.')
+  })
+})
+
 describe('QwenClient.chat', () => {
   it('sends an angel chat as given and returns plain text', async () => {
     const post = vi.fn(async () => ({ choices: [{ message: { content: '**Good** morning' } }] }))
-    const client = new QwenClient({ http: { post } as QwenHttpPort })
+    const client = new QwenClient({ http: { post } as QwenHttpPort, ...clock })
     const messages = [{ role: 'system' as const, content: 'Rules' }, { role: 'user' as const, content: 'Hi' }]
     await expect(client.chat(messages, 256)).resolves.toBe('Good morning')
     expect(post).toHaveBeenCalledWith('/v1/chat/completions', { messages, max_tokens: 256, temperature: 0.4, top_p: 0.9, stream: false })

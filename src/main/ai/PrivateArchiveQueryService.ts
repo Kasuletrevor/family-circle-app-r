@@ -44,7 +44,8 @@ export interface PrivateArchiveStorySource {
 }
 
 export type PrivateArchiveSource = PrivateArchiveDocumentSource | PrivateArchiveStorySource
-export type PrivateArchiveRoute = 'direct' | 'fast' | 'complex'
+/** `general`: answered from the model's general knowledge after the private sources did not answer. */
+export type PrivateArchiveRoute = 'direct' | 'fast' | 'complex' | 'general'
 
 export interface PrivateArchiveAnswer {
   answer: string
@@ -76,6 +77,8 @@ export interface PrivateArchiveQueryServiceDependencies {
     generateFast(question: string, context: string, languageLabel?: string): Promise<string>
     generateComplex(question: string, context: string, languageLabel?: string): Promise<string>
     translateForRetrieval(question: string): Promise<string>
+    /** Answers questions such as the date, time or geography that private sources cannot. */
+    generateGeneral?(question: string, languageLabel?: string): Promise<string>
   }
   direct: {
     answer(localUserId: number, question: string): Promise<PrivateDirectAnswer | null>
@@ -185,6 +188,25 @@ const NOT_FOUND_WORDING = [
   /\bis not (?:mentioned|provided|included|specified|stated)\b/i,
 ]
 
+// An English question about the current time, date, day, month or year, and nothing else:
+// "What is the date of the wedding?" is a family question and is searched as usual.
+const CLOCK_QUESTION = /^(?:what(?:'s| is) the (?:time|date|day)(?: (?:now|today|right now))?|what time is it(?: now| right now)?|what(?:'s| is) today(?:'s date)?|what (?:day|date) is (?:it|today)(?: today)?|what day of the week is (?:it|today)(?: today)?|what day of the week it is(?: today)?|what (?:year|month) is it(?: now)?|today's date|current (?:time|date)|time now)$/
+
+export function isClockQuestion(question: string): boolean {
+  const normalized = question.toLowerCase().replace(/[’‘]/g, "'").replace(/[?.!]+\s*$/, '').replace(/\s+/g, ' ').trim()
+    .replace(/^(?:please |can you tell me |could you tell me |tell me |do you know )+/, '')
+  return CLOCK_QUESTION.test(normalized)
+}
+
+// How Granite says it cannot answer a general question ("I do not know.").
+const UNKNOWN_WORDING = /\b(?:do not|don't|cannot|can't) (?:know|have enough information|determine)\b|\bnot sure\b/i
+
+function isUnknownGeneralAnswer(answer: string): boolean {
+  if (isNotFoundAnswer(answer)) return true
+  const firstSentence = answer.trim().split(/(?<=[.!?])\s+/)[0] ?? ''
+  return UNKNOWN_WORDING.test(firstSentence)
+}
+
 export function isNotFoundAnswer(answer: string): boolean {
   if (NOT_FOUND_SENTINEL.test(answer)) return true
   const firstSentence = answer.trim().split(/(?<=[.!?])\s+/)[0] ?? ''
@@ -249,6 +271,11 @@ export class PrivateArchiveQueryService {
 
     const documentIds = await this.validateScope(user.id, input.scope)
 
+    // The clock answers these; searching the family's sections first only adds unrelated sources.
+    if (isClockQuestion(question) && this.dependencies.qwen.generateGeneral) {
+      return this.answerGenerally(question, input, 'fast')
+    }
+
     if (input.scope.type !== 'vault') {
       const direct = await this.dependencies.direct.answer(user.id, question)
       if (direct) {
@@ -257,7 +284,7 @@ export class PrivateArchiveQueryService {
     }
 
     const candidates = await this.loadCandidates(user.id, input.scope, documentIds)
-    if (candidates.length === 0) return { answer: noContextAnswer(input.scope, input.language), sources: [], route: 'fast' }
+    if (candidates.length === 0) return this.answerGenerally(question, input, 'fast')
 
     if (!await this.dependencies.runtime.ensureEmbeddingRuntime()) {
       throw new PrivateArchiveQueryServiceError('private-ai-unavailable', 'Private AI search is unavailable')
@@ -306,7 +333,7 @@ export class PrivateArchiveQueryService {
       .slice(0, MAX_RETRIEVAL_CHUNKS)
       .map((index) => ({ candidate: candidates[index]! }))
 
-    if (ranked.length === 0) return { answer: noContextAnswer(input.scope, input.language), sources: [], route: 'fast' }
+    if (ranked.length === 0) return this.answerGenerally(question, input, 'fast')
 
     const context = ranked.map(({ candidate }, index) => (
       `[Source ${index + 1}: ${candidate.fileName}]\n${candidate.text}`
@@ -320,17 +347,42 @@ export class PrivateArchiveQueryService {
     const answer = await this.generateAnswer(route, question, context, languageLabel(input.language))
 
     // Retrieved chunks that did not answer the question are not sources of the reply.
-    if (NOT_FOUND_SENTINEL.test(answer)) return { answer: noContextAnswer(input.scope, input.language), sources: [], route }
-    if (isNotFoundAnswer(answer)) return { answer, sources: [], route }
+    if (NOT_FOUND_SENTINEL.test(answer)) return this.answerGenerally(question, input, route)
+    if (isNotFoundAnswer(answer)) return this.answerGenerally(question, input, route, answer)
 
-    return {
-      answer,
-      route,
-      sources: this.deduplicateSources(citedCandidates(
-        answer,
-        ranked.map(({ candidate }) => candidate),
-        keywordIndex,
-      )),
+    const read = ranked.map(({ candidate }) => candidate)
+    const cited = citedCandidates(answer, read, keywordIndex, { fallbackToAll: false })
+    const english = (languageLabel(input.language) ?? 'English') === 'English'
+    if (cited.length === 0 && english && keywordIndex.comparesSources && this.dependencies.qwen.generateGeneral) {
+      // An English answer that shares no distinctive word with any section did not come from
+      // them: a general question the sections only confused (Granite answered "Kigali" for the
+      // capital of Uganda), or a family fact it made up. Ask again without the sections; the
+      // general prompt answers the first and refuses the second.
+      return this.answerGenerally(question, input, route)
+    }
+    return { answer, route, sources: this.deduplicateSources(cited.length > 0 ? cited : read) }
+  }
+
+  /**
+   * The private sources did not answer. A general question (the date, the time, geography)
+   * is answered from the model's general knowledge, without sources; anything else, or any
+   * failure, keeps the not-found answer (`notFound` when the model worded one itself).
+   */
+  private async answerGenerally(
+    question: string,
+    input: { scope: PrivateArchiveScope; language?: string },
+    route: PrivateArchiveRoute,
+    notFound?: string,
+  ): Promise<PrivateArchiveAnswer> {
+    const fallback = { answer: notFound ?? noContextAnswer(input.scope, input.language), sources: [], route }
+    const generateGeneral = this.dependencies.qwen.generateGeneral?.bind(this.dependencies.qwen)
+    if (!generateGeneral) return fallback
+    try {
+      if (!await this.dependencies.runtime.ensureGenerationRuntime()) return fallback
+      const answer = await generateGeneral(question, languageLabel(input.language))
+      return isUnknownGeneralAnswer(answer) ? fallback : { answer, sources: [], route: 'general' }
+    } catch {
+      return fallback
     }
   }
 

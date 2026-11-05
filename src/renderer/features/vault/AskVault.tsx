@@ -340,10 +340,10 @@ export function AskVault({
         <div>
           <div className="ask-vault__eyebrow"><LockKeyhole size={14} aria-hidden="true" /> Local Private AI</div>
           <h1 id="ask-vault-title">Ask Private AI</h1>
-          <p>Ask about your confirmed My Story memories and indexed Vault documents. Everything stays on this computer.</p>
+          <p>Ask about your confirmed My Story memories and indexed Vault documents, or a general question such as today's date. Everything stays on this computer.</p>
           <p className="ask-vault__models">Answers by {PRIVATE_AI_MODELS.answers} · search by {PRIVATE_AI_MODELS.search} · offline</p>
         </div>
-        <div className="ask-vault__privacy"><BrainCircuit size={18} aria-hidden="true" /> Answers only from your private sources</div>
+        <div className="ask-vault__privacy"><BrainCircuit size={18} aria-hidden="true" /> Answers stay on this computer</div>
       </header>
 
       <div className="ask-vault__layout">
@@ -420,7 +420,7 @@ export function AskVault({
               }}
             />
             <div className="ask-vault__composer-footer">
-              <span>Answers stay local and use only what your private sources say.</span>
+              <span>Answers stay local. Answers about your family come only from your private sources.</span>
               <div className="ask-vault__composer-actions">
                 {voiceInput === 'recording' ? (
                   <button type="button" className="ask-vault__voice ask-vault__voice--recording" onClick={() => void finishVoiceQuestion()}>
@@ -479,6 +479,9 @@ export function AskVault({
                 )}
               </div>
               <p className="ask-vault__answer-text">{answer.answer}</p>
+              {answer.general ? (
+                <p className="ask-vault__general-note">General knowledge from the AI on this computer, not from your private sources. It can be wrong.</p>
+              ) : null}
               {readAloudMessage ? <p className="ask-vault__voice-note" role="status">{readAloudMessage}</p> : null}
 
               {answer.sources.length > 0 ? (
