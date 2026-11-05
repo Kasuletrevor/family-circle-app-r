@@ -84,7 +84,7 @@ function privateAiTitle(status: PrivateAiStatus): string {
     case 'downloading': return 'Downloading Private AI'
     case 'paused': return 'Private AI setup paused'
     case 'verifying': return 'Verifying Private AI'
-    case 'ready': return 'Private AI is ready'
+    case 'ready': return 'Private AI Engine is ready'
     case 'repair_required': return 'Private AI needs repair'
     case 'failed': return 'Private AI setup failed'
   }

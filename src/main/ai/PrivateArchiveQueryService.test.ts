@@ -537,3 +537,184 @@ describe('findStorySections with one memory', () => {
     expect(found.cite('Fishing sounds lovely. How are you today?')).toEqual([])
   })
 })
+
+describe('PrivateArchiveQueryService general questions', () => {
+  function withGeneral(generateGeneral: (question: string, languageLabel?: string) => Promise<string>, overrides: Partial<PrivateArchiveQueryServiceDependencies> = {}) {
+    const base = deps(overrides)
+    return { ...base, qwen: { ...base.qwen, generateFast: vi.fn(async () => 'NOT_FOUND'), generateGeneral: vi.fn(generateGeneral) } }
+  }
+
+  it('answers from general knowledge, with no sources, when the private sources do not answer', async () => {
+    const dependencies = withGeneral(async () => 'The capital of Uganda is Kampala.')
+    const service = new PrivateArchiveQueryService(dependencies)
+
+    await expect(service.ask({ question: 'What is the capital of Uganda?', scope: { type: 'vault', vault: { type: 'all' } }, language: 'fr' }))
+      .resolves.toEqual({ answer: 'The capital of Uganda is Kampala.', sources: [], route: 'general' })
+    expect(dependencies.qwen.generateGeneral).toHaveBeenCalledWith('What is the capital of Uganda?', 'French')
+  })
+
+  it('answers general questions when nothing is indexed yet', async () => {
+    const dependencies = withGeneral(async () => 'It is 16:09.', {
+      vaultChunks: { listQueryChunks: vi.fn(async () => []) },
+      storyChunks: { listQueryChunks: vi.fn(async () => []) },
+    })
+    const service = new PrivateArchiveQueryService(dependencies)
+
+    await expect(service.ask({ question: 'What time is it?', scope: { type: 'combined', vault: { type: 'all' } } }))
+      .resolves.toEqual({ answer: 'It is 16:09.', sources: [], route: 'general' })
+    expect(dependencies.nomic.embedQuery).not.toHaveBeenCalled()
+  })
+
+  it('keeps the private not-found answer when general knowledge does not know either', async () => {
+    // Real Granite 4.0 1B replies to family questions with no private source.
+    for (const reply of ['NOT_FOUND', 'I do not know.', 'I do not have enough information about this person or their documents to determine what the will said.']) {
+      const service = new PrivateArchiveQueryService(withGeneral(async () => reply))
+      await expect(service.ask({ question: "What is Ruth's blood type?", scope: { type: 'vault', vault: { type: 'all' } } }))
+        .resolves.toMatchObject({ answer: 'I could not find it in the selected Vault documents.', sources: [] })
+    }
+  })
+
+  it('keeps a worded not-found reply when general knowledge does not know either', async () => {
+    const reply = 'There is no information about the car Joseph drives.'
+    const base = withGeneral(async () => 'NOT_FOUND')
+    const service = new PrivateArchiveQueryService({ ...base, qwen: { ...base.qwen, generateFast: vi.fn(async () => reply) } })
+    await expect(service.ask({ question: 'What car does Joseph drive?', scope: { type: 'vault', vault: { type: 'all' } } }))
+      .resolves.toMatchObject({ answer: reply, sources: [] })
+  })
+
+  it('falls back to the not-found answer instead of failing when the general answer fails', async () => {
+    const service = new PrivateArchiveQueryService(withGeneral(async () => { throw new Error('offline') }))
+    await expect(service.ask({ question: 'Who is the president of France?', scope: { type: 'story' } }))
+      .resolves.toMatchObject({ answer: 'I could not find it in your confirmed My Story memories.', sources: [] })
+
+    const noRuntime = new PrivateArchiveQueryService(withGeneral(async () => 'unused', {
+      vaultChunks: { listQueryChunks: vi.fn(async () => []) },
+      runtime: { ensureEmbeddingRuntime: vi.fn(async () => true), ensureGenerationRuntime: vi.fn(async () => false) },
+    }))
+    await expect(noRuntime.ask({ question: 'What time is it?', scope: { type: 'vault', vault: { type: 'all' } } }))
+      .resolves.toMatchObject({ answer: 'I could not find it in the selected Vault documents.', sources: [] })
+  })
+})
+
+describe('PrivateArchiveQueryService answers that use no private section', () => {
+  // Two sources in scope, so a word found in only one of them tells which one an answer used.
+  const twoSources = {
+    vaultChunks: { listQueryChunks: vi.fn(async () => [vaultChunk(1, 'meeting.pdf', 0, 'We shipped two releases and the Vault keeps documents private.', [1, 0])]) },
+    storyChunks: { listQueryChunks: vi.fn(async () => [storyChunk(2, 'childhood', 'Life Story', 'Childhood and early memories', 'I grew up near Jinja.', [0.9, 0.1])]) },
+  }
+  function service(grounded: string, general: string, overrides: Partial<PrivateArchiveQueryServiceDependencies> = twoSources) {
+    const base = deps(overrides)
+    const qwen = { ...base.qwen, generateFast: vi.fn(async () => grounded), generateGeneral: vi.fn(async () => general) }
+    return { qwen, service: new PrivateArchiveQueryService({ ...base, qwen }) }
+  }
+  const combined = { type: 'combined' as const, vault: { type: 'all' as const } }
+
+  it('asks a general question again without the unrelated sections, so it lists none of them', async () => {
+    // Real Granite 4.0 1B answers: with family sections in front of it, it said "Kigali".
+    const { qwen, service: archive } = service('The capital of Uganda is Kigali.', 'The capital of Uganda is Kampala.')
+    await expect(archive.ask({ question: 'What is the capital of Uganda?', scope: combined }))
+      .resolves.toEqual({ answer: 'The capital of Uganda is Kampala.', sources: [], route: 'general' })
+    expect(qwen.generateGeneral).toHaveBeenCalledWith('What is the capital of Uganda?', undefined)
+  })
+
+  it('does not show a family fact the model made up', async () => {
+    const { service: archive } = service('The spare house key is stored with the family papers, which never leave home.', 'NOT_FOUND')
+    await expect(archive.ask({ question: 'Where is the spare house key?', scope: combined }))
+      .resolves.toEqual({ answer: 'I could not find it in the selected My Story and Vault sources.', sources: [], route: 'fast' })
+  })
+
+  it('keeps answers that use a private section', async () => {
+    const { qwen, service: archive } = service('You grew up near Jinja.', 'unused')
+    const result = await archive.ask({ question: 'Where did I grow up?', scope: combined })
+    expect(result.answer).toBe('You grew up near Jinja.')
+    expect(result.sources.map((source) => source.fileName)).toEqual(['My Story › Life Story › Childhood and early memories'])
+    expect(qwen.generateGeneral).not.toHaveBeenCalled()
+  })
+
+  it('keeps the answer and its sources when it cannot be traced: one source in scope, or another language', async () => {
+    const single = service('Yes, she was.', 'unused', { ...twoSources, storyChunks: { listQueryChunks: vi.fn(async () => []) } })
+    const one = await single.service.ask({ question: 'Was she born there?', scope: { type: 'vault', vault: { type: 'all' } } })
+    expect(one).toMatchObject({ answer: 'Yes, she was.', route: 'fast' })
+    expect(one.sources).toHaveLength(1)
+
+    const french = service('Oui, elle y est née.', 'unused')
+    const translated = await french.service.ask({ question: 'Est-elle née là-bas ?', scope: combined, language: 'fr' })
+    expect(translated.answer).toBe('Oui, elle y est née.')
+    expect(translated.sources).toHaveLength(2)
+    expect(french.qwen.generateGeneral).not.toHaveBeenCalled()
+  })
+})
+
+describe('PrivateArchiveQueryService clock questions', () => {
+  function setup() {
+    const base = deps()
+    const qwen = { ...base.qwen, generateGeneral: vi.fn(async () => 'It is Thursday, 5 November 2026.') }
+    return { dependencies: { ...base, qwen }, service: new PrivateArchiveQueryService({ ...base, qwen }) }
+  }
+
+  it('answers the time, date and day from the clock without searching private sources', async () => {
+    for (const question of ['What time is it?', "what's the time now", 'What is the date today?', "What is today's date?", 'What day is it today?', 'Can you tell me what day of the week it is?', 'What year is it?', 'Current date']) {
+      const { dependencies, service } = setup()
+      await expect(service.ask({ question, scope: { type: 'combined', vault: { type: 'all' } } }))
+        .resolves.toEqual({ answer: 'It is Thursday, 5 November 2026.', sources: [], route: 'general' })
+      expect(dependencies.nomic.embedQuery).not.toHaveBeenCalled()
+      expect(dependencies.vaultChunks.listQueryChunks).not.toHaveBeenCalled()
+    }
+  })
+
+  it('still searches private sources for dates and days in the family', async () => {
+    for (const question of ['What is the date of the wedding?', "What day is Ruth's check-up?", 'What time does Ruth take her eye drops?']) {
+      const { dependencies, service } = setup()
+      await service.ask({ question, scope: { type: 'vault', vault: { type: 'all' } } })
+      expect(dependencies.nomic.embedQuery).toHaveBeenCalled()
+    }
+  })
+})
+
+describe('PrivateArchiveQueryService review fixes', () => {
+  it('keeps a grounded answer when the sections in scope say the same thing (no word is rare)', async () => {
+    const base = deps({
+      vaultChunks: { listQueryChunks: vi.fn(async () => [vaultChunk(1, 'letter.txt', 0, 'Ruth lives in Jinja.', [1, 0]), vaultChunk(2, 'notes.txt', 0, 'Ruth lives in Jinja.', [0.9, 0.1])]) },
+    })
+    const qwen = { ...base.qwen, generateFast: vi.fn(async () => 'Ruth lives in Jinja.'), generateGeneral: vi.fn(async () => 'NOT_FOUND') }
+    const result = await new PrivateArchiveQueryService({ ...base, qwen }).ask({ question: 'Where does Ruth live?', scope: { type: 'vault', vault: { type: 'all' } } })
+    expect(result.answer).toBe('Ruth lives in Jinja.')
+    expect(result.sources.map((source) => source.fileName)).toEqual(['letter.txt', 'notes.txt'])
+    expect(qwen.generateGeneral).not.toHaveBeenCalled()
+  })
+
+  it('recognises a general refusal in every supported language', async () => {
+    const refusals: Array<[string, string]> = [
+      ['fr', 'Je ne sais pas.'], ['es', 'No lo sé.'], ['pt', 'Não sei.'], ['zh', '我不知道。'], ['ja', 'わかりません。'], ['fil', 'Hindi ko alam.'],
+    ]
+    for (const [language, reply] of refusals) {
+      const base = deps({ vaultChunks: { listQueryChunks: vi.fn(async () => []) } })
+      const qwen = { ...base.qwen, generateGeneral: vi.fn(async () => reply) }
+      const result = await new PrivateArchiveQueryService({ ...base, qwen }).ask({ question: '?', scope: { type: 'vault', vault: { type: 'all' } }, language })
+      expect(result.route, `${language}: ${reply}`).not.toBe('general')
+      expect(result.sources).toEqual([])
+    }
+  })
+})
+
+describe('PrivateArchiveQueryService calculated answers', () => {
+  function ask(sectionText: string, grounded: string, question: string) {
+    const base = deps({
+      vaultChunks: { listQueryChunks: vi.fn(async () => [vaultChunk(1, 'ruth.txt', 0, sectionText, [1, 0])]) },
+    })
+    const qwen = { ...base.qwen, generateFast: vi.fn(async () => grounded), generateGeneral: vi.fn(async () => 'NOT_FOUND') }
+    return { qwen, result: new PrivateArchiveQueryService({ ...base, qwen }).ask({ question, scope: { type: 'combined', vault: { type: 'all' } } }) }
+  }
+
+  it('keeps an age or a count worked out from a date in the sections (Codex review on #75)', async () => {
+    const { qwen, result } = ask('Ruth was born on 1 January 1950.', 'Ruth is 76 years old.', 'How old is Ruth?')
+    await expect(result).resolves.toMatchObject({ answer: 'Ruth is 76 years old.', route: 'fast' })
+    expect(qwen.generateGeneral).not.toHaveBeenCalled()
+  })
+
+  it('still asks the general way when the answer has a number but the sections have none', async () => {
+    const { qwen, result } = ask('Ruth likes tea with her neighbours.', 'Uganda became independent in 1962.', 'When did Uganda become independent?')
+    await result
+    expect(qwen.generateGeneral).toHaveBeenCalledWith('When did Uganda become independent?', undefined)
+  })
+})

@@ -35,6 +35,13 @@ describe('createDesktopApi Vault ask', () => {
     expect(JSON.stringify(result)).not.toMatch(/embedding|storedRelativePath|extractedText|modelPath|localUserId/)
   })
 
+  it('passes the general-knowledge mark only when it is exactly true', async () => {
+    const replies: unknown[] = [{ answer: 'It is 16:09.', sources: [], general: true }, { answer: 'x', sources: [], general: 'yes' }]
+    const api = createDesktopApi(vi.fn(async () => replies.shift()))
+    await expect(api.vault.ask({ question: 'What time is it?', scope: { type: 'all' } })).resolves.toEqual({ answer: 'It is 16:09.', sources: [], general: true })
+    await expect(api.vault.ask({ question: 'x', scope: { type: 'all' } })).resolves.toEqual({ answer: 'x', sources: [] })
+  })
+
   it('sends only a supported language code', async () => {
     const invoke = vi.fn(async () => ({ answer: 'ok', sources: [] }))
     const api = createDesktopApi(invoke)

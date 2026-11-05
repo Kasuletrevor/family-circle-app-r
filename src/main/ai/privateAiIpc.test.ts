@@ -15,7 +15,7 @@ function internalStatus(state: string = 'not_installed') {
     fileSizeBytes: 0,
     installSizeBytes: 2_000_000_000,
     pendingDownloadBytes: state === 'ready' ? 0 : 19_000_000,
-    message: state === 'ready' ? 'Private AI is ready' : 'Private AI is optional',
+    message: state === 'ready' ? 'Private AI Engine is ready' : 'Private AI is optional',
     url: 'https://secret.example/model',
     targetPath: 'C:/secret',
     sha256: 'SECRET',
@@ -138,7 +138,7 @@ describe('registerPrivateAiIpc', () => {
       totalSizeBytes: 2_000_000_000,
       downloadSizeBytes: 0,
       version: '2026.09.04',
-      message: 'Private AI is ready',
+      message: 'Private AI Engine is ready',
     })
   })
 

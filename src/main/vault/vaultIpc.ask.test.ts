@@ -92,4 +92,14 @@ describe('Vault ask IPC', () => {
     await handler?.({}, { question: 'Where?', scope: { type: 'story' }, language: 'klingon' })
     expect(ask).toHaveBeenLastCalledWith({ question: 'Where?', scope: { type: 'story' } })
   })
+
+  it('keeps the general-knowledge mark only when it is exactly true', async () => {
+    const { ipc, handlers } = registrar()
+    const replies: unknown[] = [{ answer: 'It is 16:09.', sources: [], general: true }, { answer: 'x', sources: [], general: 'yes' }]
+    const ask = vi.fn(async () => replies.shift())
+    ;(registerVaultIpc as unknown as (ipc: unknown, vault: unknown, query: { ask: typeof ask }) => void)(ipc, {}, { ask })
+    const handler = handlers.get('vault:ask')
+    await expect(handler?.({}, { question: 'What time is it?', scope: { type: 'all' } })).resolves.toEqual({ answer: 'It is 16:09.', sources: [], general: true })
+    await expect(handler?.({}, { question: 'x', scope: { type: 'all' } })).resolves.toEqual({ answer: 'x', sources: [] })
+  })
 })

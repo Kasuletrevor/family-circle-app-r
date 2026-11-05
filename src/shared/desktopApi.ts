@@ -309,6 +309,8 @@ export type VaultAnswerSource =
 export interface VaultAnswer {
   answer: string
   sources: VaultAnswerSource[]
+  /** Answered from the local model's general knowledge (the date, geography, ...), not private sources. */
+  general?: true
 }
 
 export type PrivateAiPublicState =

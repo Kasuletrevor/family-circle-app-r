@@ -40,7 +40,8 @@ describe('AskVault', () => {
     render(<AskVault client={client({ ask })} />)
 
     expect(screen.getByRole('heading', { name: 'Ask Private AI' })).toBeInTheDocument()
-    expect(screen.getByText(/Ask about your confirmed My Story memories and indexed Vault documents/)).toBeInTheDocument()
+    expect(screen.getByText(/Ask about your confirmed My Story memories and indexed Vault documents, or a general question such as today's date/)).toBeInTheDocument()
+    expect(screen.getByText('Answers about your family come only from your private sources.', { exact: false })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Question' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ask Private AI' })).toBeDisabled()
     expect(ask).not.toHaveBeenCalled()
@@ -64,6 +65,25 @@ describe('AskVault', () => {
     expect(screen.getByText('Family History.pdf')).toBeInTheDocument()
     expect(screen.getByText(/My Story · Traditions to preserve/)).toBeInTheDocument()
     expect(ask).toHaveBeenCalledWith('Tell me about grandmother', { type: 'story-and-vault' }, 'en')
+  })
+
+  it('says when an answer comes from general knowledge rather than private sources', async () => {
+    const ask = vi.fn(async (): Promise<VaultAnswer> => ({ answer: 'The capital of Uganda is Kampala.', sources: [], general: true }))
+    render(<AskVault client={client({ ask })} />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'What is the capital of Uganda?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
+
+    expect(await screen.findByText('The capital of Uganda is Kampala.')).toBeInTheDocument()
+    expect(screen.getByText('General knowledge from the AI on this computer, not from your private sources. It can be wrong.')).toBeInTheDocument()
+  })
+
+  it('does not call a private answer general knowledge', async () => {
+    const ask = vi.fn(async (): Promise<VaultAnswer> => ({ answer: 'I studied at Makerere University.', sources: [] }))
+    render(<AskVault client={client({ ask })} />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), { target: { value: 'Where did I study?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Private AI' }))
+    expect(await screen.findByText('I studied at Makerere University.')).toBeInTheDocument()
+    expect(screen.queryByText(/General knowledge/)).not.toBeInTheDocument()
   })
 
   it('can ask only My Story', async () => {

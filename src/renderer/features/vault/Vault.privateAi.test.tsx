@@ -27,7 +27,7 @@ function aiStatus(state: PrivateAiStatus['state']): PrivateAiStatus {
     ready: state === 'ready',
     repairRequired: state === 'repair_required',
     message: state === 'ready'
-      ? 'Private AI is ready'
+      ? 'Private AI Engine is ready'
       : state === 'repair_required'
         ? 'Private AI needs repair'
         : state === 'failed'
@@ -142,7 +142,7 @@ describe('Vault Private AI setup and indexing UI', () => {
     ['downloading', 'Downloading Private AI'],
     ['paused', 'Private AI setup paused'],
     ['verifying', 'Verifying Private AI'],
-    ['ready', 'Private AI is ready'],
+    ['ready', 'Private AI Engine is ready'],
     ['repair_required', 'Private AI needs repair'],
     ['failed', 'Private AI setup failed'],
   ] as const)('renders %s while keeping Upload available', async (state, message) => {

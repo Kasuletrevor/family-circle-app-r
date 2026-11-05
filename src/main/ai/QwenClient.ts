@@ -2,7 +2,12 @@ import { request as httpRequest } from 'node:http'
 import type { ChatTurn } from '../../shared/agenticChat'
 
 const GENERATION_PORT = 8080
-const SYSTEM_INSTRUCTION = 'You are a private family-knowledge assistant. Answer using ONLY the provided private source context. If the answer is not supported by the context, reply with exactly NOT_FOUND and nothing else. Otherwise reply in plain text without Markdown, in a few short sentences, and do not refer to "the context" or "the sources".'
+// Both prompts were tuned on Granite 4.0 1B. Without the current date and time it answers
+// "what time is it?" with NOT_FOUND, and without "complete sentences" it replies in two words.
+const groundedInstruction = (now: string) => `You are a private family-knowledge assistant running on this computer. It is now ${now}. Answer the question using the private source context, and use the current date and time when the question needs them, for example to work out an age or how long until a date. Reply in one to three complete sentences of plain text without Markdown, and do not refer to "the context" or "the sources". If the private source context does not answer the question, reply with exactly NOT_FOUND and nothing else.`
+// Used only after the private sources did not answer. Granite then refuses family questions
+// (NOT_FOUND or "I do not know") instead of inventing a blood type or a key's hiding place.
+const generalInstruction = (now: string) => `You are a helpful assistant running privately on this computer. It is now ${now}. Answer general questions, such as the date or time, geography, history, science or arithmetic, from general knowledge in one to three complete sentences of plain text without Markdown. You know nothing about this person, their family, their home, their health or their documents. If the question is about any of those, reply with exactly NOT_FOUND and nothing else. If you are not sure of the answer, say that you do not know.`
 const TRANSLATION_INSTRUCTION = 'Translate the search question into English for retrieval. Return only the translated question. Preserve every name, date, number, and place exactly.'
 
 export interface QwenHttpPort {
@@ -11,6 +16,25 @@ export interface QwenHttpPort {
 
 interface QwenClientDependencies {
   http?: QwenHttpPort
+  /** The current time and the computer's time zone; fixed in tests. */
+  now?: () => Date
+  timeZone?: string
+}
+
+/** For example "Thursday, 5 November 2026 at 16:09 GMT+3 (Africa/Kampala)". */
+export function describeNow(date: Date, timeZone?: string): string {
+  const zone = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  const text = date.toLocaleString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short', timeZone: zone,
+  })
+  return zone ? `${text} (${zone})` : text
+}
+
+function inLanguage(instruction: string, languageLabel?: string): string {
+  return languageLabel && languageLabel !== 'English'
+    ? `${instruction} Write the complete answer in ${languageLabel}. If the sources or the question are in another language, translate the answer into ${languageLabel}. Keep names, dates, numbers and quotations exact.`
+    : instruction
 }
 
 export class QwenClientError extends Error {
@@ -96,9 +120,13 @@ function cleanTranslation(value: string): string {
 
 export class QwenClient {
   private readonly http: QwenHttpPort
+  private readonly now: () => Date
+  private readonly timeZone?: string
 
   constructor(dependencies: QwenClientDependencies = {}) {
     this.http = dependencies.http ?? new LocalQwenHttpPort()
+    this.now = dependencies.now ?? (() => new Date())
+    this.timeZone = dependencies.timeZone
   }
 
   /** `languageLabel` (for example "French") asks for the answer in that language; English is the default. */
@@ -108,6 +136,22 @@ export class QwenClient {
 
   async generateComplex(question: string, context: string, languageLabel?: string): Promise<string> {
     return this.generate(question, context, 384, languageLabel)
+  }
+
+  /** A general question (the date, geography, ...) the private sources did not answer. */
+  async generateGeneral(question: string, languageLabel?: string): Promise<string> {
+    const answer = await this.complete({
+      messages: [
+        { role: 'system', content: inLanguage(generalInstruction(describeNow(this.now(), this.timeZone)), languageLabel) },
+        { role: 'user', content: question },
+      ],
+      max_tokens: 192,
+      temperature: 0,
+      top_k: 40,
+      top_p: 0.95,
+      stream: false,
+    })
+    return plainAnswer(answer)
   }
 
   async translateForRetrieval(question: string): Promise<string> {
@@ -132,9 +176,7 @@ export class QwenClient {
   }
 
   private async generate(question: string, context: string, maxTokens: number, languageLabel?: string): Promise<string> {
-    const system = languageLabel && languageLabel !== 'English'
-      ? `${SYSTEM_INSTRUCTION} Write the complete answer in ${languageLabel}. If the sources or the question are in another language, translate the answer into ${languageLabel}. Keep names, dates, numbers and quotations exact.`
-      : SYSTEM_INSTRUCTION
+    const system = inLanguage(groundedInstruction(describeNow(this.now(), this.timeZone)), languageLabel)
     const answer = await this.complete({
       messages: [
         { role: 'system', content: system },

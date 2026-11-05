@@ -267,6 +267,7 @@ function safeAnswer(value: unknown): VaultAnswer {
   const raw = recordOf(value)
   const sources = Array.isArray(raw.sources) ? raw.sources : []
   return {
+    ...(raw.general === true ? { general: true as const } : {}),
     answer: String(raw.answer ?? ''),
     sources: sources.flatMap((source): VaultAnswer['sources'] => {
       const row = recordOf(source)

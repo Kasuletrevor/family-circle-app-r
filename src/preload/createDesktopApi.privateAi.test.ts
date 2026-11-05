@@ -20,7 +20,7 @@ describe('createDesktopApi Private AI contract', () => {
           port: 8188,
         }
       }
-      return { state: 'ready', ready: true, repairRequired: false, totalSizeBytes: 2_000_000_000, version: '2026.09.04', message: 'Private AI is ready' }
+      return { state: 'ready', ready: true, repairRequired: false, totalSizeBytes: 2_000_000_000, version: '2026.09.04', message: 'Private AI Engine is ready' }
     })
     const api = createDesktopApi(invoke)
     const privateAi = (api as unknown as { privateAi: {
