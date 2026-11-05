@@ -670,3 +670,29 @@ describe('PrivateArchiveQueryService clock questions', () => {
     }
   })
 })
+
+describe('PrivateArchiveQueryService review fixes', () => {
+  it('keeps a grounded answer when the sections in scope say the same thing (no word is rare)', async () => {
+    const base = deps({
+      vaultChunks: { listQueryChunks: vi.fn(async () => [vaultChunk(1, 'letter.txt', 0, 'Ruth lives in Jinja.', [1, 0]), vaultChunk(2, 'notes.txt', 0, 'Ruth lives in Jinja.', [0.9, 0.1])]) },
+    })
+    const qwen = { ...base.qwen, generateFast: vi.fn(async () => 'Ruth lives in Jinja.'), generateGeneral: vi.fn(async () => 'NOT_FOUND') }
+    const result = await new PrivateArchiveQueryService({ ...base, qwen }).ask({ question: 'Where does Ruth live?', scope: { type: 'vault', vault: { type: 'all' } } })
+    expect(result.answer).toBe('Ruth lives in Jinja.')
+    expect(result.sources.map((source) => source.fileName)).toEqual(['letter.txt', 'notes.txt'])
+    expect(qwen.generateGeneral).not.toHaveBeenCalled()
+  })
+
+  it('recognises a general refusal in every supported language', async () => {
+    const refusals: Array<[string, string]> = [
+      ['fr', 'Je ne sais pas.'], ['es', 'No lo sé.'], ['pt', 'Não sei.'], ['zh', '我不知道。'], ['ja', 'わかりません。'], ['fil', 'Hindi ko alam.'],
+    ]
+    for (const [language, reply] of refusals) {
+      const base = deps({ vaultChunks: { listQueryChunks: vi.fn(async () => []) } })
+      const qwen = { ...base.qwen, generateGeneral: vi.fn(async () => reply) }
+      const result = await new PrivateArchiveQueryService({ ...base, qwen }).ask({ question: '?', scope: { type: 'vault', vault: { type: 'all' } }, language })
+      expect(result.route, `${language}: ${reply}`).not.toBe('general')
+      expect(result.sources).toEqual([])
+    }
+  })
+})

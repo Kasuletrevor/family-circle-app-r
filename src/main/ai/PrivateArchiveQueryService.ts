@@ -198,13 +198,38 @@ export function isClockQuestion(question: string): boolean {
   return CLOCK_QUESTION.test(normalized)
 }
 
-// How Granite says it cannot answer a general question ("I do not know.").
-const UNKNOWN_WORDING = /\b(?:do not|don't|cannot|can't) (?:know|have enough information|determine)\b|\bnot sure\b/i
+// How the model says it cannot answer a general question ("I do not know."), in each
+// supported answer language, since the general prompt asks for the selected language.
+const UNKNOWN_WORDING = [
+  /\b(?:do not|don't|cannot|can't) (?:know|have enough information|determine)\b|\bnot sure\b/i,
+  /\bje ne (?:sais|connais) pas\b|\bje ne suis pas s[uû]r/i,
+  /\bno (?:lo )?s[eé](?![a-z])|\bno estoy segur[oa]\b/i,
+  /\bn[aã]o sei(?![a-z])|\bn[aã]o tenho certeza\b/i,
+  /不知道|不确定/,
+  /わかりません|分かりません|知りません|わからない/,
+  /\bhindi ko alam\b|\bhindi ako sigurado\b/i,
+]
 
 function isUnknownGeneralAnswer(answer: string): boolean {
   if (isNotFoundAnswer(answer)) return true
-  const firstSentence = answer.trim().split(/(?<=[.!?])\s+/)[0] ?? ''
-  return UNKNOWN_WORDING.test(firstSentence)
+  const firstSentence = answer.trim().split(/(?<=[.!?。！？])\s*/)[0] ?? ''
+  return UNKNOWN_WORDING.some((pattern) => pattern.test(firstSentence))
+}
+
+/**
+ * True when the answer has words of its own (beyond the question's) and none of them
+ * appears in any section the model read. Rarity cannot decide this: sections that say
+ * the same thing share only words of zero weight, yet an answer repeating them is grounded.
+ * An answer with no words of its own ("Yes, she was.") cannot be judged and counts as used.
+ */
+const YES_NO = new Set(['yes', 'no', 'yeah', 'nope', 'true', 'false', 'correct', 'right', 'wrong'])
+
+function usesNoSection(answer: string, question: string, read: Array<{ text: string }>): boolean {
+  const asked = contentTerms(question)
+  const own = [...contentTerms(answer)].filter((term) => !asked.has(term) && !YES_NO.has(term))
+  if (own.length === 0) return false
+  const sectionTerms = new Set(read.flatMap((section) => [...contentTerms(section.text)]))
+  return own.every((term) => !sectionTerms.has(term))
 }
 
 export function isNotFoundAnswer(answer: string): boolean {
@@ -351,16 +376,15 @@ export class PrivateArchiveQueryService {
     if (isNotFoundAnswer(answer)) return this.answerGenerally(question, input, route, answer)
 
     const read = ranked.map(({ candidate }) => candidate)
-    const cited = citedCandidates(answer, read, keywordIndex, { fallbackToAll: false })
     const english = (languageLabel(input.language) ?? 'English') === 'English'
-    if (cited.length === 0 && english && keywordIndex.comparesSources && this.dependencies.qwen.generateGeneral) {
-      // An English answer that shares no distinctive word with any section did not come from
-      // them: a general question the sections only confused (Granite answered "Kigali" for the
-      // capital of Uganda), or a family fact it made up. Ask again without the sections; the
-      // general prompt answers the first and refuses the second.
+    if (english && usesNoSection(answer, question, read) && this.dependencies.qwen.generateGeneral) {
+      // An English answer with none of the sections' words did not come from them: a general
+      // question the sections only confused (Granite answered "Kigali" for the capital of
+      // Uganda), or a family fact it made up. Ask again without the sections; the general
+      // prompt answers the first and refuses the second.
       return this.answerGenerally(question, input, route)
     }
-    return { answer, route, sources: this.deduplicateSources(cited.length > 0 ? cited : read) }
+    return { answer, route, sources: this.deduplicateSources(citedCandidates(answer, read, keywordIndex)) }
   }
 
   /**
