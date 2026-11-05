@@ -10,7 +10,7 @@ export function BrandMark({ compact = false }: BrandMarkProps) {
       <div className="brand-mark__logo-frame">
         <img
           className="brand-mark__logo"
-          src="./kin-cropped.jpg"
+          src="./kin-round.png"
           alt="Kin-Keepers logo"
         />
       </div>

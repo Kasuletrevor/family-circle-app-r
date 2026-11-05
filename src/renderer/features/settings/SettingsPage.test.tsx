@@ -33,7 +33,7 @@ describe('SettingsPage', () => {
       repairRequired: false,
       totalSizeBytes: 704 * 1024 * 1024,
       version: 'qwen3.5-0.8b',
-      message: 'Private AI is ready',
+      message: 'Private AI Engine is ready',
     }))
     const privateAi: PrivateAiClient = {
       getStatus: vi.fn(async () => ({
@@ -51,7 +51,7 @@ describe('SettingsPage', () => {
       })),
       repair: vi.fn(async () => ({
         state: 'ready' as const, ready: true, repairRequired: false, totalSizeBytes: 704 * 1024 * 1024,
-        version: 'qwen3.5-0.8b', message: 'Private AI is ready',
+        version: 'qwen3.5-0.8b', message: 'Private AI Engine is ready',
       })),
       remove: vi.fn(),
       onProgress: vi.fn(() => () => undefined),

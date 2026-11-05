@@ -168,7 +168,7 @@ describe('OfflineAiAssetService installed asset state', () => {
     await expect(service.getStatus()).resolves.toMatchObject({ state: 'ready', pendingDownloadBytes: 0 })
   })
 
-  it('removes engines, models and staging left over from older manifests once Private AI is ready', async () => {
+  it('removes engines, models and staging left over from older manifests once Private AI Engine is ready', async () => {
     const { service, offlineAiRoot, write, writeValidInstalledAssets } = await makeFixture()
     await writeValidInstalledAssets()
     await write('bin/llama-b8772-bin-win-cpu-x64/llama-server.exe', 'old engine')

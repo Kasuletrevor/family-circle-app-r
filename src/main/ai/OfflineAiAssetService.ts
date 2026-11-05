@@ -119,7 +119,7 @@ export class OfflineAiAssetService {
     const paths = await this.verifyRequiredAssets(manifest)
     if (paths && !this.staleAssetsRemoved) await this.removeStaleAssets(manifest)
     return paths
-      ? statusFor('ready', totalBytes, 'Private AI is ready')
+      ? statusFor('ready', totalBytes, 'Private AI Engine is ready')
       : statusFor('repair_required', totalBytes, 'Private AI needs repair', await pending())
   }
 
@@ -174,7 +174,7 @@ export class OfflineAiAssetService {
         await this.writeMarkerAtomically(manifest.version)
         await this.removeStaleAssets(manifest)
         this.transientStatus = null
-        const ready = statusFor('ready', totalBytes, 'Private AI is ready')
+        const ready = statusFor('ready', totalBytes, 'Private AI Engine is ready')
         onProgress?.(ready)
         return ready
       } catch (error) {
